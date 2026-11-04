@@ -666,6 +666,38 @@ body,
   display: none;
 }
 
+.companion-party-card {
+  margin-top: 7px;
+  background: rgba(14, 18, 38, 0.85);
+  border: 1px solid rgba(76, 201, 240, 0.35);
+  border-radius: 10px;
+  padding: 7px 10px;
+  max-width: 285px;
+  backdrop-filter: blur(8px);
+}
+
+.companion-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.7rem;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.companion-row:last-child {
+  border-bottom: none;
+}
+
+.companion-banter-quote {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(255, 209, 102, 0.3);
+  font-size: 0.67rem;
+  font-style: italic;
+  color: #ffe6a7;
+}
+
 .wave-title {
   font-size: 0.84rem;
   font-weight: 900;

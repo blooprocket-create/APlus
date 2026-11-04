@@ -17,7 +17,11 @@ import {
   STOMPING_GROUNDS_SEGMENT_LENGTH,
   STOMPING_GROUNDS_TOTAL_DISTANCE,
 } from '../src/game/ProceduralPathGenerator';
-import { createDefaultQuestState, QuestEngine } from '../src/game/QuestEngine';
+import {
+  createDefaultQuestState,
+  getCompanionClassesForPlayer,
+  QuestEngine,
+} from '../src/game/QuestEngine';
 
 describe('PersistenceManager, Classes, Zones & Procedural Stomping Grounds', () => {
   let persistence: PersistenceManager;
@@ -218,7 +222,13 @@ describe('PersistenceManager, Classes, Zones & Procedural Stomping Grounds', () 
     expect(endClamp.progress).toBeCloseTo(1, 2);
   });
 
-  it('progresses through all 5 stages of the Prototype Quest (Starting Town -> Clear Stomping Grounds -> Market Crossing Twist -> Clear Stomping Grounds Again -> Finish at Starting Town NPC)', () => {
+  it('assigns the other two hero classes as active companions based on the player class', () => {
+    expect(getCompanionClassesForPlayer('assassin')).toEqual(['warrior', 'mage']);
+    expect(getCompanionClassesForPlayer('mage')).toEqual(['warrior', 'assassin']);
+    expect(getCompanionClassesForPlayer('warrior')).toEqual(['mage', 'assassin']);
+  });
+
+  it('progresses through Act I (Riftscar Cycle), Act II (Sunken Ruins), and Act III (Abyssal Sanctum) with companion banter', () => {
     const quest = createDefaultQuestState();
     expect(quest.stage).toBe('not_started');
 
@@ -250,11 +260,40 @@ describe('PersistenceManager, Classes, Zones & Procedural Stomping Grounds', () 
     expect(fullClear2.stageAdvanced).toBe(true);
     expect(quest.stage).toBe('return_starting_npc');
 
-    // Step 5: Finish quest at original NPC (Commander Vael in Starting Town)
+    // Step 5: Report back to Commander Vael in Starting Town -> Completes Act I & unlocks Act II
     const step5 = QuestEngine.interactWithNpc(quest, 'npc_commander_vael');
     expect(step5.advanced).toBe(true);
-    expect(step5.eventType).toBe('completed');
-    expect(quest.stage).toBe('completed');
+    expect(step5.eventType).toBe('act1_completed');
+    expect(quest.stage).toBe('talk_sol_market');
     expect(quest.completedCount).toBe(1);
+
+    // Step 6: Speak with Artificer Sol in Market Crossing to unseal the Sunken Astral Ruins
+    const step6 = QuestEngine.interactWithNpc(quest, 'npc_artificer_sol');
+    expect(step6.advanced).toBe(true);
+    expect(step6.eventType).toBe('ruins_unsealed');
+    expect(quest.stage).toBe('clear_sunken_ruins');
+
+    // Step 7: Enter Sunken Astral Ruins and defeat all 27 Sunken Guardians
+    QuestEngine.onEnterCombatZone(quest, 'sunken_ruins', 27);
+    const clearRuins = QuestEngine.onCombatZoneEnemyCountChanged(quest, 'sunken_ruins', 0);
+    expect(clearRuins.stageAdvanced).toBe(true);
+    expect(quest.stage).toBe('defeat_abyssal_sanctum');
+
+    // Step 8: Enter Abyssal Sanctum and defeat the Eclipse Sovereign & Royal Guard
+    QuestEngine.onEnterCombatZone(quest, 'abyssal_sanctum', 5);
+    const clearSanctum = QuestEngine.onCombatZoneEnemyCountChanged(quest, 'abyssal_sanctum', 0);
+    expect(clearSanctum.stageAdvanced).toBe(true);
+    expect(quest.stage).toBe('talk_sage_orin');
+
+    // Step 9: Speak with High Sage Orin at the Sanctum Altar to seal the Eclipse Rift
+    const step9 = QuestEngine.interactWithNpc(quest, 'npc_sage_orin');
+    expect(step9.advanced).toBe(true);
+    expect(step9.eventType).toBe('completed');
+    expect(quest.stage).toBe('completed');
+    expect(quest.completedCount).toBe(2);
+
+    // Verify companion banter reflects the non-selected companions
+    const view = QuestEngine.getObjectiveView(quest, 'abyssal_sanctum', null, 'assassin');
+    expect(['warrior', 'mage']).toContain(view.companionBanter?.speakerClass);
   });
 });

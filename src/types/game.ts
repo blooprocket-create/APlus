@@ -6,7 +6,23 @@ export type CharacterSlotIndex = 0 | 1 | 2;
 
 export type CharacterClassId = 'warrior' | 'mage' | 'assassin';
 
-export type ZoneId = 'starting_town' | 'stomping_grounds' | 'market_crossing';
+export type ZoneId =
+  | 'starting_town'
+  | 'stomping_grounds'
+  | 'market_crossing'
+  | 'sunken_ruins'
+  | 'abyssal_sanctum';
+
+export interface CompanionStatusView {
+  classId: CharacterClassId;
+  name: string;
+  archetypeLabel: string;
+  icon: string;
+  elementColor: string;
+  level: number;
+  actionText: string;
+  isFromAccountSlot: boolean;
+}
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'mythic';
 

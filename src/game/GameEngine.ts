@@ -12,6 +12,7 @@ import {
   CharacterClassId,
   CharacterSaveData,
   CharacterStats,
+  CompanionStatusView,
   InventoryItem,
   ZoneId,
 } from '../types/game';
@@ -22,7 +23,28 @@ import {
   clampToProceduralPath,
   generateStompingGroundsPath,
 } from './ProceduralPathGenerator';
-import { normalizeQuestState, QuestEngine } from './QuestEngine';
+import {
+  CANONICAL_HERO_NAMES,
+  getCompanionClassesForPlayer,
+  normalizeQuestState,
+  QuestEngine,
+} from './QuestEngine';
+
+export interface CompanionEntity {
+  classId: CharacterClassId;
+  name: string;
+  level: number;
+  isFromAccountSlot: boolean;
+  wingSide: -1 | 1;
+  rig: CharacterRig;
+  position: THREE.Vector3;
+  yaw: number;
+  attackCooldown: number;
+  attackCount: number;
+  animState: CharacterAnimationState;
+  activeAttackTimer: number;
+  actionText: string;
+}
 
 export interface EnemyEntity {
   id: string;
@@ -105,6 +127,7 @@ export interface HudTelemetry {
   nearbyPortal: PortalTrigger | null;
   nearbyNpc: NpcActor | null;
   questView: QuestObjectiveView;
+  companions: CompanionStatusView[];
   wave: number;
   enemiesRemaining: number;
   comboCount: number;
@@ -134,6 +157,7 @@ export class GameEngine {
 
   private mode: 'preview' | 'playing' = 'preview';
   private previewRig: CharacterRig | null = null;
+  private previewCompanionRigs: CharacterRig[] = [];
   private pedestalMesh: THREE.Mesh | null = null;
 
   // Active Gameplay State
@@ -182,6 +206,7 @@ export class GameEngine {
   };
 
   private enemies: EnemyEntity[] = [];
+  private companions: CompanionEntity[] = [];
   private projectiles: ProjectileEntity[] = [];
   private groundHazards: GroundHazardEntity[] = [];
   private lootOrbs: LootOrbEntity[] = [];
@@ -253,7 +278,8 @@ export class GameEngine {
   }
 
   /**
-   * Switches to 3D Pedestal Preview mode for Character Select / Creation.
+   * Switches to 3D Pedestal Preview mode for Character Select / Creation,
+   * displaying the chosen hero in the center flanked by their two companions.
    */
   public setPreviewCharacter(classId: CharacterClassId | null): void {
     this.mode = 'preview';
@@ -268,24 +294,47 @@ export class GameEngine {
       this.scene.remove(this.previewRig.root);
       this.previewRig = null;
     }
+    for (const cRig of this.previewCompanionRigs) {
+      this.scene.remove(cRig.root);
+    }
+    this.previewCompanionRigs = [];
 
     if (classId) {
       this.previewRig = new CharacterRig(classId);
-      this.previewRig.root.position.set(0, 0.26, 0);
+      this.previewRig.root.position.set(0, 0.26, 0.2);
       this.scene.add(this.previewRig.root);
+
+      const compClasses = getCompanionClassesForPlayer(classId);
+      compClasses.forEach((compClass, idx) => {
+        const side = idx === 0 ? -1 : 1;
+        const cRig = new CharacterRig(compClass);
+        cRig.root.scale.setScalar(0.86);
+        cRig.root.position.set(side * 1.25, 0.02, -0.65);
+        cRig.root.rotation.y = side * -0.35;
+        this.scene.add(cRig.root);
+        this.previewCompanionRigs.push(cRig);
+      });
     }
+    this.cameraController.snapToPedestalPreview();
   }
 
   /**
-   * Starts the Isometric ARPG Gameplay session for a selected character slot.
-   * New characters start in Starting Town (Safe Zone) and traverse portals to Stomping Grounds & Market Crossing.
+   * Starts the Isometric ARPG Gameplay session for a selected character slot,
+   * automatically spawning the other two classes as 3D AI Companions.
    */
-  public startGameplayWithCharacter(character: CharacterSaveData): void {
+  public startGameplayWithCharacter(
+    character: CharacterSaveData,
+    accountRoster: CharacterSaveData[] = []
+  ): void {
     this.clearGameplayEntities();
     if (this.previewRig) {
       this.scene.remove(this.previewRig.root);
       this.previewRig = null;
     }
+    for (const cRig of this.previewCompanionRigs) {
+      this.scene.remove(cRig.root);
+    }
+    this.previewCompanionRigs = [];
     if (this.pedestalMesh) {
       this.pedestalMesh.visible = false;
     }
@@ -302,6 +351,7 @@ export class GameEngine {
     this.playerRig = new CharacterRig(this.activeCharacter.classId);
     this.scene.add(this.playerRig.root);
     this.buildCompassArrow();
+    this.spawnCompanionPair(this.activeCharacter, accountRoster);
 
     this.cooldowns = { basic: 0, dash: 0, skill1: 0, skill2: 0, ultimate: 0 };
     this.hitComboCount = 0;
@@ -310,6 +360,54 @@ export class GameEngine {
     const initialZone: ZoneId = this.activeCharacter.currentZone || 'starting_town';
     this.enterZone(initialZone);
     this.emitHudTelemetry();
+  }
+
+  private spawnCompanionPair(
+    playerChar: CharacterSaveData,
+    accountRoster: CharacterSaveData[]
+  ): void {
+    for (const c of this.companions) {
+      this.scene.remove(c.rig.root);
+    }
+    this.companions = [];
+
+    const companionClasses = getCompanionClassesForPlayer(playerChar.classId);
+    companionClasses.forEach((compClassId, idx) => {
+      const rosterMatch = accountRoster.find(
+        (r) => r.id !== playerChar.id && r.classId === compClassId
+      );
+      const name = rosterMatch?.name ?? CANONICAL_HERO_NAMES[compClassId];
+      const level = rosterMatch?.level ?? playerChar.level;
+      const wingSide: -1 | 1 = idx === 0 ? -1 : 1;
+
+      const rig = new CharacterRig(compClassId);
+      // Scale companions slightly (0.94) so the active hero remains the clear visual anchor
+      rig.root.scale.setScalar(0.94);
+      this.scene.add(rig.root);
+
+      this.companions.push({
+        classId: compClassId,
+        name,
+        level,
+        isFromAccountSlot: Boolean(rosterMatch),
+        wingSide,
+        rig,
+        position: new THREE.Vector3(wingSide * 1.9, 0, 1.8),
+        yaw: Math.PI,
+        attackCooldown: 0.6 + idx * 0.35,
+        attackCount: 0,
+        animState: {
+          isMoving: false,
+          moveSpeedRatio: 0,
+          attackComboStep: 0,
+          attackSwingProgress: 0,
+          isDashing: false,
+          hitFlashTimer: 0,
+        },
+        activeAttackTimer: 0,
+        actionText: 'In Formation',
+      });
+    });
   }
 
   /**
@@ -369,12 +467,78 @@ export class GameEngine {
       this.spawnProceduralStompingGroundsEncounters(layout);
       const quest = normalizeQuestState(this.activeCharacter.questState);
       this.activeCharacter.questState = quest;
-      const questBanner = QuestEngine.onEnterStompingGrounds(quest, this.enemies.length);
+      const questBanner = QuestEngine.onEnterCombatZone(
+        quest,
+        'stomping_grounds',
+        this.enemies.length
+      );
 
       this.callbacks.onBannerNotification(
         questBanner.bannerTitle ?? `STOMPING GROUNDS // PATH #${layout.seed % 1000}`,
         questBanner.bannerSubtitle ??
           `Procedural Single Path (${layout.totalDistance}m) • Battle to the far Portal!`
+      );
+    } else if (zoneId === 'sunken_ruins') {
+      const layout = generateStompingGroundsPath(explicitSeed);
+      this.currentPathLayout = layout;
+      const built = this.environment.buildZone(this.scene, 'sunken_ruins', layout);
+      this.activePortals = built.portals;
+      this.activeNpcs = built.npcs;
+
+      if (spawnTag === 'from_sanctum') {
+        this.playerPos.set(layout.endPortalPos.x, 0, layout.endPortalPos.z + 2.2);
+        this.playerYaw = 0;
+        this.currentPathProgress = 1;
+      } else {
+        this.playerPos.set(layout.startPortalPos.x, 0, layout.startPortalPos.z - 2.2);
+        this.playerYaw = Math.PI;
+        this.currentPathProgress = 0;
+      }
+
+      this.spawnProceduralStompingGroundsEncounters(layout, 1.35);
+      const quest = normalizeQuestState(this.activeCharacter.questState);
+      this.activeCharacter.questState = quest;
+      const questBanner = QuestEngine.onEnterCombatZone(
+        quest,
+        'sunken_ruins',
+        this.enemies.length
+      );
+
+      this.callbacks.onBannerNotification(
+        questBanner.bannerTitle ?? `SUNKEN ASTRAL RUINS // PATH #${layout.seed % 1000}`,
+        questBanner.bannerSubtitle ??
+          `Act II Procedural Temple Path (${layout.totalDistance}m) • Battle to the Abyssal Sanctum!`
+      );
+    } else if (zoneId === 'abyssal_sanctum') {
+      this.currentPathLayout = null;
+      this.currentPathProgress = 1;
+      const built = this.environment.buildZone(this.scene, 'abyssal_sanctum');
+      this.activePortals = built.portals;
+      this.activeNpcs = built.npcs;
+
+      this.playerPos.set(0, 0, 10.2);
+      this.playerYaw = Math.PI;
+
+      const quest = normalizeQuestState(this.activeCharacter.questState);
+      this.activeCharacter.questState = quest;
+      if (quest.stage !== 'talk_sage_orin' && quest.stage !== 'completed') {
+        const scale = 1.65 + (this.activeCharacter.stompingGroundsClears || 0) * 0.2;
+        this.spawnEnemyAtPosition('boss_knight', 0, -1.5, scale * 1.45);
+        this.spawnEnemyAtPosition('sentinel', -4.2, 0.5, scale);
+        this.spawnEnemyAtPosition('sentinel', 4.2, 0.5, scale);
+        this.spawnEnemyAtPosition('slime', -2.8, 3.0, scale);
+        this.spawnEnemyAtPosition('slime', 2.8, 3.0, scale);
+      }
+
+      const questBanner = QuestEngine.onEnterCombatZone(
+        quest,
+        'abyssal_sanctum',
+        this.enemies.length
+      );
+      this.callbacks.onBannerNotification(
+        questBanner.bannerTitle ?? 'ABYSSAL SANCTUM // ECLIPSE SUMMIT',
+        questBanner.bannerSubtitle ??
+          'Confront the Eclipse Sovereign & speak with High Sage Orin at the North Altar!'
       );
     } else {
       this.currentPathLayout = null;
@@ -383,8 +547,13 @@ export class GameEngine {
       this.activePortals = built.portals;
       this.activeNpcs = built.npcs;
 
-      this.playerPos.set(0, 0, 10.2);
-      this.playerYaw = Math.PI;
+      if (spawnTag === 'from_ruins_south') {
+        this.playerPos.set(0, 0, -10.2);
+        this.playerYaw = 0;
+      } else {
+        this.playerPos.set(0, 0, 10.2);
+        this.playerYaw = Math.PI;
+      }
 
       if (spawnTag === 'from_stomping_north') {
         this.activeCharacter.stompingGroundsClears =
@@ -408,7 +577,7 @@ export class GameEngine {
       this.activeCharacter.currentHp = this.effectiveStats.maxHp;
       this.callbacks.onBannerNotification(
         'MARKET CROSSING // STARLIGHT BAZAAR',
-        'Safe Zone • Rest, equip new relics, or step through the Portal for a new Stomping Grounds run!'
+        'Safe Zone Hub • South Gate: Stomping Grounds | North Gate: Sunken Astral Ruins'
       );
     }
 
@@ -416,6 +585,17 @@ export class GameEngine {
       this.playerRig.root.position.copy(this.playerPos);
       this.playerRig.root.rotation.y = this.playerYaw;
     }
+    // Snap companions into formation next to the player on zone entry
+    for (const comp of this.companions) {
+      comp.position.set(
+        this.playerPos.x + comp.wingSide * 1.9,
+        0,
+        this.playerPos.z + 1.6
+      );
+      comp.rig.root.position.copy(comp.position);
+      comp.rig.root.rotation.y = this.playerYaw;
+    }
+    this.cameraController.snapToIsometricFollow(this.playerPos);
     this.vfx.spawnShockwaveRing(this.playerPos, 3.2, 0x4cc9f0, 0xffffff, 0.45);
     void this.saveActiveCharacterNow();
   }
@@ -442,20 +622,21 @@ export class GameEngine {
 
     this.vfx.spawnShockwaveRing(this.playerPos, 3.8, 0xffd166, 0xffffff, 0.48);
 
-    if (result.eventType === 'completed') {
-      this.activeCharacter.xp += 500;
-      this.activeCharacter.gold += 600;
-      this.activeCharacter.aetherCrystals += 50;
+    if (result.eventType === 'act1_completed' || result.eventType === 'completed') {
+      const isFinal = result.eventType === 'completed';
+      this.activeCharacter.xp += isFinal ? 1000 : 500;
+      this.activeCharacter.gold += isFinal ? 1200 : 600;
+      this.activeCharacter.aetherCrystals += isFinal ? 100 : 50;
       this.checkAndApplyLevelUps();
 
       const mythicReward = generateLootItem(
         this.activeCharacter.classId,
-        Math.max(2, this.activeCharacter.currentWave + 1),
+        Math.max(2, this.activeCharacter.currentWave + (isFinal ? 3 : 1)),
         'mythic'
       );
       this.spawnLootOrb(
         this.playerPos.clone().add(new THREE.Vector3(0, 0, -1.2)),
-        250,
+        isFinal ? 500 : 250,
         mythicReward
       );
     }
@@ -537,9 +718,56 @@ export class GameEngine {
       if (quest.stage === 'talk_market_npc') {
         const lyra = this.activeNpcs.find((n) => n.id === 'npc_merchant_lyra');
         if (lyra) targetPos = lyra.position;
+      } else if (quest.stage === 'talk_sol_market') {
+        const sol = this.activeNpcs.find((n) => n.id === 'npc_artificer_sol');
+        if (sol) targetPos = sol.position;
+      } else if (
+        quest.stage === 'clear_sunken_ruins' ||
+        quest.stage === 'defeat_abyssal_sanctum' ||
+        quest.stage === 'talk_sage_orin'
+      ) {
+        const northPortal = this.activePortals.find(
+          (p) => p.targetZone === 'sunken_ruins'
+        );
+        if (northPortal) targetPos = northPortal.position;
       } else {
-        const portal = this.activePortals[0];
-        if (portal) targetPos = portal.position;
+        const southPortal = this.activePortals.find(
+          (p) => p.targetZone === 'stomping_grounds'
+        );
+        if (southPortal) targetPos = southPortal.position;
+      }
+    } else if (this.currentZone === 'sunken_ruins') {
+      if (this.enemies.length > 0) {
+        let closest: EnemyEntity | null = null;
+        let bestDist = Infinity;
+        for (const e of this.enemies) {
+          const d = this.playerPos.distanceTo(e.bundle.root.position);
+          if (d < bestDist) {
+            bestDist = d;
+            closest = e;
+          }
+        }
+        if (closest) {
+          targetPos = {
+            x: closest.bundle.root.position.x,
+            z: closest.bundle.root.position.z,
+          };
+        }
+      } else {
+        const sanctumPortal = this.activePortals.find(
+          (p) => p.targetZone === 'abyssal_sanctum'
+        );
+        if (sanctumPortal) targetPos = sanctumPortal.position;
+      }
+    } else if (this.currentZone === 'abyssal_sanctum') {
+      if (this.enemies.length > 0) {
+        targetPos = {
+          x: this.enemies[0].bundle.root.position.x,
+          z: this.enemies[0].bundle.root.position.z,
+        };
+      } else {
+        const orin = this.activeNpcs.find((n) => n.id === 'npc_sage_orin');
+        if (orin) targetPos = orin.position;
       }
     }
 
@@ -624,6 +852,10 @@ export class GameEngine {
       this.scene.remove(this.playerRig.root);
       this.playerRig = null;
     }
+    for (const c of this.companions) {
+      this.scene.remove(c.rig.root);
+    }
+    this.companions = [];
     if (this.compassGroup) {
       this.scene.remove(this.compassGroup);
       this.compassGroup = null;
@@ -631,9 +863,12 @@ export class GameEngine {
     this.clearZoneCombatEntities();
   }
 
-  private spawnProceduralStompingGroundsEncounters(layout: ProceduralPathLayout): void {
+  private spawnProceduralStompingGroundsEncounters(
+    layout: ProceduralPathLayout,
+    zoneDifficultyMultiplier = 1.0
+  ): void {
     const clears = this.activeCharacter?.stompingGroundsClears ?? 0;
-    const scale = 1 + clears * 0.22;
+    const scale = (1 + clears * 0.22) * zoneDifficultyMultiplier;
 
     for (const pack of layout.encounters) {
       const total = pack.enemies.length;
@@ -692,16 +927,20 @@ export class GameEngine {
     this.environment.update(dt);
 
     if (this.mode === 'preview') {
+      const idleAnim: CharacterAnimationState = {
+        isMoving: false,
+        moveSpeedRatio: 0,
+        attackComboStep: 0,
+        attackSwingProgress: 0,
+        isDashing: false,
+        hitFlashTimer: 0,
+      };
       if (this.previewRig) {
-        this.previewRig.root.rotation.y += dt * 0.65;
-        this.previewRig.updateAnimation(dt, {
-          isMoving: false,
-          moveSpeedRatio: 0,
-          attackComboStep: 0,
-          attackSwingProgress: 0,
-          isDashing: false,
-          hitFlashTimer: 0,
-        });
+        this.previewRig.root.rotation.y += dt * 0.55;
+        this.previewRig.updateAnimation(dt, idleAnim);
+      }
+      for (const cRig of this.previewCompanionRigs) {
+        cRig.updateAnimation(dt, idleAnim);
       }
       this.cameraController.updatePedestalPreview(dt);
     } else if (this.mode === 'playing' && this.activeCharacter && this.playerRig && this.effectiveStats) {
@@ -826,6 +1065,7 @@ export class GameEngine {
     this.playerRig!.updateAnimation(dt, this.animState);
 
     // Update Projectiles, Ground Hazards, Enemies & Loot
+    this.updateCompanions(dt);
     this.updateProjectiles(dt);
     this.updateGroundHazards(dt);
     this.updateEnemies(dt);
@@ -837,8 +1077,264 @@ export class GameEngine {
     this.emitHudTelemetry();
   }
 
+  private updateCompanions(dt: number): void {
+    if (!this.activeCharacter) return;
+    const playerForward = new THREE.Vector3(
+      Math.sin(this.playerYaw),
+      0,
+      Math.cos(this.playerYaw)
+    );
+    const playerRight = new THREE.Vector3(playerForward.z, 0, -playerForward.x);
+
+    for (const comp of this.companions) {
+      comp.level = Math.max(comp.level, this.activeCharacter.level);
+      if (comp.attackCooldown > 0) {
+        comp.attackCooldown = Math.max(0, comp.attackCooldown - dt);
+      }
+      if (comp.activeAttackTimer > 0) {
+        comp.activeAttackTimer -= dt;
+        comp.animState.attackSwingProgress = 1 - Math.max(0, comp.activeAttackTimer / 0.28);
+        if (comp.activeAttackTimer <= 0) {
+          comp.animState.attackComboStep = 0;
+        }
+      }
+
+      // Formation anchor behind and to the left/right of the player
+      const formationPos = this.playerPos
+        .clone()
+        .addScaledVector(playerForward, -2.1)
+        .addScaledVector(playerRight, comp.wingSide * 1.85);
+
+      // Find nearest enemy within 13.5m of the player
+      let targetEnemy: EnemyEntity | null = null;
+      let bestDist = 13.5;
+      for (const e of this.enemies) {
+        const d = this.playerPos.distanceTo(e.bundle.root.position);
+        if (d < bestDist) {
+          bestDist = d;
+          targetEnemy = e;
+        }
+      }
+
+      if (targetEnemy) {
+        const enemyPos = targetEnemy.bundle.root.position;
+        const toEnemy = enemyPos.clone().sub(comp.position);
+        toEnemy.y = 0;
+        const distToEnemy = toEnemy.length();
+        const dirToEnemy =
+          distToEnemy > 0.01 ? toEnemy.clone().normalize() : new THREE.Vector3(0, 0, 1);
+
+        comp.yaw = Math.atan2(dirToEnemy.x, dirToEnemy.z);
+
+        const desiredRange =
+          comp.classId === 'warrior' ? 2.6 : comp.classId === 'mage' ? 6.8 : 6.2;
+
+        if (distToEnemy > desiredRange + 0.5) {
+          comp.position.addScaledVector(dirToEnemy, 8.2 * dt);
+          comp.animState.isMoving = true;
+          comp.animState.moveSpeedRatio = 0.95;
+          comp.actionText =
+            comp.classId === 'warrior' ? 'Charging Target' : 'Positioning';
+        } else if (comp.classId !== 'warrior' && distToEnemy < 2.6) {
+          // Ranged companions kite backward slightly if an enemy gets too close
+          comp.position.addScaledVector(dirToEnemy, -5.5 * dt);
+          comp.animState.isMoving = true;
+          comp.animState.moveSpeedRatio = 0.8;
+          comp.actionText = 'Kiting';
+        } else {
+          comp.animState.isMoving = false;
+          comp.animState.moveSpeedRatio = 0;
+        }
+
+        // Execute Companion Class Attack when cooldown is ready
+        if (comp.attackCooldown <= 0 && distToEnemy <= desiredRange + 2.5) {
+          this.executeCompanionAttack(comp, targetEnemy, dirToEnemy);
+        }
+      } else {
+        // Follow player in formation
+        const toFormation = formationPos.clone().sub(comp.position);
+        toFormation.y = 0;
+        const dist = toFormation.length();
+        if (dist > 0.45) {
+          const moveSpeed = dist > 5.0 ? 11.5 : 8.4;
+          const dir = toFormation.normalize();
+          comp.position.addScaledVector(dir, Math.min(dist, moveSpeed * dt));
+          comp.yaw = Math.atan2(dir.x, dir.z);
+          comp.animState.isMoving = true;
+          comp.animState.moveSpeedRatio = Math.min(1, dist / 2.5);
+          comp.actionText = 'Following';
+        } else {
+          comp.animState.isMoving = false;
+          comp.animState.moveSpeedRatio = 0;
+          comp.yaw = THREE.MathUtils.lerp(comp.yaw, this.playerYaw, dt * 5);
+          comp.actionText = 'Guarding';
+        }
+      }
+
+      // Clamp companion inside walkable zone
+      if (
+        (this.currentZone === 'stomping_grounds' || this.currentZone === 'sunken_ruins') &&
+        this.currentPathLayout
+      ) {
+        const clamped = clampToProceduralPath(
+          comp.position.x,
+          comp.position.z,
+          this.currentPathLayout,
+          0.6
+        );
+        comp.position.x = clamped.x;
+        comp.position.z = clamped.z;
+      } else {
+        const maxR = SAFE_ZONE_RADIUS - 1.3;
+        const len = Math.hypot(comp.position.x, comp.position.z);
+        if (len > maxR) {
+          comp.position.x *= maxR / len;
+          comp.position.z *= maxR / len;
+        }
+      }
+
+      comp.rig.root.position.copy(comp.position);
+      comp.rig.root.rotation.y = comp.yaw;
+      comp.rig.updateAnimation(dt, comp.animState);
+    }
+  }
+
+  private executeCompanionAttack(
+    comp: CompanionEntity,
+    targetEnemy: EnemyEntity,
+    dirToEnemy: THREE.Vector3
+  ): void {
+    const cDef = CHARACTER_CLASSES[comp.classId];
+    comp.attackCount += 1;
+    comp.activeAttackTimer = 0.28;
+    comp.animState.attackComboStep = (comp.attackCount % 3) + 1;
+    comp.animState.attackSwingProgress = 0;
+
+    if (comp.classId === 'warrior') {
+      comp.attackCooldown = 1.25;
+      if (comp.attackCount % 4 === 0) {
+        comp.actionText = 'Earthshaker Slam!';
+        this.vfx.spawnShockwaveRing(
+          comp.position,
+          3.6,
+          cDef.skills.skill2.colorHex,
+          cDef.skills.skill2.accentHex,
+          0.38
+        );
+        this.dealAreaDamage(
+          comp.position,
+          3.6,
+          0.75,
+          3,
+          cDef.elementColor,
+          4.0
+        );
+      } else {
+        comp.actionText = 'Dragon-Spear Thrust!';
+        this.vfx.spawnSpearThrustBeam(
+          comp.position,
+          comp.yaw,
+          4.8,
+          cDef.skills.basic.colorHex,
+          cDef.skills.basic.accentHex
+        );
+        this.dealLineDamage(
+          comp.position,
+          dirToEnemy,
+          4.8,
+          1.1,
+          0.58,
+          2,
+          cDef.elementColor,
+          2.5
+        );
+      }
+    } else if (comp.classId === 'mage') {
+      comp.attackCooldown = 1.35;
+      if (comp.attackCount % 4 === 0) {
+        comp.actionText = 'Gravity Vortex!';
+        this.spawnGroundHazard({
+          position: targetEnemy.bundle.root.position.clone(),
+          radius: 3.6,
+          damageMultiplier: 0.35,
+          energyGain: 3,
+          colorHex: cDef.skills.skill1.colorHex,
+          accentHex: cDef.skills.skill1.accentHex,
+          colorCss: cDef.elementColor,
+          duration: 1.9,
+          tickInterval: 0.5,
+          pullInward: true,
+          visualStyle: 'vortex',
+        });
+      } else {
+        comp.actionText = 'Starlight Bolt!';
+        this.spawnProjectile({
+          origin: comp.position,
+          yaw: comp.yaw,
+          speed: 17.0,
+          radius: 0.38,
+          damageMultiplier: 0.52,
+          energyGain: 2,
+          colorHex: cDef.skills.basic.colorHex,
+          accentHex: cDef.skills.basic.accentHex,
+          colorCss: cDef.elementColor,
+          maxLifetime: 0.7,
+          pierceRemaining: 1,
+          explodeRadius: 1.3,
+          homingStrength: 3.2,
+          shape: 'orb',
+        });
+      }
+    } else {
+      // Ranged Assassin Companion
+      comp.attackCooldown = 0.92;
+      if (comp.attackCount % 4 === 0) {
+        comp.actionText = 'Shadow Chakram!';
+        this.spawnProjectile({
+          origin: comp.position,
+          yaw: comp.yaw,
+          speed: 18.5,
+          radius: 0.72,
+          damageMultiplier: 0.68,
+          energyGain: 3,
+          colorHex: cDef.skills.basic.accentHex,
+          accentHex: cDef.skills.basic.colorHex,
+          colorCss: cDef.elementColor,
+          maxLifetime: 0.6,
+          pierceRemaining: 6,
+          explodeRadius: 0,
+          homingStrength: 0,
+          shape: 'chakram',
+        });
+      } else {
+        comp.actionText = 'Kunai Volley!';
+        for (const spread of [-0.1, 0.1]) {
+          this.spawnProjectile({
+            origin: comp.position,
+            yaw: comp.yaw + spread,
+            speed: 23.0,
+            radius: 0.32,
+            damageMultiplier: 0.34,
+            energyGain: 1,
+            colorHex: cDef.skills.basic.colorHex,
+            accentHex: cDef.skills.basic.accentHex,
+            colorCss: cDef.elementColor,
+            maxLifetime: 0.48,
+            pierceRemaining: 2,
+            explodeRadius: 0,
+            homingStrength: 1.5,
+            shape: 'kunai',
+          });
+        }
+      }
+    }
+  }
+
   private clampPlayerToZone(): void {
-    if (this.currentZone === 'stomping_grounds' && this.currentPathLayout) {
+    if (
+      (this.currentZone === 'stomping_grounds' || this.currentZone === 'sunken_ruins') &&
+      this.currentPathLayout
+    ) {
       const clamped = clampToProceduralPath(
         this.playerPos.x,
         this.playerPos.z,
@@ -1428,6 +1924,7 @@ export class GameEngine {
   }
 
   private spawnProjectile(opts: {
+    origin?: THREE.Vector3;
     yaw: number;
     speed: number;
     radius: number;
@@ -1443,7 +1940,8 @@ export class GameEngine {
     shape: 'orb' | 'comet' | 'kunai' | 'chakram';
   }): void {
     const group = new THREE.Group();
-    const startPos = this.playerPos
+    const basePos = opts.origin ?? this.playerPos;
+    const startPos = basePos
       .clone()
       .add(new THREE.Vector3(Math.sin(opts.yaw) * 0.65, 0.95, Math.cos(opts.yaw) * 0.65));
     group.position.copy(startPos);
@@ -1857,12 +2355,17 @@ export class GameEngine {
 
     this.spawnLootOrb(pos, enemy.goldReward, droppedItem);
 
-    // Check Quest Progress if in Stomping Grounds
-    if (this.currentZone === 'stomping_grounds') {
+    // Check Quest Progress in any Combat Zone
+    if (
+      this.currentZone === 'stomping_grounds' ||
+      this.currentZone === 'sunken_ruins' ||
+      this.currentZone === 'abyssal_sanctum'
+    ) {
       const quest = normalizeQuestState(char.questState);
       char.questState = quest;
-      const qUpdate = QuestEngine.onStompingGroundsEnemyCountChanged(
+      const qUpdate = QuestEngine.onCombatZoneEnemyCountChanged(
         quest,
+        this.currentZone,
         this.enemies.length
       );
       if (qUpdate.stageAdvanced) {
@@ -2056,8 +2559,11 @@ export class GameEngine {
         }
       }
 
-      // Clamp enemy to the procedural Stomping Grounds path
-      if (this.currentZone === 'stomping_grounds' && this.currentPathLayout) {
+      // Clamp enemy to the procedural path if in a procedural corridor zone
+      if (
+        (this.currentZone === 'stomping_grounds' || this.currentZone === 'sunken_ruins') &&
+        this.currentPathLayout
+      ) {
         const clamped = clampToProceduralPath(pos.x, pos.z, this.currentPathLayout, 0.65);
         pos.x = clamped.x;
         pos.z = clamped.z;
@@ -2111,15 +2617,43 @@ export class GameEngine {
       zoneSubtitle = `${this.enemies.length} Fiends Left • Path Seed #${(this.currentPathLayout?.seed ?? 0) % 1000}`;
     } else if (this.currentZone === 'market_crossing') {
       zoneTitle = 'MARKET CROSSING';
-      zoneSubtitle = 'Safe Zone • Starlight Bazaar';
+      zoneSubtitle = 'Safe Zone Hub • Starlight Bazaar';
+    } else if (this.currentZone === 'sunken_ruins') {
+      const pct = Math.round(this.currentPathProgress * 100);
+      zoneTitle = `SUNKEN ASTRAL RUINS (${pct}%)`;
+      zoneSubtitle = `${this.enemies.length} Guardians Left • Path Seed #${(this.currentPathLayout?.seed ?? 0) % 1000}`;
+    } else if (this.currentZone === 'abyssal_sanctum') {
+      zoneTitle = 'ABYSSAL SANCTUM';
+      zoneSubtitle =
+        this.enemies.length > 0
+          ? `${this.enemies.length} Eclipse Bosses Remaining`
+          : 'Sanctum Cleared • Speak with High Sage Orin';
     }
+
+    const companionNamesMap: Partial<Record<CharacterClassId, string>> = {};
+    const companionViews: CompanionStatusView[] = this.companions.map((c) => {
+      companionNamesMap[c.classId] = c.name;
+      const cDef = CHARACTER_CLASSES[c.classId];
+      return {
+        classId: c.classId,
+        name: c.name,
+        archetypeLabel: cDef.archetypeLabel,
+        icon: cDef.starterWeapon.icon,
+        elementColor: cDef.elementColor,
+        level: c.level,
+        actionText: c.actionText,
+        isFromAccountSlot: c.isFromAccountSlot,
+      };
+    });
 
     const quest = normalizeQuestState(char.questState);
     char.questState = quest;
     const questView = QuestEngine.getObjectiveView(
       quest,
       this.currentZone,
-      this.nearbyNpc?.id ?? null
+      this.nearbyNpc?.id ?? null,
+      char.classId,
+      companionNamesMap
     );
 
     const contextualNpc: NpcActor | null = this.nearbyNpc
@@ -2145,12 +2679,14 @@ export class GameEngine {
       zoneId: this.currentZone,
       zoneTitle,
       zoneSubtitle,
-      isSafeZone: this.currentZone !== 'stomping_grounds',
+      isSafeZone:
+        this.currentZone === 'starting_town' || this.currentZone === 'market_crossing',
       pathProgress: this.currentPathProgress,
       pathSeed: this.currentPathLayout?.seed ?? null,
       nearbyPortal: this.nearbyPortal,
       nearbyNpc: contextualNpc,
       questView,
+      companions: companionViews,
       wave: char.currentWave,
       enemiesRemaining: this.enemies.length,
       comboCount: this.hitComboCount,

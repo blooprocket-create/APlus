@@ -5,7 +5,15 @@ export interface PortalTrigger {
   label: string;
   subtitle: string;
   targetZone: ZoneId;
-  targetSpawnTag: 'from_town' | 'from_stomping_south' | 'from_stomping_north' | 'from_market';
+  targetSpawnTag:
+    | 'from_town'
+    | 'from_stomping_south'
+    | 'from_stomping_north'
+    | 'from_market'
+    | 'from_market_north'
+    | 'from_ruins_south'
+    | 'from_ruins_north'
+    | 'from_sanctum';
   position: { x: number; z: number };
   radius: number;
   colorHex: number;

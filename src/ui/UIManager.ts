@@ -5,6 +5,10 @@ import {
   computePowerRating,
 } from '../data/classes';
 import { GameEngine, HudTelemetry } from '../game/GameEngine';
+import {
+  CANONICAL_HERO_NAMES,
+  getCompanionClassesForPlayer,
+} from '../game/QuestEngine';
 import { ActionId } from '../input/InputManager';
 import { PersistenceManager } from '../persistence/PersistenceManager';
 import {
@@ -26,6 +30,8 @@ const ZONE_LABELS: Record<ZoneId, string> = {
   starting_town: 'Starting Town (Safe)',
   stomping_grounds: 'Stomping Grounds',
   market_crossing: 'Market Crossing (Safe)',
+  sunken_ruins: 'Sunken Astral Ruins',
+  abyssal_sanctum: 'Abyssal Sanctum',
 };
 
 export class UIManager {
@@ -59,6 +65,8 @@ export class UIManager {
     stepTown: HTMLElement;
     stepStomping: HTMLElement;
     stepMarket: HTMLElement;
+    stepRuins: HTMLElement;
+    stepSanctum: HTMLElement;
     pathProgressWrap: HTMLElement;
     pathProgressFill: HTMLElement;
     portalBtn: HTMLButtonElement;
@@ -66,10 +74,13 @@ export class UIManager {
     npcTitle: HTMLElement;
     npcText: HTMLElement;
     questActionBtn: HTMLButtonElement;
+    questChapterSpan: HTMLElement;
     questStepPill: HTMLElement;
     questObjTitle: HTMLElement;
     questObjHint: HTMLElement;
     questObjProgress: HTMLElement;
+    questBanterDiv: HTMLElement;
+    companionListDiv: HTMLElement;
     comboBox: HTMLElement;
     comboRank: HTMLElement;
     comboHits: HTMLElement;
@@ -190,6 +201,8 @@ export class UIManager {
       const mins = Math.floor(selectedChar.playTimeSeconds / 60);
       const secs = Math.floor(selectedChar.playTimeSeconds % 60);
       const zoneName = ZONE_LABELS[selectedChar.currentZone ?? 'starting_town'];
+      const [compA, compB] = getCompanionClassesForPlayer(selectedChar.classId);
+      const compSummary = `${CHARACTER_CLASSES[compA].starterWeapon.icon} ${CANONICAL_HERO_NAMES[compA]} (${CHARACTER_CLASSES[compA].archetypeLabel}) & ${CHARACTER_CLASSES[compB].starterWeapon.icon} ${CANONICAL_HERO_NAMES[compB]} (${CHARACTER_CLASSES[compB].archetypeLabel})`;
 
       rightPanelHtml = `
         <div class="panel-header">
@@ -199,8 +212,11 @@ export class UIManager {
         <p style="font-size:0.78rem;color:${cDef.elementColor};font-weight:800;margin-bottom:4px;">
           ${cDef.archetypeLabel} (${cDef.name}) — ${cDef.title}
         </p>
-        <p style="font-size:0.72rem;color:#ffd166;margin-bottom:6px;">
+        <p style="font-size:0.72rem;color:#ffd166;margin-bottom:4px;">
           ✦ ${cDef.cadenceDescription}
+        </p>
+        <p style="font-size:0.71rem;color:#4cc9f0;margin-bottom:6px;font-weight:700;">
+          🤝 Party Companions: ${compSummary}
         </p>
         <div class="stat-grid">
           <div class="stat-box"><span>Level</span><span>${selectedChar.level} (${selectedChar.xp}/${selectedChar.xpToNextLevel} XP)</span></div>
@@ -242,6 +258,9 @@ export class UIManager {
         )
         .join('');
 
+      const [compA, compB] = getCompanionClassesForPlayer(this.creationClassId);
+      const compSummary = `${CHARACTER_CLASSES[compA].starterWeapon.icon} ${CANONICAL_HERO_NAMES[compA]} (${CHARACTER_CLASSES[compA].archetypeLabel}) & ${CHARACTER_CLASSES[compB].starterWeapon.icon} ${CANONICAL_HERO_NAMES[compB]} (${CHARACTER_CLASSES[compB].archetypeLabel})`;
+
       rightPanelHtml = `
         <div class="panel-header">
           <span class="panel-title">AWAKEN HERO // SLOT ${this.selectedSlotIndex + 1}</span>
@@ -251,8 +270,11 @@ export class UIManager {
         <p style="font-size:0.78rem;color:${cDef.elementColor};font-weight:800;margin-bottom:3px;">
           ${cDef.name} — ${cDef.title}
         </p>
-        <p style="font-size:0.72rem;color:#ffd166;margin-bottom:6px;">
+        <p style="font-size:0.72rem;color:#ffd166;margin-bottom:4px;">
           ✦ ${cDef.cadenceDescription}
+        </p>
+        <p style="font-size:0.71rem;color:#4cc9f0;margin-bottom:6px;font-weight:700;">
+          🤝 Active Companions: ${compSummary}
         </p>
         <div class="skill-preview-list">${skillsHtml}</div>
         <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:4px;">
@@ -495,22 +517,34 @@ export class UIManager {
 
             <div id="hud-quest-tracker" class="quest-tracker-card">
               <div class="quest-tracker-header">
-                <span>📜 ACTIVE QUEST</span>
-                <span id="hud-quest-step" class="quest-step-pill">STEP 1/5</span>
+                <span id="hud-quest-chapter">📜 ACT I // THE RIFTSCAR CYCLE</span>
+                <span id="hud-quest-step" class="quest-step-pill">STEP 1/9</span>
               </div>
               <div id="hud-quest-title" class="quest-obj-title">Speak with Commander Vael</div>
               <div id="hud-quest-hint" class="quest-obj-hint">Walk north toward Commander Vael in Starting Town.</div>
               <div id="hud-quest-progress" class="quest-obj-progress">0 / 1 Spoken</div>
+              <div id="hud-quest-banter" class="companion-banter-quote"></div>
+            </div>
+
+            <div class="companion-party-card">
+              <div style="font-size:0.62rem;font-weight:900;color:var(--accent-cyan);letter-spacing:0.08em;margin-bottom:3px;">
+                🤝 ECLIPSE TRIAD COMPANIONS
+              </div>
+              <div id="hud-companion-list"></div>
             </div>
           </div>
 
           <div class="wave-card">
             <div class="zone-route-steps">
-              <span id="step-town" class="zone-step active">🏰 Starting Town</span>
+              <span id="step-town" class="zone-step active">🏰 Town</span>
               <span>➔</span>
-              <span id="step-stomping" class="zone-step">⚔️ Stomping Grounds</span>
+              <span id="step-stomping" class="zone-step">⚔️ Stomping</span>
               <span>➔</span>
-              <span id="step-market" class="zone-step">🏮 Market Crossing</span>
+              <span id="step-market" class="zone-step">🏮 Market</span>
+              <span>➔</span>
+              <span id="step-ruins" class="zone-step">🏛️ Ruins</span>
+              <span>➔</span>
+              <span id="step-sanctum" class="zone-step">👑 Sanctum</span>
             </div>
             <div id="hud-wave-title" class="wave-title">STARTING TOWN</div>
             <div id="hud-wave-sub" class="wave-sub">Safe Zone • Walk North to Portal</div>
@@ -612,6 +646,8 @@ export class UIManager {
       stepTown: this.root.querySelector('#step-town')!,
       stepStomping: this.root.querySelector('#step-stomping')!,
       stepMarket: this.root.querySelector('#step-market')!,
+      stepRuins: this.root.querySelector('#step-ruins')!,
+      stepSanctum: this.root.querySelector('#step-sanctum')!,
       pathProgressWrap: this.root.querySelector('#hud-path-progress-wrap')!,
       pathProgressFill: this.root.querySelector('#hud-path-progress-fill')!,
       portalBtn: this.root.querySelector('#hud-portal-btn')!,
@@ -619,10 +655,13 @@ export class UIManager {
       npcTitle: this.root.querySelector('#hud-npc-title')!,
       npcText: this.root.querySelector('#hud-npc-text')!,
       questActionBtn: this.root.querySelector('#hud-quest-action-btn')!,
+      questChapterSpan: this.root.querySelector('#hud-quest-chapter')!,
       questStepPill: this.root.querySelector('#hud-quest-step')!,
       questObjTitle: this.root.querySelector('#hud-quest-title')!,
       questObjHint: this.root.querySelector('#hud-quest-hint')!,
       questObjProgress: this.root.querySelector('#hud-quest-progress')!,
+      questBanterDiv: this.root.querySelector('#hud-quest-banter')!,
+      companionListDiv: this.root.querySelector('#hud-companion-list')!,
       comboBox: this.root.querySelector('#hud-combo-box')!,
       comboRank: this.root.querySelector('#hud-combo-rank')!,
       comboHits: this.root.querySelector('#hud-combo-hits')!,
@@ -674,7 +713,8 @@ export class UIManager {
       this.engine.interactWithNearbyQuestNpc();
     });
 
-    this.engine.startGameplayWithCharacter(character);
+    const accountRoster = this.slots.filter((s): s is CharacterSaveData => s !== null);
+    this.engine.startGameplayWithCharacter(character, accountRoster);
   }
 
   private openHeroInventoryModal(): void {
@@ -771,8 +811,10 @@ export class UIManager {
     this.hudRefs.stepTown.classList.toggle('active', t.zoneId === 'starting_town');
     this.hudRefs.stepStomping.classList.toggle('active', t.zoneId === 'stomping_grounds');
     this.hudRefs.stepMarket.classList.toggle('active', t.zoneId === 'market_crossing');
+    this.hudRefs.stepRuins.classList.toggle('active', t.zoneId === 'sunken_ruins');
+    this.hudRefs.stepSanctum.classList.toggle('active', t.zoneId === 'abyssal_sanctum');
 
-    if (t.zoneId === 'stomping_grounds') {
+    if (t.zoneId === 'stomping_grounds' || t.zoneId === 'sunken_ruins') {
       this.hudRefs.pathProgressWrap.style.display = 'block';
       this.hudRefs.pathProgressFill.style.width = `${Math.round(t.pathProgress * 100)}%`;
     } else {
@@ -788,12 +830,28 @@ export class UIManager {
 
     // Update Quest Tracker HUD
     const qv = t.questView;
+    this.hudRefs.questChapterSpan.textContent = `📜 ${qv.chapterTitle}`;
     this.hudRefs.questStepPill.textContent = qv.isComplete
       ? '★ COMPLETED'
       : `STEP ${qv.stepNumber}/${qv.totalSteps}`;
     this.hudRefs.questObjTitle.textContent = qv.objectiveTitle;
     this.hudRefs.questObjHint.textContent = qv.objectiveHint;
     this.hudRefs.questObjProgress.textContent = qv.progressText;
+    if (qv.companionBanter) {
+      this.hudRefs.questBanterDiv.textContent = `${qv.companionBanter.speakerName}: "${qv.companionBanter.text}"`;
+    }
+
+    // Update Companion Party Roster
+    this.hudRefs.companionListDiv.innerHTML = t.companions
+      .map(
+        (c) => `
+        <div class="companion-row">
+          <span><strong style="color:${c.elementColor}">${c.icon} ${this.escapeHtml(c.name)}</strong> <span style="color:#9aa5ce">(${c.archetypeLabel})</span></span>
+          <span style="color:#ffd166;font-weight:700;">${this.escapeHtml(c.actionText)}</span>
+        </div>
+      `
+      )
+      .join('');
 
     if (t.nearbyNpc) {
       this.hudRefs.npcBox.classList.remove('hidden');

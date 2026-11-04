@@ -69,6 +69,14 @@ export class EnvironmentBuilder {
       scene.background = new THREE.Color(0x090b18);
       scene.fog = new THREE.FogExp2(0x090b18, 0.013);
       return this.buildStompingGrounds(this.zoneGroup, proceduralLayout);
+    } else if (zoneId === 'sunken_ruins' && proceduralLayout) {
+      scene.background = new THREE.Color(0x051824);
+      scene.fog = new THREE.FogExp2(0x051824, 0.013);
+      return this.buildSunkenRuins(this.zoneGroup, proceduralLayout);
+    } else if (zoneId === 'abyssal_sanctum') {
+      scene.background = new THREE.Color(0x16071f);
+      scene.fog = new THREE.FogExp2(0x16071f, 0.012);
+      return this.buildAbyssalSanctum(this.zoneGroup);
     } else {
       scene.background = new THREE.Color(0x18112e);
       scene.fog = new THREE.FogExp2(0x18112e, 0.012);
@@ -113,9 +121,9 @@ export class EnvironmentBuilder {
     road.position.set(0, 0.01, -1.5);
     group.add(road);
 
-    // Central Aether Healing Fountain at (0, -1.5)
+    // Central Aether Healing Fountain at (0, -5.2) so the center (0,0) plaza is open
     const fountainGroup = new THREE.Group();
-    fountainGroup.position.set(0, 0, -1.5);
+    fountainGroup.position.set(0, 0, -5.2);
     const basin = new THREE.Mesh(
       new THREE.CylinderGeometry(1.85, 2.05, 0.65, 16),
       createAnimeToonMaterial({ color: 0x3d4e78 })
@@ -450,32 +458,267 @@ export class EnvironmentBuilder {
       {
         id: 'npc_artificer_sol',
         name: 'Artificer Sol',
-        role: 'Relic Appraiser',
+        role: 'Sunken Ruins Gatekeeper',
         dialogue:
-          'Re-enter the South Rift Gate anytime to roll a brand new Stomping Grounds path!',
-        position: { x: 4.5, z: -4.2 },
-        colorHex: 0x4cc9f0,
+          'Speak with me when you are ready to unseal the North Portal into the Sunken Astral Ruins!',
+        position: { x: 2.2, z: -5.8 },
+        colorHex: 0x00f5d4,
       },
     ];
     for (const npc of npcs) {
       this.addNpcMesh(group, npc);
     }
 
-    // Return Portal at South Gate (0, 14.2) -> Stomping Grounds
-    const portal: PortalTrigger = {
+    // 1. South Portal at (0, 14.2) -> Stomping Grounds (toward Starting Town)
+    const southPortal: PortalTrigger = {
       id: 'portal_market_to_stomping',
       label: 'Enter Stomping Grounds',
-      subtitle: 'New Procedural Path toward Starting Town',
+      subtitle: 'Procedural Path toward Starting Town',
       targetZone: 'stomping_grounds',
       targetSpawnTag: 'from_market',
       position: { x: 0, z: 14.2 },
       radius: 2.3,
       colorHex: 0x4cc9f0,
     };
-    this.addPortalGatewayMesh(group, portal);
+    this.addPortalGatewayMesh(group, southPortal);
+
+    // 2. North Portal at (0, -14.2) -> Sunken Astral Ruins (Act II Procedural Zone)
+    const northPortal: PortalTrigger = {
+      id: 'portal_market_to_ruins',
+      label: 'Enter Sunken Astral Ruins',
+      subtitle: 'Act II Procedural Temple Path toward Abyssal Sanctum',
+      targetZone: 'sunken_ruins',
+      targetSpawnTag: 'from_market_north',
+      position: { x: 0, z: -14.2 },
+      radius: 2.4,
+      colorHex: 0x00f5d4,
+    };
+    this.addPortalGatewayMesh(group, northPortal);
 
     this.addSkyMotes(group, 0xffd166, SAFE_ZONE_RADIUS + 8);
-    return { portals: [portal], npcs };
+    return { portals: [southPortal, northPortal], npcs };
+  }
+
+  private buildSunkenRuins(
+    group: THREE.Group,
+    layout: ProceduralPathLayout
+  ): BuiltZoneResult {
+    const roadMat = createAnimeToonMaterial({
+      color: 0x113247,
+      emissive: 0x072130,
+      emissiveIntensity: 0.35,
+    });
+    const borderMat = new THREE.MeshBasicMaterial({
+      color: 0x00f5d4,
+      transparent: true,
+      opacity: 0.55,
+    });
+    const obeliskMat = createAnimeToonMaterial({ color: 0x1a435c });
+    const crystalMat = createAnimeToonMaterial({
+      color: 0x00f5d4,
+      emissive: 0x00bbf9,
+      emissiveIntensity: 0.8,
+    });
+
+    for (const wp of layout.waypoints) {
+      const discGeo = new THREE.CylinderGeometry(wp.radius, wp.radius * 0.94, 1.2, 28);
+      const disc = new THREE.Mesh(discGeo, roadMat);
+      disc.position.set(wp.x, -0.6, wp.z);
+      disc.receiveShadow = true;
+      attachAnimeOutline(disc, 1.03);
+      group.add(disc);
+
+      const ringGeo = new THREE.RingGeometry(wp.radius - 0.55, wp.radius - 0.22, 32);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ring = new THREE.Mesh(
+        ringGeo,
+        new THREE.MeshBasicMaterial({
+          color: wp.index === layout.waypoints.length - 1 ? 0xff0054 : 0x00f5d4,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.6,
+        })
+      );
+      ring.position.set(wp.x, 0.02, wp.z);
+      group.add(ring);
+    }
+
+    for (let i = 0; i < layout.waypoints.length - 1; i++) {
+      const a = layout.waypoints[i];
+      const b = layout.waypoints[i + 1];
+      const midX = (a.x + b.x) / 2;
+      const midZ = (a.z + b.z) / 2;
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const segLen = Math.hypot(dx, dz);
+      const yaw = Math.atan2(dx, dz);
+
+      const width = layout.corridorHalfWidth * 2;
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(width, 1.15, segLen + 1.5),
+        roadMat
+      );
+      slab.position.set(midX, -0.58, midZ);
+      slab.rotation.y = yaw;
+      slab.receiveShadow = true;
+      group.add(slab);
+
+      for (const side of [-1, 1]) {
+        const railGeo = new THREE.PlaneGeometry(0.24, segLen);
+        railGeo.rotateX(-Math.PI / 2);
+        const rail = new THREE.Mesh(railGeo, borderMat);
+        rail.position.set(
+          midX + Math.cos(yaw) * side * (layout.corridorHalfWidth - 0.2),
+          0.025,
+          midZ - Math.sin(yaw) * side * (layout.corridorHalfWidth - 0.2)
+        );
+        rail.rotation.y = yaw;
+        group.add(rail);
+
+        const pillarOffset = layout.corridorHalfWidth + 1.85;
+        const px = midX + Math.cos(yaw) * side * pillarOffset;
+        const pz = midZ - Math.sin(yaw) * side * pillarOffset;
+
+        const column = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.45, 0.58, 3.2, 8),
+          obeliskMat
+        );
+        column.position.set(px, 1.6, pz);
+        attachAnimeOutline(column, 1.05);
+        group.add(column);
+
+        const shard = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.38, 0),
+          crystalMat
+        );
+        shard.position.set(px, 3.65, pz);
+        this.floatingCrystals.push(shard);
+        group.add(shard);
+      }
+    }
+
+    const startPortal: PortalTrigger = {
+      id: 'portal_ruins_to_market',
+      label: 'Return to Market Crossing',
+      subtitle: 'Starlight Bazaar (Safe Zone)',
+      targetZone: 'market_crossing',
+      targetSpawnTag: 'from_ruins_south',
+      position: { x: layout.startPortalPos.x, z: layout.startPortalPos.z + 1.8 },
+      radius: 2.2,
+      colorHex: 0x00f5d4,
+    };
+    this.addPortalGatewayMesh(group, startPortal);
+
+    const endPortal: PortalTrigger = {
+      id: 'portal_ruins_to_sanctum',
+      label: 'Enter Abyssal Sanctum',
+      subtitle: 'Act III Citadel of the Eclipse Sovereign',
+      targetZone: 'abyssal_sanctum',
+      targetSpawnTag: 'from_ruins_north',
+      position: { x: layout.endPortalPos.x, z: layout.endPortalPos.z - 1.8 },
+      radius: 2.4,
+      colorHex: 0xff0054,
+    };
+    this.addPortalGatewayMesh(group, endPortal);
+
+    this.addSkyMotes(group, 0x00f5d4, 45);
+    return { portals: [startPortal, endPortal], npcs: [] };
+  }
+
+  private buildAbyssalSanctum(group: THREE.Group): BuiltZoneResult {
+    const floorGeo = new THREE.CylinderGeometry(SAFE_ZONE_RADIUS, SAFE_ZONE_RADIUS * 0.92, 1.6, 48);
+    const floorMat = createAnimeToonMaterial({
+      color: 0x220e2e,
+      emissive: 0x14051e,
+      emissiveIntensity: 0.35,
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.position.y = -0.8;
+    floor.receiveShadow = true;
+    attachAnimeOutline(floor, 1.02);
+    group.add(floor);
+
+    for (const cfg of [
+      { r: 4.5, color: 0xff0054 },
+      { r: 10.5, color: 0xffbe0b },
+      { r: SAFE_ZONE_RADIUS - 0.5, color: 0x9d4edd },
+    ]) {
+      const ringGeo = new THREE.RingGeometry(cfg.r - 0.24, cfg.r, 48);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ring = new THREE.Mesh(
+        ringGeo,
+        new THREE.MeshBasicMaterial({
+          color: cfg.color,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.62,
+        })
+      );
+      ring.position.y = 0.02;
+      group.add(ring);
+    }
+
+    // Perimeter Obsidian Eclipse Pillars
+    const pillarMat = createAnimeToonMaterial({ color: 0x2d1642 });
+    const rubyMat = createAnimeToonMaterial({
+      color: 0xff0054,
+      emissive: 0xff0054,
+      emissiveIntensity: 0.85,
+    });
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const px = Math.cos(angle) * (SAFE_ZONE_RADIUS - 1.2);
+      const pz = Math.sin(angle) * (SAFE_ZONE_RADIUS - 1.2);
+
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.95, 3.8, 0.95), pillarMat);
+      pillar.position.set(px, 1.9, pz);
+      attachAnimeOutline(pillar, 1.06);
+      group.add(pillar);
+
+      const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.48, 0), rubyMat);
+      crystal.position.set(px, 4.4, pz);
+      this.floatingCrystals.push(crystal);
+      group.add(crystal);
+    }
+
+    // Grand Eclipse Seal Altar at North end (0, -9.2)
+    const altar = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.2, 2.6, 0.7, 16),
+      createAnimeToonMaterial({ color: 0x3b1c54, emissive: 0xffbe0b, emissiveIntensity: 0.25 })
+    );
+    altar.position.set(0, 0.35, -9.2);
+    attachAnimeOutline(altar, 1.04);
+    group.add(altar);
+
+    const npcs: NpcActor[] = [
+      {
+        id: 'npc_sage_orin',
+        name: 'High Sage Orin',
+        role: 'Keeper of the Eclipse Seal',
+        dialogue:
+          'When the Eclipse Sovereign falls, speak with me to seal the Riftscar with the Triad\'s three weapons!',
+        position: { x: 0, z: -7.5 },
+        colorHex: 0xffbe0b,
+      },
+    ];
+    for (const npc of npcs) {
+      this.addNpcMesh(group, npc);
+    }
+
+    const returnPortal: PortalTrigger = {
+      id: 'portal_sanctum_to_market',
+      label: 'Return to Market Crossing',
+      subtitle: 'Waygate back to Starlight Bazaar (Safe Zone)',
+      targetZone: 'market_crossing',
+      targetSpawnTag: 'from_sanctum',
+      position: { x: 0, z: 14.2 },
+      radius: 2.4,
+      colorHex: 0xffbe0b,
+    };
+    this.addPortalGatewayMesh(group, returnPortal);
+
+    this.addSkyMotes(group, 0xff0054, SAFE_ZONE_RADIUS + 8);
+    return { portals: [returnPortal], npcs };
   }
 
   private addPortalGatewayMesh(group: THREE.Group, portal: PortalTrigger): void {

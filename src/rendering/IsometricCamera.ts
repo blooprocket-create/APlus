@@ -9,8 +9,8 @@ export class IsometricCameraController {
 
   // Isometric offset angle (45 deg yaw, ~42 deg pitch)
   private readonly baseOffset = new THREE.Vector3(0, 14.5, 13.5);
-  private readonly previewPosition = new THREE.Vector3(0, 1.55, 4.15);
-  private readonly previewLookAt = new THREE.Vector3(0, 1.15, 0);
+  private readonly previewPosition = new THREE.Vector3(0, 2.15, 4.95);
+  private readonly previewLookAt = new THREE.Vector3(0, 1.1, 0);
 
   constructor() {
     this.camera = new THREE.PerspectiveCamera(
@@ -46,6 +46,22 @@ export class IsometricCameraController {
 
   public triggerUltimateZoom(): void {
     this.zoomPunch = 0.24;
+  }
+
+  public snapToPedestalPreview(): void {
+    this.camera.position.copy(this.previewPosition);
+    this.currentFocus.copy(this.previewLookAt);
+    this.camera.lookAt(this.currentFocus);
+  }
+
+  public snapToIsometricFollow(targetPos: THREE.Vector3): void {
+    this.currentFocus.set(targetPos.x, 0.8, targetPos.z);
+    this.camera.position.set(
+      this.currentFocus.x + this.baseOffset.x,
+      this.currentFocus.y + this.baseOffset.y,
+      this.currentFocus.z + this.baseOffset.z
+    );
+    this.camera.lookAt(this.currentFocus);
   }
 
   /**
