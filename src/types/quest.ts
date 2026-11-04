@@ -39,7 +39,7 @@ export interface CompanionBanterLine {
 export interface QuestObjectiveView {
   questTitle: string;
   chapterTitle: string;
-  stage: PrototypeQuestStage;
+  stage: PrototypeQuestStage | 'chronicle';
   stepNumber: number;
   totalSteps: number;
   objectiveTitle: string;

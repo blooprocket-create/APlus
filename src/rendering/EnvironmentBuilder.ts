@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { ChronicleChapter, ChronicleSite } from '../types/campaign';
+import { buildChronicleEnvironment } from './ChronicleEnvironment';
+import { disposeObject } from './SceneResources';
 import { ZoneId } from '../types/game';
 import { NpcActor, PortalTrigger, ProceduralPathLayout } from '../types/world';
 import { attachAnimeOutline, createAnimeToonMaterial } from './AnimeMaterials';
@@ -18,6 +21,74 @@ export class EnvironmentBuilder {
   private time = 0;
   private lightsInitialized = false;
 
+  private clearZone(scene: THREE.Scene): void {
+    if (!this.zoneGroup) return;
+    scene.remove(this.zoneGroup);
+    disposeObject(this.zoneGroup);
+    this.floatingCrystals = [];
+    this.portalVortexMeshes = [];
+    this.starParticles = null;
+  }
+
+  public buildChronicle(scene: THREE.Scene, chapter: ChronicleChapter, layout: ProceduralPathLayout, sites: ChronicleSite[]): BuiltZoneResult {
+    this.initBaseLighting(scene); this.clearZone(scene);
+    this.zoneGroup = buildChronicleEnvironment(scene, chapter, layout, sites);
+    return { portals: [], npcs: [] };
+  }
+
+  public buildPreviewScene(scene: THREE.Scene): void {
+    this.initBaseLighting(scene);
+    this.clearZone(scene);
+    scene.background = new THREE.Color(0x0b1921);
+    scene.fog = new THREE.FogExp2(0x0b1921, 0.035);
+    const group = new THREE.Group();
+    this.zoneGroup = group;
+    scene.add(group);
+    const stone = createAnimeToonMaterial({ color: 0x203b40 });
+    const gold = new THREE.MeshStandardMaterial({ color: 0xb5a278, roughness: 0.7, metalness: 0.6, emissive: 0x4c4323, emissiveIntensity: 0.2 });
+    const floor = new THREE.Mesh(new THREE.CylinderGeometry(16, 17, 0.7, 64), stone);
+    floor.position.y = -0.65;
+    floor.receiveShadow = true;
+    group.add(floor);
+    for (let i = 0; i < 3; i++) {
+      const platform = new THREE.Mesh(new THREE.CylinderGeometry(3.5 - i * 0.3, 3.65 - i * 0.3, 0.13, 64), stone);
+      platform.position.y = -0.3 + i * 0.13;
+      platform.receiveShadow = true;
+      group.add(platform);
+      const inlay = new THREE.Mesh(new THREE.TorusGeometry(3.42 - i * 0.3, 0.012, 4, 64), gold);
+      inlay.rotation.x = -Math.PI / 2;
+      inlay.position.y = platform.position.y + 0.07;
+      group.add(inlay);
+    }
+    // A broken astrolabe forms a recognizable silhouette behind the triad.
+    for (const [radius, tube] of [[2.5, 0.09], [2.72, 0.025], [3.1, 0.018]]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 8, 96), gold);
+      ring.position.set(0, 2.6, -3.2);
+      group.add(ring);
+    }
+    const moon = new THREE.Mesh(new THREE.CircleGeometry(2.46, 64), new THREE.MeshBasicMaterial({ color: 0x122c35 }));
+    moon.position.set(0, 2.6, -3.25);
+    group.add(moon);
+    for (let i = 0; i < 12; i++) {
+      const angle = i / 12 * Math.PI * 2;
+      const marker = new THREE.Mesh(new THREE.OctahedronGeometry(i % 3 === 0 ? 0.11 : 0.05), gold);
+      marker.position.set(Math.cos(angle) * 2.86, 2.6 + Math.sin(angle) * 2.86, -3.2);
+      group.add(marker);
+    }
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.48, 5.5 + i, 5), stone);
+        pillar.position.set(side * (4.7 + i * 2.2), 2.3, -4 - i * 1.5);
+        pillar.castShadow = true;
+        group.add(pillar);
+        const cap = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), gold);
+        cap.position.copy(pillar.position); cap.position.y += 3 + i * 0.5;
+        group.add(cap);
+      }
+    }
+    this.addSkyMotes(group, 0xc7c8a0, 12);
+  }
+
   public initBaseLighting(scene: THREE.Scene): void {
     if (this.lightsInitialized) return;
     this.lightsInitialized = true;
@@ -25,10 +96,10 @@ export class EnvironmentBuilder {
     scene.background = new THREE.Color(0x0b0e1d);
     scene.fog = new THREE.FogExp2(0x0b0e1d, 0.011);
 
-    const ambient = new THREE.AmbientLight(0x94a3e6, 1.25);
+    const ambient = new THREE.HemisphereLight(0xc2d5dc, 0x17292e, 1.25);
     scene.add(ambient);
 
-    const sunLight = new THREE.DirectionalLight(0xfff1e6, 2.4);
+    const sunLight = new THREE.DirectionalLight(0xffe2b1, 2.0);
     sunLight.position.set(16, 32, 20);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 1024;
@@ -40,6 +111,8 @@ export class EnvironmentBuilder {
     sunLight.shadow.camera.right = d;
     sunLight.shadow.camera.top = d;
     sunLight.shadow.camera.bottom = -d;
+    sunLight.shadow.bias = -0.0004;
+    sunLight.shadow.normalBias = 0.025;
     scene.add(sunLight);
   }
 
@@ -50,9 +123,7 @@ export class EnvironmentBuilder {
   ): BuiltZoneResult {
     this.initBaseLighting(scene);
 
-    if (this.zoneGroup) {
-      scene.remove(this.zoneGroup);
-    }
+    this.clearZone(scene);
     this.zoneGroup = new THREE.Group();
     this.zoneGroup.name = `zone_${zoneId}`;
     scene.add(this.zoneGroup);
@@ -88,7 +159,7 @@ export class EnvironmentBuilder {
     // Cobblestone Safe-Zone Plaza
     const floorGeo = new THREE.CylinderGeometry(SAFE_ZONE_RADIUS, SAFE_ZONE_RADIUS * 0.94, 1.4, 48);
     const floorMat = createAnimeToonMaterial({
-      color: 0x26304f,
+      color: 0x263b40,
       emissive: 0x111830,
       emissiveIntensity: 0.25,
     });
@@ -116,7 +187,7 @@ export class EnvironmentBuilder {
     // North-South stone walkway leading to the Stomping Grounds Portal
     const roadGeo = new THREE.PlaneGeometry(3.6, 26);
     roadGeo.rotateX(-Math.PI / 2);
-    const roadMat = createAnimeToonMaterial({ color: 0x344266 });
+    const roadMat = createAnimeToonMaterial({ color: 0x3b4c4d });
     const road = new THREE.Mesh(roadGeo, roadMat);
     road.position.set(0, 0.01, -1.5);
     group.add(road);
@@ -168,7 +239,7 @@ export class EnvironmentBuilder {
       { x: -5.5, z: -12.0 },
       { x: 5.5, z: -12.0 },
     ]) {
-      this.addSakuraTree(group, pos.x, pos.z, 0xff758f);
+      this.addSakuraTree(group, pos.x, pos.z, 0x879d8b);
     }
 
     for (const lPos of [
@@ -227,7 +298,7 @@ export class EnvironmentBuilder {
     layout: ProceduralPathLayout
   ): BuiltZoneResult {
     const roadMat = createAnimeToonMaterial({
-      color: 0x1e243d,
+      color: 0x2a3b42,
       emissive: 0x0d1124,
       emissiveIntensity: 0.3,
     });
@@ -236,7 +307,7 @@ export class EnvironmentBuilder {
       transparent: true,
       opacity: 0.45,
     });
-    const cliffMat = createAnimeToonMaterial({ color: 0x2c2247 });
+    const cliffMat = createAnimeToonMaterial({ color: 0x26353c });
     const crystalMat = createAnimeToonMaterial({
       color: 0xff3e6c,
       emissive: 0xff2a6d,
@@ -259,7 +330,7 @@ export class EnvironmentBuilder {
             ? 0xffd166
             : wp.index === layout.waypoints.length - 2
               ? 0xff0054
-              : 0x7209b7;
+              : 0x699585;
       const ringGeo = new THREE.RingGeometry(wp.radius - 0.55, wp.radius - 0.25, 32);
       ringGeo.rotateX(-Math.PI / 2);
       const ring = new THREE.Mesh(
@@ -273,6 +344,7 @@ export class EnvironmentBuilder {
       );
       ring.position.set(wp.x, 0.02, wp.z);
       group.add(ring);
+      this.addRuinsDetail(group, wp.x, wp.z, wp.index);
     }
 
     // Render each connecting single-path road segment + flanking boundary cliffs/trees
@@ -330,7 +402,7 @@ export class EnvironmentBuilder {
           this.floatingCrystals.push(shard);
           group.add(shard);
         } else {
-          this.addSakuraTree(group, px, pz, 0x9d4edd);
+          this.addSakuraTree(group, px, pz, 0x5e887a);
         }
       }
     }
@@ -369,7 +441,7 @@ export class EnvironmentBuilder {
     // Starlight Bazaar Safe-Zone Plaza
     const floorGeo = new THREE.CylinderGeometry(SAFE_ZONE_RADIUS, SAFE_ZONE_RADIUS * 0.94, 1.4, 48);
     const floorMat = createAnimeToonMaterial({
-      color: 0x2c2247,
+      color: 0x26353c,
       emissive: 0x18102e,
       emissiveIntensity: 0.3,
     });
@@ -902,6 +974,41 @@ export class EnvironmentBuilder {
     group.add(stall);
   }
 
+  private addRuinsDetail(group: THREE.Group, x: number, z: number, index: number): void {
+    const stone = createAnimeToonMaterial({ color: 0x425558 });
+    const moss = createAnimeToonMaterial({ color: 0x5b7a60 });
+    for (const side of [-1, 1]) {
+      const column = new THREE.Group();
+      column.position.set(x + side * 5.4, 0, z - 1);
+      const height = index % 3 === 0 ? 3.3 : 1.2 + (index % 3) * 0.65;
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.45, height, 6), stone);
+      shaft.position.y = height / 2; shaft.castShadow = true;
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.25, 1.1), stone);
+      foot.position.y = 0.1; foot.receiveShadow = true;
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.2, 0.95), moss);
+      cap.position.y = height;
+      column.add(shaft, foot, cap);
+      group.add(column);
+      for (let i = 0; i < 5; i++) {
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18 + i * 0.05, 0), i % 2 ? stone : moss);
+        rock.position.set(x + side * (4.6 + (i % 2) * 0.4), 0.12, z + (i - 2) * 1.2);
+        rock.scale.y = 0.45; rock.rotation.y = i * 1.8;
+        rock.castShadow = true;
+        group.add(rock);
+      }
+    }
+    // A stone causeway, with visible seams leading through each arena.
+    const tileGeometry = new THREE.BoxGeometry(1.1, 0.025, 0.65);
+    for (let i = -2; i <= 2; i++) {
+      for (const side of [-1, 1]) {
+        const tile = new THREE.Mesh(tileGeometry, stone);
+        tile.position.set(x + side * 0.58, 0.012, z + i * 0.76);
+        tile.receiveShadow = true;
+        group.add(tile);
+      }
+    }
+  }
+
   private addSakuraTree(group: THREE.Group, x: number, z: number, leafColor: number): void {
     const treeGroup = new THREE.Group();
     treeGroup.position.set(x, 0, z);
@@ -960,9 +1067,9 @@ export class EnvironmentBuilder {
     particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const particleMat = new THREE.PointsMaterial({
       color: colorHex,
-      size: 0.22,
+      size: 0.065,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.45,
     });
     this.starParticles = new THREE.Points(particleGeo, particleMat);
     group.add(this.starParticles);

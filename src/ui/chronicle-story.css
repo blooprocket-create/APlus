@@ -1,0 +1,99 @@
+.lobby-atlas-button, .hud-atlas-button { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 10px 14px; border: 1px solid #d3bd854d; background: #14282cc9; color: #d4c292; border-radius: 3px; cursor: pointer; font-size: 9px; letter-spacing: .12em; }
+.hud-atlas-button { width: 158px; font-size: 8px; padding: 10px 7px; }
+.hud-atlas-button kbd { font-size: 7px; padding: 1px 4px; }
+.finisher-preview-button { display: flex; align-items: center; gap: 8px; width: 100%; background: transparent; border: 0; border-top: 1px solid #adbea52b; color: #aebaa8; margin-top: 18px; padding-top: 15px; font-size: 9px; cursor: pointer; text-align: left; }
+.finisher-preview-button > span { margin-left: auto; color: #718b83; font-size: 7px; letter-spacing: .1em; }
+.finisher-preview-button:hover { color: #e7cea0; }
+.atlas-overlay .game-menu-card { width: min(1100px, 96vw); max-height: 90dvh; padding: 28px 35px; text-align: left; }
+.atlas-overlay .menu-emblem { float: right; }
+.atlas-overlay .game-menu-card h2 { font-size: 45px; margin: 10px 0 20px; }
+.atlas-overlay .menu-content { max-height: 60dvh; overflow-y: auto; padding-right: 8px; scrollbar-width: thin; scrollbar-color: #6f8068 transparent; }
+.atlas-overlay .menu-actions { display: flex; flex-direction: row; justify-content: flex-end; border-top: 1px solid #b5c5a524; padding-top: 16px; margin-top: 20px; }
+.atlas-tabs { display: flex; border-bottom: 1px solid #a4baa82d; gap: 25px; margin-bottom: 18px; position: sticky; top: 0; background: #14272c; z-index: 1; }
+.atlas-tabs button { cursor: pointer; border: 0; border-bottom: 1px solid transparent; background: none; color: #8ba698; padding: 10px 0; font-size: 11px; }
+.atlas-tabs button.active { color: #e2cc9b; border-color: #d7bb86; }
+.atlas-intro { max-width: 650px; padding-bottom: 18px; }
+.atlas-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
+.atlas-chapter { position: relative; display: flex; flex-direction: column; padding: 22px 18px 18px; border: 1px solid #a2b99e25; background: radial-gradient(ellipse at 80% 0, color-mix(in srgb, var(--region-glow) 12%, transparent), transparent 65%), #0c2026; border-radius: 3px; overflow: hidden; min-height: 230px; }
+.atlas-chapter::before { content: ''; position: absolute; right: -20px; top: -30px; width: 140px; height: 140px; border: 1px solid var(--region-glow); opacity: .1; border-radius: 50%; box-shadow: 0 0 0 12px #b8c09a09, 0 0 0 30px #b8c09a08; }
+.atlas-chapter-number { color: var(--region-glow); font: 32px Georgia, serif; margin-bottom: 17px; opacity: .75; }
+.atlas-chapter .eyebrow { font-size: 7px; color: var(--region-glow); }
+.atlas-chapter h3, .codex-grid h3 { font: 22px Georgia, serif; margin: 9px 0; color: #e7e5d6; }
+.atlas-chapter > p { font-size: 10px; color: #8fa99a; line-height: 1.7; margin-bottom: 12px; }
+.atlas-guardian { margin-top: auto; padding: 10px 0 14px; font-size: 8px; color: #afa992; border-top: 1px solid #a4baa81b; }
+.atlas-chapter .btn-anime { font-size: 9px; width: 100%; padding: 10px 8px; }
+.atlas-chapter.locked { opacity: .6; }
+.atlas-chapter.completed { border-color: #b9d99a6e; }
+.atlas-chapter.completed::after { content: 'REMEMBERED'; position: absolute; top: 17px; right: 15px; font-size: 7px; letter-spacing: .12em; color: #c1d99c; }
+.journal-entries { display: flex; flex-direction: column; gap: 12px; }
+.journal-entries article { border-left: 1px solid #c6b78d64; padding: 6px 16px; }
+.journal-entries article p { margin-top: 6px; font-size: 11px; }
+.codex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.codex-grid article { border: 1px solid #a9be9e24; padding: 22px; }
+.codex-grid p { font-size: 11px; }
+.ending-letter { padding: 22px; border: 1px solid #d5bc8275; margin-top: 25px; }
+.ending-letter p { margin-top: 12px; }
+.chronicle-conversation .game-menu-card { width: min(640px, 94vw); text-align: left; padding: 35px 40px; }
+.chronicle-conversation .menu-emblem { float: right; }
+.chronicle-conversation .game-menu-card h2 { font-size: 34px; line-height: 1.15; margin-bottom: 24px; }
+.chronicle-speaker { color: #d7bb86; text-transform: uppercase; font-size: 9px; letter-spacing: .14em; margin-bottom: 16px; }
+.menu-content .chronicle-dialogue { font: 18px/1.8 Georgia, serif; color: #d8dfce; }
+.chronicle-inscription { margin-top: 20px; border-left: 2px solid #b8c59873; padding: 12px 20px; color: #c4c6a2; font: italic 16px/1.8 Georgia, serif; background: #bdcfaa08; }
+.chronicle-page { text-align: right; margin-top: 18px; color: #809c8c; font-size: 9px; letter-spacing: .15em; }
+.menu-content .chronicle-feedback { color: #e6b390; font-size: 11px; padding-top: 16px; }
+.chronicle-conversation .menu-actions { align-items: stretch; }
+.chronicle-conversation .menu-actions .btn-anime { text-align: left; }
+.chronicle-conversation .menu-actions .btn-anime:last-child { color: #98ac9c; background: transparent; border-color: transparent; padding: 8px 0; }
+
+/* Letterboxed, real-time guardian executions. The world actors and camera animate underneath. */
+.cinema-active > :not(.boss-finisher-overlay) { opacity: 0 !important; pointer-events: none !important; }
+body:has(#boss-finisher-overlay) #damage-layer { display: none; }
+.boss-finisher-overlay { position: fixed; inset: 0; z-index: 95; pointer-events: none; color: #f4ecda; --bar-height: clamp(70px, calc((100dvh - 100vw / 2.39) / 2), 28dvh); background: radial-gradient(ellipse, transparent 40%, #02080e80 100%); }
+.finisher-letterbox { position: absolute; left: 0; right: 0; height: var(--bar-height); background: #02070b; }
+.finisher-letterbox.top { top: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 26px 40px; border-bottom: 1px solid #b8ba8b33; }
+.finisher-letterbox.top > span { font-size: 8px; color: #b0bba7; letter-spacing: .2em; margin-top: 10px; }
+#skip-finisher { pointer-events: auto; cursor: pointer; display: flex; align-items: center; gap: 14px; border: 0; background: none; color: #9daa9a; font-size: 10px; padding: 8px 0; }
+.finisher-letterbox.bottom { bottom: 0; text-align: center; padding: 8px 30px 22px; border-top: 1px solid #b8ba8b33; display: flex; flex-direction: column; justify-content: center; }
+.finisher-boss-name { font: clamp(14px, 1.4vw, 19px) Georgia, serif; color: #cbb68b; letter-spacing: .08em; }
+.finisher-last-words { font: italic clamp(12px, 1vw, 17px)/1.4 Georgia, serif; color: #c3caba; max-width: 650px; margin: 6px auto 0; }
+.finisher-progress { position: absolute; bottom: 12px; left: 40px; right: 40px; height: 1px; background: #77836b35; }
+.finisher-progress i { display: block; height: 100%; background: #c5b389; }
+.finisher-title { position: absolute; top: calc(var(--bar-height) + 32px); left: 7%; right: 7%; opacity: 0; transform: translateY(12px); transition: opacity .4s, transform .4s; text-shadow: 0 4px 25px #000b; }
+.finisher-subtitle { display: block; color: #e1c695; font-size: 10px; letter-spacing: .25em; margin-bottom: 15px; }
+.finisher-title h1 { font: clamp(28px, 5.5vw, 84px)/1.04 Georgia, serif; letter-spacing: -.02em; font-weight: 400; max-width: 850px; }
+.boss-finisher-overlay[data-phase="awakening"] .finisher-title, .boss-finisher-overlay[data-phase="execution"] .finisher-title { opacity: 1; transform: translateY(0); }
+.finisher-flash { position: absolute; inset: 0; background: #fff5db; opacity: var(--impact-flash); z-index: 2; mix-blend-mode: screen; }
+.finisher-verdict { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -40%); text-align: center; opacity: 0; transition: opacity .7s, transform .7s; text-shadow: 0 2px 25px #000; }
+.finisher-verdict > span { display: block; font-size: 11px; letter-spacing: .8em; color: #bfc8b3; padding-left: .8em; margin-bottom: 12px; }
+.finisher-verdict strong { font: clamp(45px, 8vw, 110px) Georgia, serif; color: #e7c994; letter-spacing: .18em; padding-left: .18em; }
+.boss-finisher-overlay[data-phase="requiem"] .finisher-verdict { opacity: 1; transform: translate(-50%, -50%); }
+@media (max-width: 750px) {
+  .lobby-atlas-button { font-size: 7px; padding: 8px; }
+  .lobby-atlas-button svg { display: none; }
+  .hud-atlas-button { width: 106px; font-size: 6px; gap: 5px; }
+  .hud-atlas-button kbd { display: none; }
+  .atlas-overlay .game-menu-card { padding: 23px; }
+  .atlas-overlay .game-menu-card h2 { font-size: 34px; }
+  .atlas-grid { grid-template-columns: 1fr; }
+  .atlas-chapter { min-height: 0; }
+  .atlas-chapter-number { position: absolute; top: 22px; right: 22px; font-size: 25px; }
+  .atlas-chapter .eyebrow { max-width: 80%; }
+  .atlas-chapter.completed::after { top: 9px; right: 22px; font-size: 6px; }
+  .atlas-tabs { gap: 14px; }
+  .atlas-tabs button { font-size: 9px; }
+  .codex-grid { grid-template-columns: 1fr; }
+  .atlas-overlay .menu-actions { flex-direction: column; }
+  .chronicle-conversation .game-menu-card { padding: 26px; }
+  .chronicle-conversation .game-menu-card h2 { font-size: 28px; }
+  .menu-content .chronicle-dialogue { font-size: 16px; }
+  .chronicle-inscription { font-size: 14px; }
+  .finisher-letterbox.top { padding: 15px 20px; }
+  .finisher-letterbox.top > span { font-size: 6px; max-width: 125px; line-height: 1.8; }
+  #skip-finisher { font-size: 8px; gap: 6px; }
+  .finisher-letterbox.bottom { padding: 20px; }
+  .finisher-boss-name { font-size: 16px; }
+  .finisher-last-words { font-size: 14px; }
+  .finisher-subtitle { font-size: 7px; letter-spacing: .15em; }
+  .finisher-progress { left: 20px; right: 20px; bottom: 15px; }
+}
+@media (prefers-reduced-motion: reduce) { .finisher-flash { display: none; } }

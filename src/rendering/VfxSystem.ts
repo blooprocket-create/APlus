@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { disposeObject } from './SceneResources';
 
 interface ActiveVfxMesh {
   mesh: THREE.Object3D;
@@ -412,9 +413,7 @@ export class VfxSystem {
 
       if (item.age >= item.duration) {
         this.scene.remove(item.mesh);
-        for (const m of item.materials) {
-          m.dispose();
-        }
+        disposeObject(item.mesh);
         this.activeMeshes.splice(i, 1);
       }
     }
@@ -448,6 +447,7 @@ export class VfxSystem {
   public clearAll(): void {
     for (const item of this.activeMeshes) {
       this.scene.remove(item.mesh);
+      disposeObject(item.mesh);
     }
     this.activeMeshes = [];
     for (const d of this.damageNumbers) {

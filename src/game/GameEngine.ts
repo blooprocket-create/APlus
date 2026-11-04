@@ -1,4 +1,14 @@
 import * as THREE from 'three';
+import { dressGuardian } from '../rendering/GuardianRegalia';
+import { BossFinisher } from '../rendering/BossFinisher';
+import { FinisherFrame } from './FinisherTimeline';
+import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
+import { ChronicleInteraction, ChronicleSite } from '../types/campaign';
+import { advanceChronicle, beginChapter, chronicleObjectiveView, currentChapter, currentObjective, ensureCampaign, isChronicleRegion } from './CampaignEngine';
+import { buildChronicleLayout } from './ChronicleWorld';
+import { AudioSystem } from '../audio/AudioSystem';
+import { AttackPattern, FLASK_CAPACITY, getAttackPattern, getGuardianPattern, isInsideAttack, isSafeZone, resolveFlask } from './CombatRules';
+import { MapSnapshot } from '../ui/Minimap';
 import { CHARACTER_CLASSES, computeEffectiveStats } from '../data/classes';
 import { ActionId, InputManager } from '../input/InputManager';
 import { PersistenceManager, xpRequiredForLevel } from '../persistence/PersistenceManager';
@@ -7,6 +17,7 @@ import { CharacterAnimationState, CharacterRig } from '../rendering/CharacterMes
 import { buildEnemyMesh, EnemyKind, EnemyMeshBundle } from '../rendering/EnemyMeshBuilder';
 import { EnvironmentBuilder, SAFE_ZONE_RADIUS } from '../rendering/EnvironmentBuilder';
 import { IsometricCameraController } from '../rendering/IsometricCamera';
+import { disposeObject } from '../rendering/SceneResources';
 import { VfxSystem } from '../rendering/VfxSystem';
 import {
   CharacterClassId,
@@ -67,6 +78,12 @@ export interface EnemyEntity {
   hitFlashTimer: number;
   knockbackVel: THREE.Vector3;
   bundle: EnemyMeshBundle;
+  windup: number;
+  attackPattern: AttackPattern | null;
+  attackTarget: THREE.Vector3;
+  telegraph: THREE.Group | null;
+  enraged: boolean;
+  lastWords?: string;
 }
 
 export interface ProjectileEntity {
@@ -115,7 +132,21 @@ export interface LootOrbEntity {
   age: number;
 }
 
+export interface ExpeditionReport {
+  zone: ZoneId;
+  kills: number;
+  seconds: number;
+  gold: number;
+  damageTaken: number;
+}
+
 export interface HudTelemetry {
+  map: MapSnapshot;
+  boss: { name: string; hp: number; maxHp: number; enraged: boolean } | null;
+  flaskCharges: number;
+  expedition: { defeated: number; total: number; seconds: number };
+  damageFlash: boolean;
+  nearbyChronicle: { title: string; resolved: boolean } | null;
   hp: number;
   maxHp: number;
   xp: number;
@@ -131,6 +162,7 @@ export interface HudTelemetry {
   pathProgress: number; // 0..1 when in stomping_grounds
   pathSeed: number | null;
   nearbyPortal: PortalTrigger | null;
+  portalLocked: boolean;
   nearbyNpc: NpcActor | null;
   questView: QuestObjectiveView;
   companions: CompanionStatusView[];
@@ -148,6 +180,11 @@ export interface GameEngineCallbacks {
   onBannerNotification: (title: string, subtitle: string) => void;
   onLootObtained: (item: InventoryItem) => void;
   onCharacterSaved: (character: CharacterSaveData) => void;
+  onDefeated?: () => void;
+  onZoneCleared?: (report: ExpeditionReport) => void;
+  onFinisherFrame?: (frame: FinisherFrame) => void;
+  onFinisherEnd?: () => void;
+  onChronicleInteraction?: (interaction: ChronicleInteraction) => void;
   onTriggerCutscene?: (cutsceneId: CutsceneId) => void;
 }
 
@@ -221,6 +258,159 @@ export class GameEngine {
   private supportPulseTimer = 0;
   private lastSavedAt = Date.now();
   private lastFrameTime = performance.now();
+  public readonly audio = new AudioSystem();
+  private pauseReasons = new Set<string>();
+  private defeated = false;
+  private flaskCharges = FLASK_CAPACITY;
+  private flaskCooldown = 0;
+  private hitStop = 0;
+  private hudTimer = 0;
+  private expedition = { total: 0, defeated: 0, seconds: 0, gold: 0, damageTaken: 0 };
+  private saveQueue: Promise<void> = Promise.resolve();
+  private defeatedEnemyIds = new Set<string>();
+  private finisher: BossFinisher | null = null;
+  private chronicleSites: ChronicleSite[] = [];
+  private nearbyChronicleSite: ChronicleSite | null = null;
+
+  public get isFinishing(): boolean { return this.finisher !== null; }
+  public skipBossFinisher(): void { this.finisher?.finish(); }
+
+  public previewBossFinisher(classId: CharacterClassId): void {
+    if (this.finisher || this.mode !== 'preview') return;
+    this.setPreviewCharacter(classId);
+    const hero = this.previewRig!;
+    const boss = buildEnemyMesh('boss_knight');
+    boss.root.position.set(0, 0, -2.5); this.scene.add(boss.root);
+    this.previewCompanionRigs.forEach(rig => { rig.root.visible = false; });
+    this.setPaused('finisher', true);
+    this.audio.startCinematic();
+    this.finisher = new BossFinisher(this.scene, this.cameraController.camera,
+      { hero, boss, classId, bossName: 'Avel, the Rootbound', lastWords: CHRONICLE_CHAPTERS[0].guardian.lastWords },
+      frame => this.callbacks.onFinisherFrame?.(frame), cue => this.audio.cinematic(cue),
+      () => {
+        this.finisher = null; this.audio.stopCinematic(); this.setPaused('finisher', false);
+        this.removeSceneObject(boss.root);
+        this.previewCompanionRigs.forEach(rig => { rig.root.visible = true; });
+        this.cameraController.updateAspect();
+        this.cameraController.snapToPedestalPreview();
+        this.callbacks.onFinisherEnd?.();
+      }, this.cameraController.shakeEnabled);
+  }
+
+  private beginBossFinisher(enemy: EnemyEntity): void {
+    if (this.finisher || !this.playerRig || !this.activeCharacter) return;
+    enemy.hp = 1; this.removeTelegraph(enemy);
+    this.setPaused('finisher', true);
+    this.audio.startCinematic();
+    this.finisher = new BossFinisher(this.scene, this.cameraController.camera,
+      { hero: this.playerRig, boss: enemy.bundle, classId: this.activeCharacter.classId, bossName: enemy.name, lastWords: enemy.lastWords ?? 'The oath is broken. Let the ones I kept waiting find their way home.' },
+      frame => this.callbacks.onFinisherFrame?.(frame), cue => this.audio.cinematic(cue),
+      () => {
+        this.finisher = null; this.audio.stopCinematic(); this.setPaused('finisher', false);
+        this.callbacks.onFinisherEnd?.();
+        const index = this.enemies.findIndex(candidate => candidate.id === enemy.id);
+        if (index >= 0) { enemy.hp = 0; this.handleEnemyDefeated(enemy, index); }
+        this.cameraController.updateAspect();
+        this.cameraController.snapToIsometricFollow(this.playerPos);
+        this.emitHudTelemetry();
+      }, this.cameraController.shakeEnabled);
+  }
+
+  public async travelToChapter(index: number): Promise<boolean> {
+    if (!this.activeCharacter || this.finisher || this.defeated) return false;
+    if (!await this.saveActiveCharacterNow()) return false;
+    if (!beginChapter(this.activeCharacter, index)) return false;
+    const chapter = currentChapter(this.activeCharacter);
+    const checkpoint = ensureCampaign(this.activeCharacter).checkpoints[chapter.id];
+    if (checkpoint) this.activeCharacter.position = { ...checkpoint.position };
+    this.enterZone(chapter.region, undefined, chapter.seed, checkpoint ? { ...checkpoint.journey, flaskCharges: this.flaskCharges } : undefined);
+    this.emitHudTelemetry();
+    return true;
+  }
+
+  private spawnChronicleGuardian(): void {
+    if (!this.activeCharacter || !this.currentPathLayout || !isChronicleRegion(this.currentZone)) return;
+    const chapter = currentChapter(this.activeCharacter);
+    if (currentObjective(this.activeCharacter)?.kind !== 'battle' || this.enemies.some(enemy => enemy.kind === 'boss_knight')) return;
+    const point = this.currentPathLayout.waypoints[11];
+    this.spawnEnemyAtPosition('boss_knight', point.x, point.z, 1.1 + ensureCampaign(this.activeCharacter).chapterIndex * 0.08);
+    const enemy = this.enemies[this.enemies.length - 1];
+    dressGuardian(enemy.bundle, chapter.region, chapter.palette.glow);
+    enemy.name = chapter.guardian.name; enemy.lastWords = chapter.guardian.lastWords;
+    enemy.hp = enemy.maxHp = Math.round(enemy.maxHp * 2.2);
+    this.expedition.total += 1;
+  }
+
+  private interactChronicleSite(): boolean {
+    if (!this.activeCharacter || !this.nearbyChronicleSite || this.isPaused) return false;
+    const site = this.nearbyChronicleSite;
+    const state = ensureCampaign(this.activeCharacter);
+    const chapter = currentChapter(this.activeCharacter);
+    if (state.discoveries.includes(site.id)) return false;
+    const objective = site.kind === 'echo' ? { id: site.id, kind: 'memory' as const, title: site.title, hint: '', speaker: 'An echo of Elarion', text: [site.text ?? ''] } : chapter.objectives[site.objectiveIndex];
+    if (site.kind !== 'echo' && (site.objectiveIndex !== state.objectiveIndex || site.kind === 'battle')) return false;
+    this.callbacks.onChronicleInteraction?.({ chapterTitle: chapter.title, objective, siteId: site.id, optional: site.kind === 'echo' });
+    return true;
+  }
+
+  public resolveChronicleInteraction(siteId: string, option?: number): { advanced: boolean; message: string } {
+    if (!this.activeCharacter || this.finisher || this.defeated) return { advanced: false, message: 'The world is not ready.' };
+    const site = this.chronicleSites.find(candidate => candidate.id === siteId);
+    if (!site || Math.hypot(site.position.x - this.playerPos.x, site.position.z - this.playerPos.z) > 4.5) return { advanced: false, message: 'Return to the memory stone.' };
+    const state = ensureCampaign(this.activeCharacter);
+    if (site.kind === 'echo') {
+      if (state.discoveries.includes(site.id)) return { advanced: false, message: 'This echo is already in your journal.' };
+      state.discoveries.push(site.id); state.journal.push(`${site.title}: ${site.text}`);
+      this.activeCharacter.xp += 40; this.activeCharacter.aetherCrystals += 3;
+    } else {
+      const result = advanceChronicle(this.activeCharacter, site.id, option);
+      if (!result.advanced) return result;
+      if (result.chapterComplete) this.callbacks.onBannerNotification('CHAPTER COMPLETE', result.message);
+    }
+    this.nearbyChronicleSite = null;
+    this.spawnChronicleGuardian(); this.checkAndApplyLevelUps();
+    this.vfx.spawnShockwaveRing(this.playerPos, 3, 0xd7bb86, 0xffffff, 0.5);
+    void this.saveActiveCharacterNow(); this.emitHudTelemetry();
+    return { advanced: true, message: 'Your journal has been updated.' };
+  }
+
+  public setPaused(reason: string, paused: boolean): void {
+    if (paused) this.pauseReasons.add(reason);
+    else this.pauseReasons.delete(reason);
+    this.input.resetAll();
+  }
+
+  public get isPaused(): boolean { return this.pauseReasons.size > 0 || this.defeated; }
+
+  public setScreenShake(enabled: boolean): void { this.cameraController.shakeEnabled = enabled; }
+
+  public useFlask(): void {
+    if (this.mode !== 'playing' || this.isPaused || !this.activeCharacter || !this.effectiveStats || this.flaskCooldown > 0) return;
+    const result = resolveFlask(this.activeCharacter.currentHp, this.effectiveStats.maxHp, this.flaskCharges);
+    if (!result.healed) {
+      this.callbacks.onBannerNotification(this.flaskCharges === 0 ? 'FLASK EMPTY' : 'VITALITY FULL', this.flaskCharges === 0 ? 'Return to a sanctuary to refill your flask.' : 'Save your flask for the next battle.');
+      return;
+    }
+    this.activeCharacter.currentHp = result.hp;
+    this.flaskCharges = result.charges;
+    this.flaskCooldown = 0.7;
+    void this.saveActiveCharacterNow();
+    this.audio.play('heal');
+    this.vfx.spawnShockwaveRing(this.playerPos, 2.5, 0x9ed8b4, 0xeaffdb, 0.5);
+    this.vfx.spawnDamageNumber(this.playerPos, result.healed, false, '#a8e6bd', `+${result.healed}`);
+    this.emitHudTelemetry();
+  }
+
+  public reviveAtSanctuary(): void {
+    if (!this.defeated || !this.activeCharacter || !this.effectiveStats) return;
+    this.defeated = false;
+    this.activeCharacter.currentHp = this.effectiveStats.maxHp;
+    this.hitComboCount = 0;
+    this.hitStop = 0;
+    this.cooldowns = { basic: 0, dash: 0, skill1: 0, skill2: 0, ultimate: 0 };
+    this.enterZone('starting_town');
+    this.emitHudTelemetry();
+  }
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -245,15 +435,19 @@ export class GameEngine {
     this.scene = new THREE.Scene();
     this.cameraController = new IsometricCameraController();
     this.environment = new EnvironmentBuilder();
-    this.environment.buildZone(this.scene, 'starting_town');
+    this.environment.buildPreviewScene(this.scene);
 
     this.vfx = new VfxSystem(this.scene, damageLayer);
     this.input = new InputManager();
+    this.input.bindCanvas(this.canvas);
 
     this.buildPreviewPedestal();
 
     window.addEventListener('resize', this.onResize);
     window.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLElement && (e.target.matches('input, textarea, select') || e.target.isContentEditable)) return;
+      if (this.isPaused || e.repeat) return;
+      if (e.code === 'KeyH') this.useFlask();
       if ((e.code === 'KeyF' || e.code === 'Enter') && this.mode === 'playing') {
         if (!this.interactWithNearbyQuestNpc()) {
           this.tryTraverseNearbyPortal();
@@ -291,19 +485,22 @@ export class GameEngine {
    */
   public setPreviewCharacter(classId: CharacterClassId | null): void {
     this.mode = 'preview';
+    this.pauseReasons.clear();
+    this.defeated = false;
+    this.input.resetAll();
     this.clearGameplayEntities();
-    this.environment.buildZone(this.scene, 'starting_town');
+    this.environment.buildPreviewScene(this.scene);
 
     if (this.pedestalMesh) {
       this.pedestalMesh.visible = true;
     }
 
     if (this.previewRig) {
-      this.scene.remove(this.previewRig.root);
+      this.removeSceneObject(this.previewRig.root);
       this.previewRig = null;
     }
     for (const cRig of this.previewCompanionRigs) {
-      this.scene.remove(cRig.root);
+      this.removeSceneObject(cRig.root);
     }
     this.previewCompanionRigs = [];
 
@@ -336,11 +533,11 @@ export class GameEngine {
   ): void {
     this.clearGameplayEntities();
     if (this.previewRig) {
-      this.scene.remove(this.previewRig.root);
+      this.removeSceneObject(this.previewRig.root);
       this.previewRig = null;
     }
     for (const cRig of this.previewCompanionRigs) {
-      this.scene.remove(cRig.root);
+      this.removeSceneObject(cRig.root);
     }
     this.previewCompanionRigs = [];
     if (this.pedestalMesh) {
@@ -348,7 +545,17 @@ export class GameEngine {
     }
 
     this.mode = 'playing';
+    this.pauseReasons.clear();
+    this.defeated = false;
+    this.flaskCharges = FLASK_CAPACITY;
+    this.hitStop = 0;
+    this.flaskCooldown = 0;
+    this.dashTimer = 0;
+    this.activeAttackTimer = 0;
+    this.comboStep = 0;
+    this.input.resetAll();
     this.activeCharacter = structuredClone(character);
+    ensureCampaign(this.activeCharacter);
     this.activeCharacter.questState = normalizeQuestState(this.activeCharacter.questState);
     ensureSkillRunes(this.activeCharacter);
     ensureCompanionConfigs(this.activeCharacter);
@@ -371,7 +578,8 @@ export class GameEngine {
     this.autoSaveTimer = 0;
 
     const initialZone: ZoneId = this.activeCharacter.currentZone || 'starting_town';
-    this.enterZone(initialZone);
+    const journey = this.activeCharacter.journeyState;
+    this.enterZone(initialZone, undefined, journey?.seed ?? undefined, journey?.zone === initialZone ? journey : undefined);
     this.emitHudTelemetry();
   }
 
@@ -380,7 +588,7 @@ export class GameEngine {
     accountRoster: CharacterSaveData[]
   ): void {
     for (const c of this.companions) {
-      this.scene.remove(c.rig.root);
+      this.removeSceneObject(c.rig.root);
     }
     this.companions = [];
 
@@ -429,18 +637,42 @@ export class GameEngine {
   public enterZone(
     zoneId: ZoneId,
     spawnTag?: PortalTrigger['targetSpawnTag'],
-    explicitSeed?: number
+    explicitSeed?: number,
+    resume?: CharacterSaveData['journeyState']
   ): void {
     if (!this.activeCharacter || !this.effectiveStats) return;
 
+    const savedPosition = resume ? { ...this.activeCharacter.position } : null;
+    const savedQuest = resume ? structuredClone(this.activeCharacter.questState) : null;
+    for (const orb of this.lootOrbs) this.collectLootOrb(orb);
     this.clearZoneCombatEntities();
+    this.defeatedEnemyIds.clear();
     this.currentZone = zoneId;
+    this.expedition = { total: 0, defeated: 0, seconds: 0, gold: 0, damageTaken: 0 };
+    this.hitStop = 0;
+    this.dashTimer = 0;
+    this.activeAttackTimer = 0;
+    this.input.resetAll();
+    if (isSafeZone(zoneId)) this.flaskCharges = FLASK_CAPACITY;
     this.activeCharacter.currentZone = zoneId;
     this.portalGraceTimer = 1.65;
     this.nearbyPortal = null;
     this.nearbyNpc = null;
+    this.chronicleSites = [];
+    this.nearbyChronicleSite = null;
 
-    if (zoneId === 'starting_town') {
+    if (isChronicleRegion(zoneId)) {
+      const chapter = currentChapter(this.activeCharacter);
+      const built = buildChronicleLayout(chapter);
+      this.currentPathLayout = built.layout; this.chronicleSites = built.sites;
+      this.environment.buildChronicle(this.scene, chapter, built.layout, built.sites);
+      this.activePortals = []; this.activeNpcs = [];
+      this.playerPos.set(built.layout.startPortalPos.x, 0, built.layout.startPortalPos.z);
+      this.playerYaw = Math.PI; this.currentPathProgress = 0;
+      this.spawnProceduralStompingGroundsEncounters(built.layout, 0.8 + ensureCampaign(this.activeCharacter).chapterIndex * 0.08);
+      this.spawnChronicleGuardian();
+      this.callbacks.onBannerNotification(chapter.title.toUpperCase(), chapter.subtitle);
+    } else if (zoneId === 'starting_town') {
       this.currentPathLayout = null;
       this.currentPathProgress = 0;
       const built = this.environment.buildZone(this.scene, 'starting_town');
@@ -587,7 +819,7 @@ export class GameEngine {
           this.activeCharacter.currentWave,
           'epic'
         );
-        this.spawnLootOrb(new THREE.Vector3(0, 0, 6.5), bonusGold, rewardItem);
+        this.spawnLootOrb(new THREE.Vector3(0, 0, 6.5), 0, rewardItem);
       }
 
       this.activeCharacter.currentHp = this.effectiveStats.maxHp;
@@ -597,6 +829,32 @@ export class GameEngine {
       );
     }
 
+    this.expedition.total = resume ? resume.enemies.length + resume.defeatedEnemyIds.length : this.enemies.length;
+    if (resume && savedPosition) {
+      this.defeatedEnemyIds = new Set(resume.defeatedEnemyIds);
+      for (let i = this.enemies.length - 1; i >= 0; i--) {
+        const enemy = this.enemies[i];
+        if (this.defeatedEnemyIds.has(enemy.id)) {
+          this.removeSceneObject(enemy.bundle.root);
+          this.enemies.splice(i, 1);
+        } else {
+          const savedEnemy = resume.enemies.find(saved => saved.id === enemy.id);
+          if (savedEnemy) {
+            enemy.hp = Math.max(1, Math.min(enemy.maxHp, savedEnemy.hp));
+            enemy.bundle.root.position.set(savedEnemy.x, 0, savedEnemy.z);
+          }
+        }
+      }
+      this.expedition.defeated = resume.defeatedEnemyIds.length;
+      this.expedition.seconds = resume.elapsedSeconds;
+      this.expedition.damageTaken = resume.damageTaken;
+      this.expedition.gold = resume.goldEarned;
+      if (!isSafeZone(zoneId)) this.flaskCharges = Math.max(0, Math.min(FLASK_CAPACITY, resume.flaskCharges));
+      if (savedQuest) this.activeCharacter.questState = savedQuest;
+      this.playerPos.set(savedPosition.x, 0, savedPosition.z);
+      this.clampPlayerToZone();
+      for (const orb of resume.pendingLoot) this.spawnLootOrb(new THREE.Vector3(orb.x, 0, orb.z), orb.gold, orb.item);
+    }
     if (this.playerRig) {
       this.playerRig.root.position.copy(this.playerPos);
       this.playerRig.root.rotation.y = this.playerYaw;
@@ -616,8 +874,16 @@ export class GameEngine {
     void this.saveActiveCharacterNow();
   }
 
+  private isPortalLocked(portal: PortalTrigger): boolean {
+    return this.enemies.length > 0 && ((this.currentZone === 'stomping_grounds' && portal.targetZone === 'market_crossing') || (this.currentZone === 'sunken_ruins' && portal.targetZone === 'abyssal_sanctum'));
+  }
+
   public tryTraverseNearbyPortal(): boolean {
-    if (!this.nearbyPortal || this.mode !== 'playing') return false;
+    if (!this.nearbyPortal || this.mode !== 'playing' || this.isPaused) return false;
+    if (this.isPortalLocked(this.nearbyPortal)) {
+      this.callbacks.onBannerNotification('THE RIFT IS SEALED', 'Defeat the remaining fiends to open the way forward.');
+      return false;
+    }
     const target = this.nearbyPortal;
     this.enterZone(target.targetZone, target.targetSpawnTag);
     return true;
@@ -627,7 +893,8 @@ export class GameEngine {
    * Interacts with the nearby NPC to accept, advance, or complete the active quest.
    */
   public interactWithNearbyQuestNpc(): boolean {
-    if (!this.activeCharacter || !this.nearbyNpc || this.mode !== 'playing') {
+    if (this.interactChronicleSite()) return true;
+    if (!this.activeCharacter || !this.nearbyNpc || this.mode !== 'playing' || this.isPaused) {
       return false;
     }
     const quest = normalizeQuestState(this.activeCharacter.questState);
@@ -775,7 +1042,7 @@ export class GameEngine {
 
   private buildCompassArrow(): void {
     if (this.compassGroup) {
-      this.scene.remove(this.compassGroup);
+      this.removeSceneObject(this.compassGroup);
     }
     this.compassGroup = new THREE.Group();
     const arrowGeo = new THREE.ConeGeometry(0.24, 0.62, 4);
@@ -798,7 +1065,11 @@ export class GameEngine {
     const quest = normalizeQuestState(this.activeCharacter.questState);
     let targetPos: { x: number; z: number } | null = null;
 
-    if (this.currentZone === 'starting_town') {
+    if (isChronicleRegion(this.currentZone)) {
+      const objective = currentObjective(this.activeCharacter);
+      const site = this.chronicleSites.find(candidate => candidate.id === objective?.id);
+      if (site) targetPos = site.position;
+    } else if (this.currentZone === 'starting_town') {
       if (quest.stage === 'not_started' || quest.stage === 'return_starting_npc') {
         const vael = this.activeNpcs.find((n) => n.id === 'npc_commander_vael');
         if (vael) targetPos = vael.position;
@@ -937,34 +1208,71 @@ export class GameEngine {
     return structuredClone(this.activeCharacter);
   }
 
-  public async saveActiveCharacterNow(): Promise<void> {
-    if (!this.activeCharacter || this.mode !== 'playing') return;
-    this.activeCharacter.position = {
-      x: Number(this.playerPos.x.toFixed(2)),
-      y: 0,
-      z: Number(this.playerPos.z.toFixed(2)),
+  public async saveActiveCharacterNow(): Promise<boolean> {
+    if (!this.activeCharacter || this.mode !== 'playing') return false;
+    this.activeCharacter.position = { x: Number(this.playerPos.x.toFixed(2)), y: 0, z: Number(this.playerPos.z.toFixed(2)) };
+    this.activeCharacter.journeyState = {
+      zone: this.currentZone,
+      seed: this.currentPathLayout?.seed ?? null,
+      defeatedEnemyIds: [...this.defeatedEnemyIds],
+      enemies: this.enemies.map(enemy => ({ id: enemy.id, hp: enemy.hp, x: enemy.bundle.root.position.x, z: enemy.bundle.root.position.z })),
+      pendingLoot: this.lootOrbs.map(orb => ({ x: orb.position.x, z: orb.position.z, gold: orb.gold, item: orb.item })),
+      flaskCharges: this.flaskCharges,
+      elapsedSeconds: this.expedition.seconds,
+      damageTaken: this.expedition.damageTaken,
+      goldEarned: this.expedition.gold,
     };
-    const saved = await this.persistence.saveCharacter(this.activeCharacter);
-    this.activeCharacter = saved;
-    this.lastSavedAt = Date.now();
-    this.callbacks.onCharacterSaved(saved);
+    if (isChronicleRegion(this.currentZone)) {
+      const state = ensureCampaign(this.activeCharacter);
+      state.checkpoints[currentChapter(this.activeCharacter).id] = { journey: structuredClone(this.activeCharacter.journeyState), position: { ...this.activeCharacter.position } };
+    }
+    const character = this.activeCharacter;
+    const snapshot = structuredClone(character);
+    const write = this.saveQueue.then(async () => {
+      const saved = await this.persistence.saveCharacter(snapshot);
+      // Keep live combat state: replacing it with an older save rolls back damage and loot.
+      if (this.activeCharacter === character) {
+        character.updatedAt = saved.updatedAt;
+        this.lastSavedAt = Date.now();
+        this.callbacks.onCharacterSaved(saved);
+      }
+    });
+    let success = true;
+    this.saveQueue = write.catch(() => {
+      success = false;
+      this.callbacks.onBannerNotification('SAVE FAILED', 'Your session is still active. Check browser storage and try saving again.');
+    });
+    await this.saveQueue;
+    return success;
+  }
+
+  private removeSceneObject(object: THREE.Object3D): void {
+    this.scene.remove(object);
+    disposeObject(object);
+  }
+
+  private removeTelegraph(enemy: EnemyEntity): void {
+    if (!enemy.telegraph) return;
+    this.removeSceneObject(enemy.telegraph);
+    enemy.telegraph = null;
   }
 
   private clearZoneCombatEntities(): void {
     for (const enemy of this.enemies) {
-      this.scene.remove(enemy.bundle.root);
+      this.removeTelegraph(enemy);
+      this.removeSceneObject(enemy.bundle.root);
     }
     this.enemies = [];
     for (const proj of this.projectiles) {
-      this.scene.remove(proj.mesh);
+      this.removeSceneObject(proj.mesh);
     }
     this.projectiles = [];
     for (const haz of this.groundHazards) {
-      this.scene.remove(haz.mesh);
+      this.removeSceneObject(haz.mesh);
     }
     this.groundHazards = [];
     for (const orb of this.lootOrbs) {
-      this.scene.remove(orb.mesh);
+      this.removeSceneObject(orb.mesh);
     }
     this.lootOrbs = [];
     this.vfx.clearAll();
@@ -972,15 +1280,15 @@ export class GameEngine {
 
   private clearGameplayEntities(): void {
     if (this.playerRig) {
-      this.scene.remove(this.playerRig.root);
+      this.removeSceneObject(this.playerRig.root);
       this.playerRig = null;
     }
     for (const c of this.companions) {
-      this.scene.remove(c.rig.root);
+      this.removeSceneObject(c.rig.root);
     }
     this.companions = [];
     if (this.compassGroup) {
-      this.scene.remove(this.compassGroup);
+      this.removeSceneObject(this.compassGroup);
       this.compassGroup = null;
     }
     this.clearZoneCombatEntities();
@@ -1016,12 +1324,13 @@ export class GameEngine {
     bundle.root.position.set(x, 0, z);
     this.scene.add(bundle.root);
 
-    const baseHp = kind === 'boss_knight' ? 680 : kind === 'sentinel' ? 210 : 135;
-    const baseAtk = kind === 'boss_knight' ? 38 : kind === 'sentinel' ? 22 : 15;
+    scale *= 1 + Math.max(0, (this.activeCharacter?.level ?? 1) - 1) * 0.1;
+    const baseHp = kind === 'boss_knight' ? 1700 : kind === 'sentinel' ? 380 : 210;
+    const baseAtk = kind === 'boss_knight' ? 75 : kind === 'sentinel' ? 44 : 30;
     const speed = kind === 'boss_knight' ? 3.3 : kind === 'sentinel' ? 3.8 : 4.3;
 
     this.enemies.push({
-      id: `enemy_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: `enemy_${this.currentZone}_${kind}_${x.toFixed(2)}_${z.toFixed(2)}`,
       kind,
       name:
         kind === 'boss_knight'
@@ -1040,14 +1349,25 @@ export class GameEngine {
       hitFlashTimer: 0,
       knockbackVel: new THREE.Vector3(),
       bundle,
+      windup: 0,
+      attackPattern: null,
+      attackTarget: new THREE.Vector3(),
+      telegraph: null,
+      enraged: false,
     });
   }
 
   private loop = (now: number): void => {
-    const dt = Math.min(0.05, Math.max(0.001, (now - this.lastFrameTime) / 1000));
+    const elapsed = Math.max(0.001, (now - this.lastFrameTime) / 1000);
+    const dt = Math.min(0.05, elapsed);
     this.lastFrameTime = now;
 
-    this.environment.update(dt);
+    if (this.finisher) {
+      if (document.visibilityState !== 'hidden') this.finisher.update(Math.min(0.25, elapsed));
+      this.renderer.render(this.scene, this.cameraController.camera);
+      requestAnimationFrame(this.loop); return;
+    }
+    if (!this.isPaused) this.environment.update(dt);
 
     if (this.mode === 'preview') {
       const idleAnim: CharacterAnimationState = {
@@ -1059,7 +1379,7 @@ export class GameEngine {
         hitFlashTimer: 0,
       };
       if (this.previewRig) {
-        this.previewRig.root.rotation.y += dt * 0.55;
+        this.previewRig.root.rotation.y = -0.18 + Math.sin(now * 0.00035) * 0.16;
         this.previewRig.updateAnimation(dt, idleAnim);
       }
       for (const cRig of this.previewCompanionRigs) {
@@ -1067,10 +1387,16 @@ export class GameEngine {
       }
       this.cameraController.updatePedestalPreview(dt);
     } else if (this.mode === 'playing' && this.activeCharacter && this.playerRig && this.effectiveStats) {
-      this.updateGameplay(dt);
+      if (this.isPaused) {
+        if (this.pauseReasons.has('cutscene')) this.cameraController.updateIsometricFollow(dt, this.playerPos, new THREE.Vector2());
+      } else if (this.hitStop > 0) {
+        this.hitStop = Math.max(0, this.hitStop - dt);
+      } else {
+        this.updateGameplay(dt);
+      }
     }
 
-    this.vfx.update(dt, this.cameraController.camera);
+    this.vfx.update(this.isPaused ? 0 : dt, this.cameraController.camera);
     this.renderer.render(this.scene, this.cameraController.camera);
 
     requestAnimationFrame(this.loop);
@@ -1082,6 +1408,8 @@ export class GameEngine {
     const classDef = CHARACTER_CLASSES[char.classId];
 
     char.playTimeSeconds += dt;
+    if (!isSafeZone(this.currentZone) && this.enemies.length > 0) this.expedition.seconds += dt;
+    this.flaskCooldown = Math.max(0, this.flaskCooldown - dt);
     this.autoSaveTimer += dt;
     if (this.autoSaveTimer >= 5.0) {
       this.autoSaveTimer = 0;
@@ -1093,9 +1421,9 @@ export class GameEngine {
     }
 
     // Safe Zone passive regeneration
-    if (this.currentZone !== 'stomping_grounds') {
+    if (isSafeZone(this.currentZone)) {
       if (char.currentHp < stats.maxHp) {
-        char.currentHp = Math.min(stats.maxHp, Math.ceil(char.currentHp + stats.maxHp * 0.15 * dt));
+        char.currentHp = Math.min(stats.maxHp, char.currentHp + stats.maxHp * 0.15 * dt);
       }
       if (char.ultimateEnergy < 100) {
         char.ultimateEnergy = Math.min(100, char.ultimateEnergy + 8 * dt);
@@ -1172,6 +1500,8 @@ export class GameEngine {
       this.executeBasicCombo();
     }
 
+    if (this.finisher) return;
+
     // Update attack swing animation progress
     if (this.activeAttackTimer > 0) {
       this.activeAttackTimer -= dt;
@@ -1189,15 +1519,19 @@ export class GameEngine {
 
     // Update Projectiles, Ground Hazards, Enemies & Loot
     this.updateCompanions(dt);
+    if (this.finisher) return;
     this.updateProjectiles(dt);
+    if (this.finisher) return;
     this.updateGroundHazards(dt);
+    if (this.finisher) return;
     this.updateEnemies(dt);
     this.updateLootOrbs(dt);
     this.updatePortalAndNpcProximity();
     this.updateCompassArrow();
 
     this.cameraController.updateIsometricFollow(dt, this.playerPos, move);
-    this.emitHudTelemetry();
+    this.hudTimer += dt;
+    if (this.hudTimer >= 0.08) { this.hudTimer = 0; this.emitHudTelemetry(); }
   }
 
   private updateCompanions(dt: number): void {
@@ -1326,11 +1660,11 @@ export class GameEngine {
         }
       }
 
-      // Clamp companion inside walkable zone
-      if (
-        (this.currentZone === 'stomping_grounds' || this.currentZone === 'sunken_ruins') &&
-        this.currentPathLayout
-      ) {
+      // The belllands are explorable landscapes; the tutorial retains its corridor bounds.
+      if (isChronicleRegion(this.currentZone)) {
+        comp.position.x = THREE.MathUtils.clamp(comp.position.x, -60, 60);
+        comp.position.z = THREE.MathUtils.clamp(comp.position.z, -282, 12);
+      } else if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(
           comp.position.x,
           comp.position.z,
@@ -1366,7 +1700,7 @@ export class GameEngine {
       (cfg.equipped.weapon?.attackBonus ?? 0) +
       (cfg.equipped.charm?.attackBonus ?? 0);
     const gearScale = 1 + gearAtk * 0.008;
-    const bondMult = (1 + (cfg.bondLevel - 1) * 0.12) * stanceInfo.damageMult * gearScale;
+    const bondMult = 0.45 * (1 + (cfg.bondLevel - 1) * 0.12) * stanceInfo.damageMult * gearScale;
 
     comp.attackCount += 1;
     comp.activeAttackTimer = 0.28;
@@ -1494,10 +1828,11 @@ export class GameEngine {
   }
 
   private clampPlayerToZone(): void {
-    if (
-      (this.currentZone === 'stomping_grounds' || this.currentZone === 'sunken_ruins') &&
-      this.currentPathLayout
-    ) {
+    if (isChronicleRegion(this.currentZone) && this.currentPathLayout) {
+      this.playerPos.x = THREE.MathUtils.clamp(this.playerPos.x, -60, 60);
+      this.playerPos.z = THREE.MathUtils.clamp(this.playerPos.z, -282, 12);
+      this.currentPathProgress = clampToProceduralPath(this.playerPos.x, this.playerPos.z, this.currentPathLayout).progress;
+    } else if (this.currentPathLayout) {
       const clamped = clampToProceduralPath(
         this.playerPos.x,
         this.playerPos.z,
@@ -1519,6 +1854,16 @@ export class GameEngine {
   }
 
   private updatePortalAndNpcProximity(): void {
+    this.nearbyChronicleSite = null;
+    if (this.activeCharacter && isChronicleRegion(this.currentZone)) {
+      const state = ensureCampaign(this.activeCharacter);
+      let distance = 3.5;
+      for (const site of this.chronicleSites) {
+        if (site.kind === 'battle' || state.discoveries.includes(site.id) || (site.kind !== 'echo' && site.objectiveIndex !== state.objectiveIndex)) continue;
+        const d = Math.hypot(site.position.x - this.playerPos.x, site.position.z - this.playerPos.z);
+        if (d < distance) { distance = d; this.nearbyChronicleSite = site; }
+      }
+    }
     // Check NPC proximity
     let closestNpc: NpcActor | null = null;
     let bestNpcDist = 3.6;
@@ -1550,7 +1895,7 @@ export class GameEngine {
     this.nearbyPortal = closestPortal;
 
     // Auto-enter portal when stepping directly into the portal core after arrival grace period
-    if (closestPortal && bestPortalDist <= 1.35 && this.portalGraceTimer <= 0) {
+    if (closestPortal && bestPortalDist <= 1.35 && this.portalGraceTimer <= 0 && !this.isPaused && !this.isPortalLocked(closestPortal)) {
       this.enterZone(closestPortal.targetZone, closestPortal.targetSpawnTag);
     }
   }
@@ -1575,6 +1920,7 @@ export class GameEngine {
 
   private executeDash(classDef: (typeof CHARACTER_CLASSES)[CharacterClassId]): void {
     const dashSkill = classDef.skills.dash;
+    this.audio.play('dash');
     this.cooldowns.dash = dashSkill.cooldown;
     this.invulnerableTimer = 0.38;
 
@@ -1669,6 +2015,7 @@ export class GameEngine {
     const skillLevelBonus = 1 + (char.skillLevels.basic - 1) * 0.1;
 
     this.faceNearestEnemy(basic.range + 2.0);
+    this.audio.play('attack');
     this.comboStep = (this.comboStep % 3) + 1;
     this.comboResetTimer = 1.4;
 
@@ -2309,7 +2656,7 @@ export class GameEngine {
             3.5
           );
         }
-        this.scene.remove(p.mesh);
+        this.removeSceneObject(p.mesh);
         this.projectiles.splice(i, 1);
       }
     }
@@ -2405,7 +2752,7 @@ export class GameEngine {
       }
 
       if (h.age >= h.duration) {
-        this.scene.remove(h.mesh);
+        this.removeSceneObject(h.mesh);
         this.groundHazards.splice(i, 1);
       }
     }
@@ -2455,6 +2802,7 @@ export class GameEngine {
     knockbackStrength: number,
     pullCenter?: THREE.Vector3
   ): void {
+    if (this.finisher) return;
     const char = this.activeCharacter!;
     const stats = this.effectiveStats!;
 
@@ -2464,6 +2812,8 @@ export class GameEngine {
     const dmg = Math.max(1, Math.round(rawDmg));
 
     enemy.hp = Math.max(0, enemy.hp - dmg);
+    this.audio.play(isCrit ? 'critical' : 'hit');
+    if (isCrit) this.hitStop = Math.max(this.hitStop, 0.035);
     enemy.hitFlashTimer = 0.14;
 
     if (pullCenter) {
@@ -2489,7 +2839,8 @@ export class GameEngine {
     }
 
     if (enemy.hp <= 0) {
-      this.handleEnemyDefeated(enemy, enemyIndex);
+      if (enemy.kind === 'boss_knight') this.beginBossFinisher(enemy);
+      else this.handleEnemyDefeated(enemy, enemyIndex);
     }
   }
 
@@ -2532,8 +2883,13 @@ export class GameEngine {
     const pos = enemy.bundle.root.position.clone();
 
     this.vfx.spawnShockwaveRing(pos, 1.8, 0xffbe0b, 0xffffff, 0.3);
-    this.scene.remove(enemy.bundle.root);
+    this.removeTelegraph(enemy);
+    this.removeSceneObject(enemy.bundle.root);
     this.enemies.splice(index, 1);
+    this.expedition.defeated += 1;
+    this.defeatedEnemyIds.add(enemy.id);
+    this.expedition.gold += enemy.goldReward;
+    this.hitStop = Math.max(this.hitStop, 0.045);
 
     char.enemiesDefeated += 1;
     char.xp += enemy.xpReward;
@@ -2572,7 +2928,23 @@ export class GameEngine {
       }
     }
 
+    if (enemy.kind === 'boss_knight' && isChronicleRegion(this.currentZone)) {
+      const objective = currentObjective(char);
+      if (objective?.kind === 'battle') {
+        advanceChronicle(char, objective.id);
+        this.callbacks.onBannerNotification('THE OATH IS BROKEN', 'A guardian’s memory has been returned. Find your companion at the camp.');
+      }
+      void this.saveActiveCharacterNow();
+    }
     this.checkAndApplyLevelUps();
+    if (!isChronicleRegion(this.currentZone) && this.enemies.length === 0 && this.expedition.total > 0) {
+      // Bank the drops before showing the report or allowing a zone transition.
+      for (const orb of this.lootOrbs) this.collectLootOrb(orb);
+      this.lootOrbs = [];
+      this.audio.play('victory');
+      void this.saveActiveCharacterNow();
+      this.callbacks.onZoneCleared?.({ zone: this.currentZone, kills: this.expedition.defeated, seconds: this.expedition.seconds, gold: this.expedition.gold, damageTaken: this.expedition.damageTaken });
+    }
   }
 
   private checkAndApplyLevelUps(): void {
@@ -2580,6 +2952,7 @@ export class GameEngine {
     while (char.xp >= char.xpToNextLevel) {
       char.xp -= char.xpToNextLevel;
       char.level += 1;
+      this.audio.play('level');
       char.xpToNextLevel = xpRequiredForLevel(char.level);
       char.aetherCrystals += 15;
       char.skillLevels.basic += 1;
@@ -2634,53 +3007,41 @@ export class GameEngine {
     });
   }
 
+  private collectLootOrb(orb: LootOrbEntity): void {
+    const char = this.activeCharacter;
+    if (!char) return;
+    char.gold += orb.gold;
+    if (orb.item) {
+      char.inventory.push(orb.item);
+      this.callbacks.onLootObtained(orb.item);
+      this.vfx.spawnDamageNumber(this.playerPos, 0, true, '#a8d9cb', `${orb.item.icon} ${orb.item.name}`);
+    } else if (orb.gold > 0) {
+      this.vfx.spawnDamageNumber(this.playerPos, orb.gold, false, '#d8b97d', `+${orb.gold}G`);
+    }
+    this.removeSceneObject(orb.mesh);
+  }
+
   private updateLootOrbs(dt: number): void {
-    const char = this.activeCharacter!;
     for (let i = this.lootOrbs.length - 1; i >= 0; i--) {
       const orb = this.lootOrbs[i];
       orb.age += dt;
       orb.mesh.rotation.y += dt * 3.2;
       orb.position.y = 0.5 + Math.sin(orb.age * 4) * 0.14;
-
       const dist = this.playerPos.distanceTo(orb.position);
       if (dist < 4.5) {
         const pullDir = this.playerPos.clone().sub(orb.position).normalize();
         orb.position.addScaledVector(pullDir, 11.5 * dt);
       }
-
       if (dist < 0.95) {
-        char.gold += orb.gold;
-        if (orb.item) {
-          if (char.inventory.length >= 24) {
-            char.inventory.shift();
-          }
-          char.inventory.push(orb.item);
-          this.callbacks.onLootObtained(orb.item);
-          this.vfx.spawnDamageNumber(
-            this.playerPos,
-            0,
-            true,
-            '#4cc9f0',
-            `${orb.item.icon} ${orb.item.name}`
-          );
-          void this.saveActiveCharacterNow();
-        } else {
-          this.vfx.spawnDamageNumber(
-            this.playerPos,
-            orb.gold,
-            false,
-            '#ffd166',
-            `+${orb.gold}G`
-          );
-        }
-
-        this.scene.remove(orb.mesh);
         this.lootOrbs.splice(i, 1);
+        this.collectLootOrb(orb);
+        void this.saveActiveCharacterNow();
       }
     }
   }
 
   private updateEnemies(dt: number): void {
+    if (this.finisher) return;
     const char = this.activeCharacter!;
     const stats = this.effectiveStats!;
 
@@ -2698,45 +3059,73 @@ export class GameEngine {
       toPlayer.y = 0;
       const dist = toPlayer.length();
 
-      // Enemies along the Stomping Grounds path aggro when player approaches within 16.5m
-      if (dist <= 16.5 && dist > 0.01) {
-        const dir = toPlayer.clone().normalize();
-        enemy.bundle.bodyMesh.rotation.y = Math.atan2(dir.x, dir.z);
-
-        const stopRange = enemy.radius + 0.78;
-        if (dist > stopRange) {
-          pos.addScaledVector(dir, enemy.speed * dt);
-        } else {
-          enemy.attackCooldown -= dt;
-          if (enemy.attackCooldown <= 0) {
-            enemy.attackCooldown = 1.35;
-            if (this.invulnerableTimer <= 0) {
-              const mitigated = Math.max(
-                1,
-                Math.round(enemy.attack * (100 / (100 + stats.defense)))
-              );
-              char.currentHp = Math.max(0, char.currentHp - mitigated);
-              this.animState.hitFlashTimer = 0.18;
-              this.vfx.spawnDamageNumber(
-                this.playerPos,
-                mitigated,
-                false,
-                '#ff4d6d',
-                `-${mitigated}`
-              );
-              this.cameraController.triggerShake(0.22, 0.15);
-
+      if (enemy.kind === 'boss_knight' && !enemy.enraged && enemy.hp <= enemy.maxHp * 0.5) {
+        enemy.enraged = true;
+        this.vfx.spawnShockwaveRing(pos, 4, 0xff526d, 0xffbc80, 0.6);
+        this.callbacks.onBannerNotification('THE GATEKEEPER ENRAGES', 'Faster strikes. Watch the ground and keep your dash ready.');
+      }
+      const pattern = enemy.windup > 0 && enemy.attackPattern ? enemy.attackPattern : enemy.kind === 'boss_knight' && isChronicleRegion(this.currentZone) ? getGuardianPattern(this.currentZone, enemy.enraged) : getAttackPattern(enemy.kind, enemy.enraged);
+      if (enemy.windup > 0) {
+        enemy.windup = Math.max(0, enemy.windup - dt);
+        const progress = 1 - enemy.windup / pattern.windup;
+        const fill = enemy.telegraph?.children[1];
+        if (fill) fill.scale.setScalar(Math.max(0.03, progress));
+        if (enemy.windup === 0) {
+          this.removeTelegraph(enemy);
+          this.vfx.spawnShockwaveRing(enemy.attackTarget, pattern.radius, 0xff526d, 0xffd3b4, 0.3);
+          enemy.attackCooldown = pattern.recovery;
+          if (isInsideAttack(this.playerPos, enemy.attackTarget, pattern.radius, pattern.innerRadius)) {
+            if (this.invulnerableTimer > 0) {
+              char.ultimateEnergy = Math.min(100, char.ultimateEnergy + 12);
+              this.vfx.spawnDamageNumber(this.playerPos, 0, false, '#a8e6d3', 'EVADE +12');
+            } else {
+              const damage = Math.max(1, Math.round(enemy.attack * pattern.damageScale * (100 / (100 + stats.defense))));
+              char.currentHp = Math.max(0, char.currentHp - damage);
+              this.expedition.damageTaken += damage;
+              this.hitComboCount = 0;
+              this.invulnerableTimer = 0.35;
+              this.animState.hitFlashTimer = 0.22;
+              this.audio.play('hurt');
+              this.vfx.spawnDamageNumber(this.playerPos, damage, false, '#f48390', `-${damage}`);
+              this.cameraController.triggerShake(0.25, 0.16);
               if (char.currentHp <= 0) {
-                char.currentHp = stats.maxHp;
-                this.enterZone('starting_town');
-                this.callbacks.onBannerNotification(
-                  'RETURNED TO STARTING TOWN',
-                  'Outpost healers restored your vitality!'
-                );
+                this.defeated = true;
+                this.input.resetAll();
+                this.audio.play('defeat');
+                this.emitHudTelemetry();
+                this.callbacks.onDefeated?.();
                 return;
               }
             }
           }
+        }
+      } else if (dist <= 16.5 && dist > 0.01) {
+        const dir = toPlayer.clone().normalize();
+        enemy.bundle.bodyMesh.rotation.y = Math.atan2(dir.x, dir.z);
+        enemy.attackCooldown = Math.max(0, enemy.attackCooldown - dt);
+        if (dist > pattern.reach) {
+          pos.addScaledVector(dir, enemy.speed * (enemy.enraged ? 1.25 : 1) * dt);
+        } else if (enemy.attackCooldown <= 0) {
+          enemy.attackTarget.copy(enemy.kind === 'boss_knight' && this.currentZone !== 'ember_coast' && this.currentZone !== 'world_heart' ? pos : this.playerPos);
+          enemy.attackTarget.y = 0.06;
+          enemy.attackPattern = pattern;
+          enemy.windup = pattern.windup;
+          const group = new THREE.Group();
+          group.position.copy(enemy.attackTarget);
+          const makeMarker = (geometry: THREE.BufferGeometry, opacity: number) => {
+            const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: enemy.kind === 'boss_knight' ? 0xff875b : 0xff526d, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+            mesh.rotation.x = -Math.PI / 2;
+            group.add(mesh);
+          };
+          makeMarker(new THREE.RingGeometry(pattern.radius - 0.07, pattern.radius, 48), 0.9);
+          makeMarker(pattern.innerRadius ? new THREE.RingGeometry(pattern.innerRadius, pattern.radius, 48) : new THREE.CircleGeometry(pattern.radius, 48), 0.26);
+          group.children[1].scale.setScalar(0.03);
+          if (pattern.innerRadius) {
+            const safe = new THREE.Mesh(new THREE.RingGeometry(pattern.innerRadius - 0.05, pattern.innerRadius, 48), new THREE.MeshBasicMaterial({ color: 0xa4e7cc, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+            safe.rotation.x = -Math.PI / 2; safe.position.y = 0.01; group.add(safe);
+          }
+          enemy.telegraph = group;
+          this.scene.add(group);
         }
       }
 
@@ -2755,10 +3144,7 @@ export class GameEngine {
       }
 
       // Clamp enemy to the procedural path if in a procedural corridor zone
-      if (
-        (this.currentZone === 'stomping_grounds' || this.currentZone === 'sunken_ruins') &&
-        this.currentPathLayout
-      ) {
+      if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(pos.x, pos.z, this.currentPathLayout, 0.65);
         pos.x = clamped.x;
         pos.z = clamped.z;
@@ -2808,15 +3194,15 @@ export class GameEngine {
     let zoneSubtitle = 'Safe Zone • Aetherhaven Outpost';
     if (this.currentZone === 'stomping_grounds') {
       const pct = Math.round(this.currentPathProgress * 100);
-      zoneTitle = `STOMPING GROUNDS (${pct}%)`;
-      zoneSubtitle = `${this.enemies.length} Fiends Left • Path Seed #${(this.currentPathLayout?.seed ?? 0) % 1000}`;
+      zoneTitle = `STOMPING GROUNDS · ${pct}%`;
+      zoneSubtitle = `${this.enemies.length} fiends remaining · Fractured wilds`;
     } else if (this.currentZone === 'market_crossing') {
       zoneTitle = 'MARKET CROSSING';
       zoneSubtitle = 'Safe Zone Hub • Starlight Bazaar';
     } else if (this.currentZone === 'sunken_ruins') {
       const pct = Math.round(this.currentPathProgress * 100);
       zoneTitle = `SUNKEN ASTRAL RUINS (${pct}%)`;
-      zoneSubtitle = `${this.enemies.length} Guardians Left • Path Seed #${(this.currentPathLayout?.seed ?? 0) % 1000}`;
+      zoneSubtitle = `${this.enemies.length} guardians remaining · The drowned spire`;
     } else if (this.currentZone === 'abyssal_sanctum') {
       zoneTitle = 'ABYSSAL SANCTUM';
       zoneSubtitle =
@@ -2847,13 +3233,20 @@ export class GameEngine {
 
     const quest = normalizeQuestState(char.questState);
     char.questState = quest;
-    const questView = QuestEngine.getObjectiveView(
+    const legacyQuestView = QuestEngine.getObjectiveView(
       quest,
       this.currentZone,
       this.nearbyNpc?.id ?? null,
       char.classId,
       companionNamesMap
     );
+
+    const questView = chronicleObjectiveView(char, this.currentZone) ?? legacyQuestView;
+    if (isChronicleRegion(this.currentZone)) {
+      const chapter = currentChapter(char);
+      zoneTitle = REGION_NAMES[chapter.region].toUpperCase();
+      zoneSubtitle = chapter.title;
+    }
 
     const contextualNpc: NpcActor | null = this.nearbyNpc
       ? {
@@ -2866,7 +3259,21 @@ export class GameEngine {
         }
       : null;
 
+    const boss = this.enemies.find(enemy => enemy.kind === 'boss_knight' && enemy.bundle.root.position.distanceTo(this.playerPos) < 19);
     this.callbacks.onHudUpdate({
+      map: {
+        player: { x: this.playerPos.x, z: this.playerPos.z, yaw: this.playerYaw },
+        enemies: this.enemies.filter(e => e.bundle.root.position.distanceTo(this.playerPos) < 28).map(e => ({ x: e.bundle.root.position.x, z: e.bundle.root.position.z, boss: e.kind === 'boss_knight' })),
+        portals: this.activePortals.map(p => p.position),
+        npcs: [...this.activeNpcs.map(n => n.position), ...this.chronicleSites.filter(site => !ensureCampaign(char).discoveries.includes(site.id) && (site.kind === 'echo' || site.objectiveIndex === ensureCampaign(char).objectiveIndex)).map(site => site.position)],
+        path: this.currentPathLayout?.waypoints ?? [],
+        connections: this.currentPathLayout?.connections,
+      },
+      boss: boss ? { name: boss.name, hp: boss.hp, maxHp: boss.maxHp, enraged: boss.enraged } : null,
+      flaskCharges: this.flaskCharges,
+      expedition: { defeated: this.expedition.defeated, total: this.expedition.total, seconds: this.expedition.seconds },
+      damageFlash: this.animState.hitFlashTimer > 0,
+      nearbyChronicle: this.nearbyChronicleSite ? { title: this.nearbyChronicleSite.title, resolved: false } : null,
       hp: char.currentHp,
       maxHp: this.effectiveStats.maxHp,
       xp: char.xp,
@@ -2883,6 +3290,7 @@ export class GameEngine {
       pathProgress: this.currentPathProgress,
       pathSeed: this.currentPathLayout?.seed ?? null,
       nearbyPortal: this.nearbyPortal,
+      portalLocked: this.nearbyPortal ? this.isPortalLocked(this.nearbyPortal) : false,
       nearbyNpc: contextualNpc,
       questView,
       companions: companionViews,

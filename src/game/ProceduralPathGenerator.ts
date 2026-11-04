@@ -142,9 +142,10 @@ export function clampToProceduralPath(
   let bestDistanceAlongPath = 0;
   let bestSegmentIdx = 0;
 
-  for (let i = 0; i < layout.waypoints.length - 1; i++) {
-    const a = layout.waypoints[i];
-    const b = layout.waypoints[i + 1];
+  const edges = layout.connections ?? layout.waypoints.slice(1).map((_, i) => [i, i + 1] as [number, number]);
+  for (let i = 0; i < edges.length; i++) {
+    const a = layout.waypoints[edges[i][0]];
+    const b = layout.waypoints[edges[i][1]];
     const abx = b.x - a.x;
     const abz = b.z - a.z;
     const abLenSq = abx * abx + abz * abz;
@@ -166,7 +167,7 @@ export function clampToProceduralPath(
       bestClosestX = cx;
       bestClosestZ = cz;
       bestSegmentIdx = i;
-      bestDistanceAlongPath = a.distanceFromStart + t * layout.segmentLength;
+      bestDistanceAlongPath = a.distanceFromStart + t * (layout.connections ? b.distanceFromStart - a.distanceFromStart : layout.segmentLength);
 
       // Expand walkable width smoothly near clearing waypoints
       const clearingRadius =

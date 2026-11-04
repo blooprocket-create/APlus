@@ -79,7 +79,7 @@ export const CHARACTER_CLASSES: Record<CharacterClassId, CharacterClassDefinitio
         aoeRadius: 2.3,
         colorHex: 0xffbe0b,
         accentHex: 0xffffff,
-        keyHint: 'SHIFT / SPACE',
+        keyHint: 'SHIFT / K',
       },
       skill1: {
         id: 'skill1',
@@ -192,7 +192,7 @@ export const CHARACTER_CLASSES: Record<CharacterClassId, CharacterClassDefinitio
         aoeRadius: 2.6,
         colorHex: 0x7209b7,
         accentHex: 0x4cc9f0,
-        keyHint: 'SHIFT / SPACE',
+        keyHint: 'SHIFT / K',
       },
       skill1: {
         id: 'skill1',
@@ -305,7 +305,7 @@ export const CHARACTER_CLASSES: Record<CharacterClassId, CharacterClassDefinitio
         aoeRadius: 2.0,
         colorHex: 0xc77dff,
         accentHex: 0xffffff,
-        keyHint: 'SHIFT / SPACE',
+        keyHint: 'SHIFT / K',
       },
       skill1: {
         id: 'skill1',

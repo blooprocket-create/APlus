@@ -51,6 +51,7 @@ export interface ProceduralPathLayout {
   corridorHalfWidth: number;
   waypoints: PathWaypoint[];
   encounters: ProceduralEncounterPack[];
+  connections?: [number, number][];
   startPortalPos: { x: number; z: number };
   endPortalPos: { x: number; z: number };
 }

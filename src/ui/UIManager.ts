@@ -4,7 +4,13 @@ import {
   computeEffectiveStats,
   computePowerRating,
 } from '../data/classes';
-import { GameEngine, HudTelemetry } from '../game/GameEngine';
+import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
+import { chapterUnlocked, endingText, ensureCampaign } from '../game/CampaignEngine';
+import { ChronicleInteraction } from '../types/campaign';
+import { FinisherFrame } from '../game/FinisherTimeline';
+import { icon, CLASS_ICONS } from './icons';
+import { drawMinimap } from './Minimap';
+import { GameEngine, HudTelemetry, ExpeditionReport } from '../game/GameEngine';
 import {
   CANONICAL_HERO_NAMES,
   getCompanionClassesForPlayer,
@@ -26,7 +32,6 @@ import {
   CharacterSaveData,
   CompanionTacticalStance,
   CutsceneId,
-  MAX_CHARACTERS_PER_ACCOUNT,
   Skill1RuneId,
   Skill2RuneId,
   UltimateRuneId,
@@ -47,11 +52,12 @@ const DEFAULT_NAMES: Record<CharacterClassId, string> = {
 };
 
 const ZONE_LABELS: Record<ZoneId, string> = {
-  starting_town: 'Starting Town (Safe)',
+  starting_town: 'Aetherhaven',
   stomping_grounds: 'Stomping Grounds',
-  market_crossing: 'Market Crossing (Safe)',
+  market_crossing: 'Market Crossing',
   sunken_ruins: 'Sunken Astral Ruins',
   abyssal_sanctum: 'Abyssal Sanctum',
+  ...REGION_NAMES,
 };
 
 export class UIManager {
@@ -125,11 +131,21 @@ export class UIManager {
 
   private bannerTimeout: number | null = null;
   private cutinTimeout: number | null = null;
+  private previousFocus: HTMLElement | null = null;
+  private lastCompanionMarkup = '';
+  private shakeEnabled = true;
+  private atlasTab: 'world' | 'journal' | 'codex' = 'world';
 
   constructor(root: HTMLElement, persistence: PersistenceManager, engine: GameEngine) {
     this.root = root;
     this.persistence = persistence;
     this.engine = engine;
+    try { const saved = localStorage.getItem('astral-screen-shake'); this.shakeEnabled = saved === null ? !window.matchMedia('(prefers-reduced-motion: reduce)').matches : saved !== 'false'; } catch { /* optional preference */ }
+    this.engine.setScreenShake(this.shakeEnabled);
+    window.addEventListener('keydown', this.handleMenuKey);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.hudRefs && !this.engine.isPaused) this.openPauseMenu();
+    });
   }
 
   public async bootstrap(): Promise<void> {
@@ -152,6 +168,9 @@ export class UIManager {
   public async showCharacterSelectScreen(): Promise<void> {
     if (!this.activeAccount) return;
     this.hudRefs = null;
+    this.root.querySelector('#game-menu')?.remove();
+    this.engine.setPaused('menu', false);
+    this.engine.setPaused('deck', false);
     this.slots = await this.persistence.getCharacterSlots(this.activeAccount.id);
 
     // Pick last selected character's slot if available, otherwise slot 0
@@ -178,193 +197,61 @@ export class UIManager {
     if (!this.activeAccount) return;
     const occupiedCount = this.slots.filter(Boolean).length;
     const selectedChar = this.slots[this.selectedSlotIndex];
-
-    const slotCardsHtml = ([0, 1, 2] as CharacterSlotIndex[])
-      .map((slotIdx) => {
-        const char = this.slots[slotIdx];
-        const isSelected = slotIdx === this.selectedSlotIndex;
-        if (char) {
-          const cDef = CHARACTER_CLASSES[char.classId];
-          const pwr = computePowerRating(char);
-          const zoneLabel = ZONE_LABELS[char.currentZone ?? 'starting_town'];
-          return `
-            <div class="char-slot-card ${isSelected ? 'selected' : ''}" data-slot="${slotIdx}">
-              <div class="slot-left">
-                <div class="slot-badge" style="border-color: ${cDef.elementColor}">
-                  ${cDef.starterWeapon.icon}
-                </div>
-                <div class="slot-info">
-                  <h4>${this.escapeHtml(char.name)}</h4>
-                  <p>${cDef.archetypeLabel} • ${zoneLabel}</p>
-                </div>
-              </div>
-              <div class="slot-lv">
-                <div>LV.${char.level}</div>
-                <div style="font-size:0.68rem;color:#9aa5ce">⚡ ${pwr}</div>
-              </div>
-            </div>
-          `;
-        } else {
-          return `
-            <div class="char-slot-card ${isSelected ? 'selected' : ''}" data-slot="${slotIdx}">
-              <div class="slot-left">
-                <div class="slot-badge">＋</div>
-                <div class="slot-info">
-                  <h4>Empty Vessel // Slot ${slotIdx + 1}</h4>
-                  <p>Tap to awaken a new Hero</p>
-                </div>
-              </div>
-              <div class="slot-lv" style="color:#4cc9f0">CREATE</div>
-            </div>
-          `;
-        }
-      })
-      .join('');
-
-    let rightPanelHtml = '';
-    if (selectedChar) {
-      const cDef = CHARACTER_CLASSES[selectedChar.classId];
-      const eff = computeEffectiveStats(selectedChar);
-      const pwr = computePowerRating(selectedChar);
-      const mins = Math.floor(selectedChar.playTimeSeconds / 60);
-      const secs = Math.floor(selectedChar.playTimeSeconds % 60);
-      const zoneName = ZONE_LABELS[selectedChar.currentZone ?? 'starting_town'];
-      const [compA, compB] = getCompanionClassesForPlayer(selectedChar.classId);
-      const compSummary = `${CHARACTER_CLASSES[compA].starterWeapon.icon} ${CANONICAL_HERO_NAMES[compA]} (${CHARACTER_CLASSES[compA].archetypeLabel}) & ${CHARACTER_CLASSES[compB].starterWeapon.icon} ${CANONICAL_HERO_NAMES[compB]} (${CHARACTER_CLASSES[compB].archetypeLabel})`;
-
-      rightPanelHtml = `
-        <div class="panel-header">
-          <span class="panel-title">${this.escapeHtml(selectedChar.name)} // SLOT ${selectedChar.slotIndex + 1}</span>
-          <span class="slot-counter">⚡ PWR ${pwr}</span>
-        </div>
-        <p style="font-size:0.78rem;color:${cDef.elementColor};font-weight:800;margin-bottom:4px;">
-          ${cDef.archetypeLabel} (${cDef.name}) — ${cDef.title}
-        </p>
-        <p style="font-size:0.72rem;color:#ffd166;margin-bottom:4px;">
-          ✦ ${cDef.cadenceDescription}
-        </p>
-        <p style="font-size:0.71rem;color:#4cc9f0;margin-bottom:6px;font-weight:700;">
-          🤝 Party Companions: ${compSummary}
-        </p>
-        <div class="stat-grid">
-          <div class="stat-box"><span>Level</span><span>${selectedChar.level} (${selectedChar.xp}/${selectedChar.xpToNextLevel} XP)</span></div>
-          <div class="stat-box"><span>Location</span><span>${zoneName}</span></div>
-          <div class="stat-box"><span>Max HP</span><span>${eff.maxHp}</span></div>
-          <div class="stat-box"><span>Attack / Spd</span><span>${eff.attack} (${eff.attackSpeed}x)</span></div>
-          <div class="stat-box"><span>Crit Rate / Dmg</span><span>${Math.round(eff.critRate * 100)}% / ${Math.round(eff.critDamage * 100)}%</span></div>
-          <div class="stat-box"><span>Gold / Crystals</span><span>${selectedChar.gold}G / ${selectedChar.aetherCrystals}✦</span></div>
-          <div class="stat-box"><span>Weapon</span><span>${selectedChar.equipped.weapon?.name ?? 'None'}</span></div>
-          <div class="stat-box"><span>Wilds / Kills</span><span>${selectedChar.stompingGroundsClears ?? 0} • ${selectedChar.enemiesDefeated} (${mins}m ${secs}s)</span></div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:10px;">
-          <button id="btn-enter-world" class="btn-anime btn-primary" style="flex:1;padding:12px;">
-            ▶ ENTER WORLD (${zoneName.split(' ')[0].toUpperCase()})
-          </button>
-          <button id="btn-delete-char" class="btn-anime btn-danger" title="Delete Character">
-            🗑
-          </button>
-        </div>
-      `;
-    } else {
-      const cDef = CHARACTER_CLASSES[this.creationClassId];
-      const classTabs = CHARACTER_CLASS_LIST.map(
-        (cls) => `
-          <div class="class-tab ${cls.id === this.creationClassId ? 'active' : ''}" data-class="${cls.id}">
-            <div>${cls.starterWeapon.icon}</div>
-            <div>${cls.archetypeLabel}</div>
-          </div>
-        `
-      ).join('');
-
-      const skillsHtml = Object.values(cDef.skills)
-        .map(
-          (sk) => `
-          <div class="skill-chip">
-            <strong>${sk.name}</strong> (${sk.subtitle}): ${sk.description}
-          </div>
-        `
-        )
-        .join('');
-
-      const [compA, compB] = getCompanionClassesForPlayer(this.creationClassId);
-      const compSummary = `${CHARACTER_CLASSES[compA].starterWeapon.icon} ${CANONICAL_HERO_NAMES[compA]} (${CHARACTER_CLASSES[compA].archetypeLabel}) & ${CHARACTER_CLASSES[compB].starterWeapon.icon} ${CANONICAL_HERO_NAMES[compB]} (${CHARACTER_CLASSES[compB].archetypeLabel})`;
-
-      rightPanelHtml = `
-        <div class="panel-header">
-          <span class="panel-title">AWAKEN HERO // SLOT ${this.selectedSlotIndex + 1}</span>
-          <span class="slot-counter">${cDef.archetypeLabel}</span>
-        </div>
-        <div class="class-tabs">${classTabs}</div>
-        <p style="font-size:0.78rem;color:${cDef.elementColor};font-weight:800;margin-bottom:3px;">
-          ${cDef.name} — ${cDef.title}
-        </p>
-        <p style="font-size:0.72rem;color:#ffd166;margin-bottom:4px;">
-          ✦ ${cDef.cadenceDescription}
-        </p>
-        <p style="font-size:0.71rem;color:#4cc9f0;margin-bottom:6px;font-weight:700;">
-          🤝 Active Companions: ${compSummary}
-        </p>
-        <div class="skill-preview-list">${skillsHtml}</div>
-        <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-          CHARACTER NAME (Starts in Starting Town Safe Zone)
-        </label>
-        <input
-          id="input-char-name"
-          class="input-field"
-          type="text"
-          maxlength="18"
-          value="${this.escapeHtml(this.creationNameDraft)}"
-          placeholder="Enter hero name..."
-        />
-        ${
-          this.errorMessage
-            ? `<p style="color:#ff4d6d;font-size:0.75rem;margin-bottom:8px;font-weight:700;">⚠ ${this.escapeHtml(this.errorMessage)}</p>`
-            : ''
-        }
-        <button id="btn-create-char" class="btn-anime btn-primary" style="width:100%;padding:12px;">
-          ✦ AWAKEN IN STARTING TOWN
-        </button>
-      `;
-    }
-
+    const cDef = CHARACTER_CLASSES[selectedChar?.classId ?? this.creationClassId];
+    const eff = selectedChar ? computeEffectiveStats(selectedChar) : cDef.baseStats;
+    const classTabs = CHARACTER_CLASS_LIST.map(cls => `
+      <button class="class-tab ${cls.id === this.creationClassId ? 'active' : ''}" data-class="${cls.id}">
+        ${icon(CLASS_ICONS[cls.id])}<span>${cls.archetypeLabel}</span>
+      </button>`).join('');
+    const slotCards = this.slots.map((char, i) => `
+      <button class="char-slot-card ${this.selectedSlotIndex === i ? 'selected' : ''}" data-slot="${i}" aria-pressed="${this.selectedSlotIndex === i}">
+        <span class="roster-number">0${i + 1}</span>
+        <span class="slot-badge">${icon(char ? CLASS_ICONS[char.classId] : 'plus', 26)}</span>
+        <span class="slot-info"><strong>${char ? this.escapeHtml(char.name) : 'Awaken a hero'}</strong><small>${char ? CHARACTER_CLASSES[char.classId].archetypeLabel : 'Choose your calling'}</small></span>
+        ${char ? `<span class="slot-lv">LV ${char.level}</span>` : ''}
+      </button>`).join('');
+    const zone = selectedChar?.currentZone ?? 'starting_town';
+    const route = (['whispering_woods', 'ember_coast', 'glass_desert', 'frostmarch', 'crown_of_night', 'world_heart'] as ZoneId[]).map((z, i) => `
+      <span class="journey-stop ${z === zone ? 'current' : ''}" title="${ZONE_LABELS[z]}"><i>${i + 1}</i><span>${ZONE_LABELS[z]}</span></span>`).join('');
     this.root.innerHTML = `
       <div class="lobby-screen">
-        <div class="lobby-topbar">
-          <div class="brand-badge">
-            <div class="brand-title">ASTRAL CHRONICLES</div>
-            <div class="brand-subtitle">3D Anime Action RPG • Mobile &amp; Desktop Web</div>
+        <header class="lobby-topbar">
+          <div class="wordmark">${icon('star', 34)}<div>ASTRAL<span>CHRONICLES</span></div></div>
+          <span class="edition-label">THE LONG DAWN <i></i> SIX ACTS</span>
+          <div class="lobby-tools interactive">
+            <button id="btn-world-atlas" class="lobby-atlas-button">${icon('map', 17)} THE LONG DAWN</button>
+            <button id="btn-lobby-help" class="quiet-button" aria-label="How to play">?</button>
+            <button id="btn-lobby-audio" class="quiet-button" aria-label="Toggle sound">${icon(this.engine.audio.muted ? 'mute' : 'sound', 19)}</button>
+            <button id="btn-switch-account" class="profile-button"><span class="profile-avatar">${this.escapeHtml(this.activeAccount.displayName.slice(0, 1))}</span><span>${this.escapeHtml(this.activeAccount.displayName)}<small>LOCAL PROFILE</small></span></button>
           </div>
-          <div class="account-pill interactive">
-            <span>Account: <strong>@${this.escapeHtml(this.activeAccount.username)}</strong> (${occupiedCount}/${MAX_CHARACTERS_PER_ACCOUNT} Heroes)</span>
-            <button id="btn-switch-account" class="btn-anime btn-cyan" style="padding:5px 10px;font-size:0.72rem;">
-              Switch Account
-            </button>
-          </div>
-        </div>
-
-        <div class="lobby-main">
-          <div class="slots-panel">
-            <div class="panel-header">
-              <span class="panel-title">Character Vessels</span>
-              <span class="slot-counter">${occupiedCount} / ${MAX_CHARACTERS_PER_ACCOUNT} MAX</span>
-            </div>
-            <div class="slot-list">
-              ${slotCardsHtml}
-            </div>
-          </div>
-
-          <div style="text-align:center;pointer-events:none;padding-bottom:8px;">
-            <span style="background:rgba(9,11,22,0.75);border:1px solid rgba(255,255,255,0.15);padding:4px 12px;border-radius:99px;font-size:0.72rem;color:var(--text-muted);">
-              3D Live Cel-Shaded Pedestal Preview
-            </span>
-          </div>
-
-          <div class="details-panel">
-            ${rightPanelHtml}
-          </div>
-        </div>
-      </div>
-    `;
+        </header>
+        <main class="lobby-stage">
+          <div class="lobby-intro"><div class="eyebrow"><span></span> THREE FATES. ONE WORLD.</div><h1>The eclipse<br>is <em>rising.</em></h1><p>Gather your triad. Cross the fractured wilds.<br>Bring the light back home.</p></div>
+          <section class="details-panel interactive" style="--hero-color:${cDef.elementColor}">
+            <div class="hero-panel-heading"><span class="eyebrow">${selectedChar ? 'YOUR CHOSEN HERO' : 'A NEW AWAKENING'}</span><span class="hero-element">${icon(CLASS_ICONS[cDef.id], 17)} ${cDef.element.split('-')[0]}</span></div>
+            <div class="hero-class-name">${cDef.archetypeLabel}</div>
+            <h2>${this.escapeHtml(selectedChar?.name ?? this.creationNameDraft)}</h2>
+            <p class="hero-lore">${cDef.playstyle}</p>
+            ${!selectedChar ? `<div class="class-tabs">${classTabs}</div>` : ''}
+            <div class="hero-stats"><div><small>VITALITY</small><strong>${eff.maxHp}</strong></div><div><small>ATTACK</small><strong>${eff.attack}</strong></div><div><small>CRITICAL</small><strong>${Math.round(eff.critRate * 100)}<span>%</span></strong></div></div>
+            <div class="hero-abilities">${(['basic', 'dash', 'skill1', 'skill2', 'ultimate'] as ActionId[]).map((key, i) => `<div class="ability-preview" title="${this.escapeHtml(cDef.skills[key].name + ': ' + cDef.skills[key].description)}">${icon(['spear', 'dash', 'flame', 'shield', 'burst'][i], 23)}<small>${['J', 'SHIFT', 'Q', 'E', 'R'][i]}</small></div>`).join('')}</div>
+            ${selectedChar ? `<div class="journey-resume"><span class="status-dot"></span><div><small>CONTINUE YOUR JOURNEY</small><strong>${ZONE_LABELS[zone]} <span>· Level ${selectedChar.level}</span></strong></div>${icon('map', 22)}</div>
+              <button id="btn-enter-world" class="btn-anime btn-primary journey-button">${selectedChar.campaign?.started ? 'Continue journey' : 'Begin The Long Dawn'} ${icon('arrow', 22)}</button>
+              <div class="hero-panel-foot"><span>POWER ${computePowerRating(selectedChar)} · ${selectedChar.enemiesDefeated} FIENDS SLAIN</span><button id="btn-delete-char" class="text-button" aria-label="Delete selected hero">Delete hero</button></div>` : `
+              <label class="eyebrow name-label" for="input-char-name">NAME YOUR HERO</label><input id="input-char-name" class="input-field" maxlength="18" value="${this.escapeHtml(this.creationNameDraft)}" placeholder="Enter a name">
+              ${this.errorMessage ? `<p class="form-error" role="alert">${this.escapeHtml(this.errorMessage)}</p>` : ''}
+              <button id="btn-create-char" class="btn-anime btn-primary journey-button">Awaken your hero ${icon('arrow', 22)}</button>`}
+            <button id="btn-finisher-preview" class="finisher-preview-button">${icon('burst', 17)} Watch a guardian finisher <span>12 SEC</span></button>
+          </section>
+          <section class="hero-roster interactive"><div class="roster-caption"><span class="eyebrow">SELECT YOUR HERO</span><span>${occupiedCount} / 3 AWAKENED</span></div><div class="slot-list">${slotCards}</div></section>
+          <div class="preview-caption"><span class="preview-rule"></span>THE ECLIPSE TRIAD<span class="preview-rule"></span></div>
+        </main>
+        <footer class="lobby-footer"><div class="journey-route">${route}</div><span class="local-save"><span class="status-dot"></span> PROGRESS SAVED ON THIS DEVICE</span></footer>
+      </div>`;
+    this.root.querySelector('#btn-world-atlas')?.addEventListener('click', () => this.openAtlas());
+    this.root.querySelector('#btn-finisher-preview')?.addEventListener('click', () => this.engine.previewBossFinisher(cDef.id));
+    this.root.querySelector('#btn-lobby-help')?.addEventListener('click', () => this.openHelp());
+    this.root.querySelector('#btn-lobby-audio')?.addEventListener('click', () => { this.engine.audio.toggle(); this.renderLobbyDOM(); });
 
     // Bind events
     this.root.querySelectorAll<HTMLElement>('.char-slot-card').forEach((card) => {
@@ -408,6 +295,9 @@ export class UIManager {
             classId: this.creationClassId,
           });
           this.startHudAndGameplay(created);
+          this.engine.setPaused('travel', true);
+          await this.engine.travelToChapter(0);
+          this.engine.setPaused('travel', false);
         } catch (err) {
           this.errorMessage = err instanceof Error ? err.message : String(err);
           this.renderLobbyDOM();
@@ -417,8 +307,13 @@ export class UIManager {
 
     const enterBtn = this.root.querySelector<HTMLButtonElement>('#btn-enter-world');
     if (enterBtn && selectedChar) {
-      enterBtn.addEventListener('click', () => {
+      enterBtn.addEventListener('click', async () => {
         this.startHudAndGameplay(selectedChar);
+        if (!selectedChar.campaign?.started) {
+          this.engine.setPaused('travel', true);
+          await this.engine.travelToChapter(0);
+          this.engine.setPaused('travel', false);
+        }
       });
     }
 
@@ -426,8 +321,15 @@ export class UIManager {
     if (deleteBtn && selectedChar) {
       deleteBtn.addEventListener('click', async () => {
         if (!this.activeAccount) return;
-        await this.persistence.deleteCharacter(this.activeAccount.id, selectedChar.id);
-        await this.showCharacterSelectScreen();
+        this.openOverlay('Release this hero?', `<p>Delete ${this.escapeHtml(selectedChar.name)} and their saved progress? Your other heroes will remain.</p>`, [
+          { label: 'Keep hero', action: () => this.closeOverlay() },
+          { label: 'Delete hero', action: async () => {
+            if (!this.activeAccount) return;
+            await this.persistence.deleteCharacter(this.activeAccount.id, selectedChar.id);
+            this.closeOverlay();
+            await this.showCharacterSelectScreen();
+          } },
+        ]);
       });
     }
 
@@ -443,6 +345,9 @@ export class UIManager {
     const accounts = await this.persistence.listAccounts();
     const modal = document.createElement('div');
     modal.className = 'modal-backdrop';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Local profiles');
 
     const existingListHtml = accounts
       .map(
@@ -464,22 +369,22 @@ export class UIManager {
     modal.innerHTML = `
       <div class="modal-card">
         <div class="panel-header">
-          <span class="panel-title">Account Management (Max 3 Heroes / Account)</span>
+          <span class="panel-title">Local profiles</span>
           <button id="btn-close-acc-modal" class="btn-anime" style="padding:4px 9px;">✕</button>
         </div>
         <p style="font-size:0.76rem;color:var(--text-muted);margin-bottom:10px;">
-          Each account persists its own independent roster of up to 3 characters.
+          Profiles keep separate rosters of up to three heroes on this device.
         </p>
         <div class="slot-list" style="margin-bottom:14px;">
           ${existingListHtml}
         </div>
         <div style="border-top:1px solid rgba(255,255,255,0.12);padding-top:12px;">
           <label style="font-size:0.74rem;color:var(--text-muted);display:block;margin-bottom:6px;">
-            CREATE OR SIGN IN TO ANOTHER ACCOUNT USERNAME
+            PROFILE NAME
           </label>
           <input id="input-new-acc" class="input-field" type="text" placeholder="e.g. kirito_02" />
           <button id="btn-login-new-acc" class="btn-anime btn-primary" style="width:100%;">
-            Sign In / Create Account
+            Open / Create profile
           </button>
         </div>
       </div>
@@ -515,15 +420,18 @@ export class UIManager {
 
   public startHudAndGameplay(character: CharacterSaveData): void {
     const cDef = CHARACTER_CLASSES[character.classId];
+    this.lastCompanionMarkup = '';
 
     this.root.innerHTML = `
       <div class="hud-screen">
+        <div id="damage-vignette" aria-hidden="true"></div>
+        <div class="boss-hud hidden" id="boss-hud"><div class="eyebrow" id="boss-state">RIFT GUARDIAN</div><strong id="boss-name"></strong><div class="boss-track"><div id="boss-fill"></div></div><span id="boss-health"></span></div>
         <div class="hud-top">
           <div>
             <div class="hero-status-card">
               <div class="hero-status-top">
                 <div class="hero-name-row">
-                  <span>${cDef.starterWeapon.icon} ${this.escapeHtml(character.name)}</span>
+                  <span class="hud-hero-name">${icon(CLASS_ICONS[character.classId], 22)} ${this.escapeHtml(character.name)}</span>
                   <span id="hud-lv" class="lv-pill">LV.${character.level}</span>
                 </div>
                 <span id="hud-save-badge" class="save-badge">✓ Saved</span>
@@ -539,7 +447,7 @@ export class UIManager {
               <div class="currency-row">
                 <span id="hud-gold">🪙 ${character.gold}G</span>
                 <span id="hud-crystals" style="color:#4cc9f0">✦ ${character.aetherCrystals}</span>
-                <span style="color:#9aa5ce">Slot ${character.slotIndex + 1}/3</span>
+                <span class="hero-class-label">${cDef.archetypeLabel}</span>
               </div>
             </div>
 
@@ -556,7 +464,7 @@ export class UIManager {
 
             <div class="companion-party-card">
               <div style="font-size:0.62rem;font-weight:900;color:var(--accent-cyan);letter-spacing:0.08em;margin-bottom:3px;">
-                🤝 ECLIPSE TRIAD COMPANIONS
+                THE ECLIPSE TRIAD
               </div>
               <div id="hud-companion-list"></div>
             </div>
@@ -564,15 +472,15 @@ export class UIManager {
 
           <div class="wave-card">
             <div class="zone-route-steps">
-              <span id="step-town" class="zone-step active">🏰 Town</span>
+              <span id="step-town" class="zone-step active">Town</span>
               <span>➔</span>
-              <span id="step-stomping" class="zone-step">⚔️ Stomping</span>
+              <span id="step-stomping" class="zone-step">Wilds</span>
               <span>➔</span>
-              <span id="step-market" class="zone-step">🏮 Market</span>
+              <span id="step-market" class="zone-step">Market</span>
               <span>➔</span>
-              <span id="step-ruins" class="zone-step">🏛️ Ruins</span>
+              <span id="step-ruins" class="zone-step">Ruins</span>
               <span>➔</span>
-              <span id="step-sanctum" class="zone-step">👑 Sanctum</span>
+              <span id="step-sanctum" class="zone-step">Sanctum</span>
             </div>
             <div id="hud-wave-title" class="wave-title">STARTING TOWN</div>
             <div id="hud-wave-sub" class="wave-sub">Safe Zone • Walk North to Portal</div>
@@ -582,23 +490,26 @@ export class UIManager {
           </div>
 
           <div class="hud-top-right">
+            <div class="minimap-wrap"><span class="map-north">N</span><canvas id="hud-minimap" width="220" height="220" aria-label="Local map: red fiends, gold allies, green portals"></canvas><div class="map-legend"><i></i> FIENDS <i></i> PORTALS</div></div>
             <div class="hud-btn-group">
               <button id="btn-hero-sheet" class="btn-anime btn-cyan" style="padding:6px 10px;font-size:0.7rem;">
-                🎒 Inventory
+                ${icon('bag', 16)} Gear <kbd>I</kbd>
               </button>
-              <button id="btn-comp-sheet" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
-                🤝 Companions
+              <button id="btn-comp-sheet" class="btn-anime secondary-hud-action" style="padding:6px 10px;font-size:0.7rem;">
+                Triad
               </button>
-              <button id="btn-ability-sheet" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
-                ⚡ Abilities
+              <button id="btn-ability-sheet" class="btn-anime secondary-hud-action" style="padding:6px 10px;font-size:0.7rem;">
+                Skills
               </button>
-              <button id="btn-cutscenes-sheet" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
-                🎬 Story
+              <button id="btn-cutscenes-sheet" class="btn-anime secondary-hud-action" style="padding:6px 10px;font-size:0.7rem;">
+                Story
               </button>
-              <button id="btn-char-select" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
-                ⇄ Heroes
+              <button id="btn-char-select" class="btn-anime secondary-hud-action" style="padding:6px 10px;font-size:0.7rem;">
+                Heroes
               </button>
             </div>
+            <button id="btn-world-atlas" class="hud-atlas-button interactive">${icon('map', 16)} WORLD ATLAS <kbd>M</kbd></button>
+            <div class="hud-utilities interactive"><button id="btn-hud-help" class="quiet-button" aria-label="How to play">?</button><button id="btn-pause" class="quiet-button" aria-label="Pause game">${icon('pause', 18)}</button></div>
             <div id="hud-combo-box" class="combo-box hidden">
               <div id="hud-combo-rank" class="combo-rank">S</div>
               <div id="hud-combo-hits" class="combo-hits">12 HITS</div>
@@ -630,38 +541,41 @@ export class UIManager {
         </div>
 
         <div class="hud-bottom">
+          <div class="desktop-move-hint"><div class="key-wasd"><kbd>W</kbd><div><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div></div><span>MOVE<br><small>F to interact</small></span></div>
+          <div class="expedition-meter" id="expedition-meter"><span class="eyebrow">SANCTUARY</span><strong id="expedition-count">A moment of respite</strong><small id="expedition-time">Flasks replenished · Vitality restored</small></div>
+          <button id="btn-flask" class="flask-button interactive" aria-label="Use healing flask">${icon('flask', 24)}<span>MENDING FLASK<small id="flask-charges">3 / 3 charges</small></span><kbd>H</kbd></button>
           <div id="joystick-zone" class="joystick-zone" aria-label="Movement Thumbstick">
             <div id="joystick-knob" class="joystick-knob"></div>
           </div>
 
           <div class="action-cluster">
             <button id="act-ultimate" class="action-btn action-btn-ultimate" aria-label="Ultimate Skill">
-              <span class="btn-title">ULT</span>
+              <span class="skill-icon">${icon('burst', 28)}</span><span class="btn-title">ECLIPSE</span>
               <span id="ult-pct-label" class="btn-key">0%</span>
               <div id="cd-ultimate" class="cd-overlay hidden"></div>
             </button>
 
             <button id="act-skill1" class="action-btn action-btn-skill1" aria-label="Skill 1">
-              <span class="btn-title">${cDef.skills.skill1.name.split(' ')[0]}</span>
+              <span class="skill-icon">${icon('flame', 25)}</span><span class="btn-title">${cDef.skills.skill1.name.split(' ')[0]}</span>
               <span class="btn-key">Q / 1</span>
               <div id="cd-skill1" class="cd-overlay hidden"></div>
             </button>
 
             <button id="act-skill2" class="action-btn action-btn-skill2" aria-label="Skill 2">
-              <span class="btn-title">${cDef.skills.skill2.name.split(' ')[0]}</span>
+              <span class="skill-icon">${icon('shield', 25)}</span><span class="btn-title">${cDef.skills.skill2.name.split(' ')[0]}</span>
               <span class="btn-key">E / 2</span>
               <div id="cd-skill2" class="cd-overlay hidden"></div>
             </button>
 
             <button id="act-dash" class="action-btn action-btn-dash" aria-label="Dash">
-              <span class="btn-title">DASH</span>
+              <span class="skill-icon">${icon('dash', 25)}</span><span class="btn-title">EVADE</span>
               <span class="btn-key">SHIFT</span>
               <div id="cd-dash" class="cd-overlay hidden"></div>
             </button>
 
             <button id="act-basic" class="action-btn action-btn-basic" aria-label="Primary Attack">
-              <span class="btn-title" style="font-size:0.82rem">ATTACK</span>
-              <span class="btn-key">SPACE / J</span>
+              <span class="skill-icon">${icon(CLASS_ICONS[character.classId], 28)}</span><span class="btn-title">ATTACK</span>
+              <span class="btn-key">LMB / J</span>
               <div id="cd-basic" class="cd-overlay hidden"></div>
             </button>
           </div>
@@ -732,11 +646,16 @@ export class UIManager {
 
     this.engine.input.bindVirtualControls(joystickZone, joystickKnob, actionMap);
 
+    this.root.querySelector('#btn-world-atlas')?.addEventListener('click', () => this.openAtlas());
+    this.root.querySelector('#btn-pause')?.addEventListener('click', () => this.openPauseMenu());
+    this.root.querySelector('#btn-hud-help')?.addEventListener('click', () => this.openHelp());
+    this.root.querySelector('#btn-flask')?.addEventListener('click', () => this.engine.useFlask());
+
     // Top-right HUD buttons
     this.root.querySelector('#btn-char-select')?.addEventListener('click', async () => {
       this.cutsceneDirector.stop();
       this.engine.setCutsceneCameraShot(null);
-      await this.engine.saveActiveCharacterNow();
+      if (!await this.engine.saveActiveCharacterNow()) return;
       await this.showCharacterSelectScreen();
     });
 
@@ -769,6 +688,7 @@ export class UIManager {
     const char = this.engine.getActiveCharacter();
     if (!char) return;
 
+    this.engine.setPaused('cutscene', true);
     const script = buildCutsceneScript(char ? cutsceneId : 'prologue_triad_awakening', char);
     this.cutsceneDirector.play(
       this.root,
@@ -784,6 +704,7 @@ export class UIManager {
       },
       () => {
         this.engine.setCutsceneCameraShot(null);
+        this.engine.setPaused('cutscene', false);
       }
     );
   }
@@ -799,6 +720,7 @@ export class UIManager {
 
     const char = this.engine.getActiveCharacter();
     if (!char) return;
+    this.engine.setPaused('deck', true);
     const stats = computeEffectiveStats(char);
     const pwr = computePowerRating(char);
     const cDef = CHARACTER_CLASSES[char.classId];
@@ -807,6 +729,9 @@ export class UIManager {
     const modal = document.createElement('div');
     modal.id = 'command-deck-modal';
     modal.className = 'modal-backdrop';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Command deck');
 
     let tabBodyHtml = '';
 
@@ -1086,7 +1011,7 @@ export class UIManager {
 
         <div class="deck-tabs">
           <div class="deck-tab ${this.deckTab === 'inventory' ? 'active' : ''}" data-deck-tab="inventory">
-            🎒 Inventory (${char.inventory.length}/24)
+            🎒 Inventory (${char.inventory.length} items)
           </div>
           <div class="deck-tab ${this.deckTab === 'companions' ? 'active' : ''}" data-deck-tab="companions">
             🤝 Companions (2)
@@ -1111,7 +1036,8 @@ export class UIManager {
 
     this.root.appendChild(modal);
 
-    modal.querySelector('#btn-close-inv')?.addEventListener('click', () => modal.remove());
+    modal.querySelector('#btn-close-inv')?.addEventListener('click', () => this.closeDeck());
+    modal.querySelector<HTMLButtonElement>('#btn-close-inv')?.focus();
 
     modal.querySelectorAll<HTMLElement>('[data-deck-tab]').forEach((tabEl) => {
       tabEl.addEventListener('click', () => {
@@ -1269,10 +1195,208 @@ export class UIManager {
     modal.querySelectorAll<HTMLElement>('[data-play-cutscene]').forEach((row) => {
       row.addEventListener('click', () => {
         const cId = row.dataset.playCutscene as CutsceneId;
-        modal.remove();
+        this.closeDeck();
         this.engine.triggerCutscene(cId);
       });
     });
+  }
+
+  private closeDeck(): void {
+    this.root.querySelector('#command-deck-modal')?.remove();
+    this.engine.setPaused('deck', false);
+    this.root.querySelector<HTMLButtonElement>('#btn-hero-sheet')?.focus();
+  }
+
+  private closeOverlay(): void {
+    this.root.querySelector('#game-menu')?.remove();
+    this.engine.setPaused('menu', false);
+    this.previousFocus?.focus();
+  }
+
+  private openOverlay(title: string, content: string, actions: { label: string; action: () => void | Promise<void> }[], eyebrow = 'ASTRAL CHRONICLES'): void {
+    if (!this.root.querySelector('#game-menu')) this.previousFocus = document.activeElement as HTMLElement;
+    this.root.querySelector('#game-menu')?.remove();
+    this.engine.setPaused('menu', true);
+    const overlay = document.createElement('div');
+    overlay.id = 'game-menu';
+    overlay.className = 'game-menu modal-backdrop';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'menu-title');
+    overlay.innerHTML = `<section class="game-menu-card"><div class="menu-emblem">${icon('star', 36)}</div><span class="eyebrow">${eyebrow}</span><h2 id="menu-title">${title}</h2><div class="menu-content">${content}</div><div class="menu-actions">${actions.map((action, i) => `<button class="btn-anime ${i === 0 ? 'btn-primary' : ''}" data-menu-action="${i}">${action.label}</button>`).join('')}</div></section>`;
+    actions.forEach((action, i) => overlay.querySelector(`[data-menu-action="${i}"]`)?.addEventListener('click', async () => {
+      const button = overlay.querySelector<HTMLButtonElement>(`[data-menu-action="${i}"]`)!;
+      button.disabled = true;
+      try { await action.action(); } finally { button.disabled = false; }
+    }));
+    this.root.appendChild(overlay);
+    overlay.querySelector<HTMLButtonElement>('button')?.focus();
+  }
+
+  public openPauseMenu(): void {
+    if (!this.hudRefs || this.cutsceneDirector.isPlaying()) return;
+    this.openOverlay('Take a breath.', `<p>Your triad will wait. The world is paused.</p><div class="pause-settings"><button id="toggle-audio" class="setting-row">Sound effects <span>${this.engine.audio.muted ? 'OFF' : 'ON'}</span></button><button id="toggle-shake" class="setting-row">Camera shake <span>${this.shakeEnabled ? 'ON' : 'OFF'}</span></button></div>`, [
+      { label: 'Return to the journey', action: () => this.closeOverlay() },
+      { label: 'World atlas & journal', action: () => this.openAtlas() },
+      { label: 'How to play', action: () => this.openHelp() },
+      { label: 'Save & return to heroes', action: async () => {
+        if (!await this.engine.saveActiveCharacterNow()) {
+          const message = this.root.querySelector('#game-menu .menu-content p');
+          if (message) message.textContent = 'Saving failed. Check browser storage, then try again. Your session is still active.';
+          return;
+        }
+        this.closeOverlay();
+        await this.showCharacterSelectScreen();
+      } },
+    ], 'JOURNEY PAUSED');
+    this.root.querySelector('#toggle-audio')?.addEventListener('click', () => { this.engine.audio.toggle(); this.openPauseMenu(); });
+    this.root.querySelector('#toggle-shake')?.addEventListener('click', () => {
+      this.shakeEnabled = !this.shakeEnabled;
+      this.engine.setScreenShake(this.shakeEnabled);
+      try { localStorage.setItem('astral-screen-shake', String(this.shakeEnabled)); } catch { /* optional preference */ }
+      this.openPauseMenu();
+    });
+  }
+
+  private openHelp(): void {
+    this.openOverlay('Every legend starts here.', `<p>Follow the gold compass to memory stones, sealed shrines, and guardians. The Long Dawn spans twelve chapters in six belllands. Press M for the world atlas, journal, and recovered histories.</p><div class="controls-guide"><span>Move</span><kbd>W A S D / Arrows</kbd><span>Attack · hold to chain</span><kbd>Left mouse / J / Space</kbd><span>Evade · brief invulnerability</span><kbd>Shift / K</kbd><span>Abilities / Ultimate</span><kbd>Q · E / R</kbd><span>Heal · 40% vitality</span><kbd>H</kbd><span>Talk / Enter portal</span><kbd>F / Enter</kbd><span>World atlas / journal</span><kbd>M</kbd><span>Gear / Pause</span><kbd>I / Esc</kbd></div><p class="help-tip">Leave red circles before they fill. Some guardian rings have a safe center. Dash through a strike to gain 12 Eclipse energy. Your three flask charges refill in sanctuaries. On touchscreens, use the thumbstick and ability buttons.</p>`, [
+      { label: this.hudRefs ? 'Ready to venture forth' : 'Choose your hero', action: () => this.closeOverlay() },
+    ], 'FIELD GUIDE');
+  }
+
+  public showDefeat(): void {
+    this.openOverlay('Even stars fall.', '<p>The rift claimed this battle. Your gold, equipment, and experience are safe.</p><p class="help-tip">Keep moving when an enemy marks the ground. Your dash can carry you through a strike, and a mending flask restores 40% of your vitality.</p>', [
+      { label: 'Rise at Aetherhaven', action: () => { this.closeOverlay(); this.engine.reviveAtSanctuary(); } },
+    ], 'TRIAD DEFEATED');
+    this.root.querySelector('#game-menu')?.setAttribute('data-locked', 'true');
+  }
+
+  public showExpeditionReport(report: ExpeditionReport): void {
+    const minutes = Math.floor(report.seconds / 60);
+    const seconds = Math.floor(report.seconds % 60).toString().padStart(2, '0');
+    this.openOverlay('The path is yours.', `<p>${ZONE_LABELS[report.zone]} is clear. All spoils have been collected.</p><div class="report-stats"><div><strong>${report.kills}</strong><small>FIENDS SLAIN</small></div><div><strong>${minutes}:${seconds}</strong><small>TIME</small></div><div><strong>${report.gold}</strong><small>GOLD EARNED</small></div></div><div class="report-distinction">${report.damageTaken === 0 ? '✧ UNTOUCHED · A flawless expedition' : `${report.damageTaken} damage endured · The triad stands together`}</div><p class="help-tip">Follow the compass to the far portal to continue your journey.</p>`, [
+      { label: 'Onward, together', action: () => this.closeOverlay() },
+    ], 'EXPEDITION COMPLETE');
+  }
+
+  public showLootToast(name: string, rarity: string): void {
+    const old = this.root.querySelector('.loot-toast');
+    old?.remove();
+    const toast = document.createElement('div');
+    toast.className = `loot-toast rarity-${rarity}`;
+    toast.setAttribute('role', 'status');
+    toast.innerHTML = `${icon('bag', 22)}<span><small>${this.escapeHtml(rarity.toUpperCase())} ITEM ACQUIRED</small><strong>${this.escapeHtml(name)}</strong></span><kbd>I</kbd>`;
+    this.root.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 3800);
+  }
+
+  private handleMenuKey = (event: KeyboardEvent): void => {
+    if (event.target instanceof HTMLElement && (event.target.matches('input, textarea, select') || event.target.isContentEditable)) return;
+    const modal = this.root.querySelector<HTMLElement>('[role="dialog"]');
+    if (event.code === 'Tab' && modal) {
+      const buttons = Array.from(modal.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, [tabindex="0"]'));
+      if (buttons.length) {
+        const first = buttons[0]; const last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    }
+    if (this.engine.isFinishing) { if (event.code === 'Escape') { event.preventDefault(); this.engine.skipBossFinisher(); } return; }
+    if (event.repeat || this.cutsceneDirector.isPlaying() || this.root.querySelector('#game-menu[data-locked]')) return;
+    if (event.code === 'Escape') {
+      event.preventDefault();
+      if (this.root.querySelector('#game-menu[data-locked]')) return;
+      if (this.root.querySelector('#game-menu')) this.closeOverlay();
+      else if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
+      else this.openPauseMenu();
+    } else if (event.code === 'KeyM' && !this.root.querySelector('#game-menu[data-locked]')) {
+      if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
+      this.openAtlas();
+    } else if (event.code === 'KeyI' && this.hudRefs && !this.root.querySelector('#game-menu')) {
+      if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
+      else this.openCommandDeckModal('inventory');
+    } else if (event.code === 'Slash' && event.shiftKey) this.openHelp();
+  };
+
+  public openAtlas(): void {
+    if (this.engine.isFinishing) return;
+    const character = this.hudRefs ? this.engine.getActiveCharacter() : this.slots[this.selectedSlotIndex];
+    if (!character) { this.openHelp(); return; }
+    const state = ensureCampaign(character);
+    let content = '';
+    const nav = `<nav class="atlas-tabs">${(['world', 'journal', 'codex'] as const).map(tab => `<button data-atlas-tab="${tab}" class="${tab === this.atlasTab ? 'active' : ''}">${tab === 'world' ? 'The six belllands' : tab === 'journal' ? 'Your journal' : 'World codex'}</button>`).join('')}</nav>`;
+    if (this.atlasTab === 'world') {
+      content = `<p class="atlas-intro">The kingdom bought its morning with people. Follow the stolen names through six belllands and decide what the next dawn will carry.</p><div class="atlas-grid">${CHRONICLE_CHAPTERS.map((chapter, i) => {
+        const unlocked = chapterUnlocked(state, i); const complete = state.completedChapterIds.includes(chapter.id);
+        return `<article class="atlas-chapter ${unlocked ? 'unlocked' : 'locked'} ${complete ? 'completed' : ''}" style="--region-glow:#${chapter.palette.glow.toString(16).padStart(6, '0')}"><span class="atlas-chapter-number">${String(i + 1).padStart(2, '0')}</span><span class="eyebrow">${REGION_NAMES[chapter.region]}</span><h3>${chapter.title}</h3><p>${chapter.subtitle}</p><div class="atlas-guardian">${chapter.guardian.name}</div><button class="btn-anime ${unlocked && !complete ? 'btn-primary' : ''}" data-travel-chapter="${i}" ${unlocked ? '' : 'disabled'}>${complete ? 'Revisit the bellland' : !unlocked ? 'Complete the previous chapter' : state.started && state.chapterIndex === i ? 'Continue this chapter' : 'Begin chapter'}</button></article>`;
+      }).join('')}</div>`;
+    } else if (this.atlasTab === 'journal') {
+      content = `<p class="atlas-intro">${state.completedChapterIds.length} / 12 chapters complete · ${state.discoveries.length} discoveries · ${Object.keys(state.choices).length} choices made</p><div class="journal-entries">${state.journal.length ? [...state.journal].reverse().map((entry, i) => `<article><span class="eyebrow">ENTRY ${state.journal.length - i}</span><p>${this.escapeHtml(entry)}</p></article>`).join('') : '<p>Your journal is empty. Begin The Names in the Bark to follow the first stolen name.</p>'}</div>`;
+      if (state.completedChapterIds.length === CHRONICLE_CHAPTERS.length) content += `<div class="ending-letter"><span class="eyebrow">THE WORLD YOU LEFT BEHIND</span><p>${this.escapeHtml(endingText(state))}</p></div>`;
+    } else {
+      content = `<p class="atlas-intro">History belongs to the people who remember it. Complete chapters to recover their accounts.</p><div class="codex-grid">${CHRONICLE_CHAPTERS.map(chapter => `<article><span class="eyebrow">${REGION_NAMES[chapter.region]}</span><h3>${chapter.codex.title}</h3><p>${state.codexEntries.includes(chapter.id) ? chapter.codex.text : 'This history has not yet been recovered.'}</p></article>`).join('')}</div>`;
+    }
+    this.openOverlay('The Long Dawn', `${nav}${content}`, [
+      { label: this.hudRefs ? 'Return to the world' : 'Return to heroes', action: () => this.closeOverlay() },
+      ...(this.hudRefs ? [{ label: 'Rest at Aetherhaven', action: async () => {
+        if (!await this.engine.saveActiveCharacterNow()) return;
+        this.engine.enterZone('starting_town'); this.closeOverlay();
+      } }] : []),
+    ], 'WORLD ATLAS · A CHRONICLE IN SIX ACTS');
+    this.root.querySelector('#game-menu')?.classList.add('atlas-overlay');
+    this.root.querySelectorAll<HTMLElement>('[data-atlas-tab]').forEach(button => button.addEventListener('click', () => {
+      this.atlasTab = button.dataset.atlasTab as typeof this.atlasTab; this.openAtlas();
+    }));
+    this.root.querySelectorAll<HTMLButtonElement>('[data-travel-chapter]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      if (!this.hudRefs) {
+        this.closeOverlay(); this.startHudAndGameplay(character); this.engine.setPaused('menu', true);
+      }
+      const travelled = await this.engine.travelToChapter(Number(button.dataset.travelChapter));
+      if (travelled) this.closeOverlay(); else { button.disabled = false; this.showBanner('THE ROAD IS CLOSED', 'Complete the previous chapter or check your save storage.'); }
+    }));
+  }
+
+  public showChronicleInteraction(interaction: ChronicleInteraction): void {
+    let page = 0; let feedback = '';
+    const objective = interaction.objective;
+    const render = () => {
+      const lastPage = page >= objective.text.length - 1;
+      const finish = (option?: number) => {
+        const result = this.engine.resolveChronicleInteraction(interaction.siteId, option);
+        if (result.advanced) this.closeOverlay(); else { feedback = result.message; render(); }
+      };
+      const actions = !lastPage ? [{ label: 'Listen', action: () => { page += 1; render(); } }] : objective.options ? objective.options.map((label, i) => ({ label, action: () => finish(i) })) : [{ label: interaction.optional ? 'Remember this echo' : 'Carry this memory onward', action: () => finish() }];
+      actions.push({ label: 'Leave for now', action: () => this.closeOverlay() });
+      this.openOverlay(objective.title, `<div class="chronicle-speaker">${this.escapeHtml(objective.speaker)}</div><p class="chronicle-dialogue">${this.escapeHtml(objective.text[page] ?? '')}</p>${lastPage && objective.clue ? `<blockquote class="chronicle-inscription">${this.escapeHtml(objective.clue)}</blockquote>` : ''}${feedback ? `<p role="status" class="chronicle-feedback">${this.escapeHtml(feedback)}</p>` : ''}<div class="chronicle-page">${page + 1} / ${objective.text.length}</div>`, actions, interaction.chapterTitle);
+      this.root.querySelector('#game-menu')?.classList.add('chronicle-conversation');
+    };
+    render();
+  }
+
+  public showFinisherFrame(frame: FinisherFrame): void {
+    let overlay = this.root.querySelector<HTMLElement>('#boss-finisher-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div'); overlay.id = 'boss-finisher-overlay'; overlay.className = 'boss-finisher-overlay';
+      overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-modal', 'true'); overlay.setAttribute('aria-label', 'Guardian finishing blow');
+      overlay.innerHTML = `<div class="finisher-flash"></div><div class="finisher-letterbox top"><span>ASTRAL CHRONICLES / RESONANCE FRACTURE</span><button id="skip-finisher">Skip cinematic <kbd>ESC</kbd></button></div><div class="finisher-title"><span class="finisher-subtitle"></span><h1></h1></div><div class="finisher-verdict"><span>OATH</span><strong>SEVERED</strong></div><div class="finisher-letterbox bottom"><div class="finisher-boss-name"></div><div class="finisher-last-words"></div><div class="finisher-progress"><i></i></div></div>`;
+      this.root.appendChild(overlay); this.root.classList.add('cinema-active');
+      overlay.querySelector('#skip-finisher')?.addEventListener('click', () => this.engine.skipBossFinisher());
+      overlay.querySelector<HTMLButtonElement>('button')?.focus();
+    }
+    overlay.dataset.phase = frame.phase;
+    overlay.style.setProperty('--impact-flash', String(frame.flash * 0.8));
+    overlay.querySelector('h1')!.textContent = frame.title;
+    overlay.querySelector('.finisher-subtitle')!.textContent = frame.subtitle;
+    overlay.querySelector('.finisher-boss-name')!.textContent = frame.bossName;
+    overlay.querySelector('.finisher-last-words')!.textContent = frame.phase === 'requiem' ? `“${frame.lastWords}”` : frame.phase === 'silence' ? 'A lifetime held in a single breath.' : '';
+    (overlay.querySelector('.finisher-progress i') as HTMLElement).style.width = `${frame.progress * 100}%`;
+  }
+
+  public endFinisher(): void {
+    this.root.querySelector('#boss-finisher-overlay')?.remove();
+    this.root.classList.remove('cinema-active');
+    this.root.querySelector<HTMLButtonElement>('#btn-finisher-preview')?.focus();
   }
 
   public updateHud(t: HudTelemetry): void {
@@ -1280,14 +1404,14 @@ export class UIManager {
 
     const hpPct = Math.max(0, Math.min(100, (t.hp / Math.max(1, t.maxHp)) * 100));
     this.hudRefs.hpFill.style.width = `${hpPct.toFixed(1)}%`;
-    this.hudRefs.hpLabel.textContent = `${t.hp} / ${t.maxHp} HP`;
+    this.hudRefs.hpLabel.textContent = `${Math.ceil(t.hp)} / ${t.maxHp} HP`;
 
     const xpPct = Math.max(0, Math.min(100, (t.xp / Math.max(1, t.xpToNextLevel)) * 100));
     this.hudRefs.xpFill.style.width = `${xpPct.toFixed(1)}%`;
     this.hudRefs.xpLabel.textContent = `XP ${t.xp}/${t.xpToNextLevel}`;
 
     this.hudRefs.lvPill.textContent = `LV.${t.level}`;
-    this.hudRefs.goldSpan.textContent = `🪙 ${t.gold}G`;
+    this.hudRefs.goldSpan.textContent = `◈ ${t.gold.toLocaleString()}`;
     this.hudRefs.crystalSpan.textContent = `✦ ${t.aetherCrystals}`;
     this.hudRefs.saveBadge.textContent = `✓ ${t.lastSavedText}`;
 
@@ -1300,7 +1424,7 @@ export class UIManager {
     this.hudRefs.stepRuins.classList.toggle('active', t.zoneId === 'sunken_ruins');
     this.hudRefs.stepSanctum.classList.toggle('active', t.zoneId === 'abyssal_sanctum');
 
-    if (t.zoneId === 'stomping_grounds' || t.zoneId === 'sunken_ruins') {
+    if (t.map.path.length > 0) {
       this.hudRefs.pathProgressWrap.style.display = 'block';
       this.hudRefs.pathProgressFill.style.width = `${Math.round(t.pathProgress * 100)}%`;
     } else {
@@ -1309,14 +1433,16 @@ export class UIManager {
 
     if (t.nearbyPortal) {
       this.hudRefs.portalBtn.classList.remove('hidden');
-      this.hudRefs.portalBtn.textContent = `🌀 ${t.nearbyPortal.label.toUpperCase()} [F / TAP]`;
+      this.hudRefs.portalBtn.textContent = t.portalLocked ? 'RIFT SEALED · DEFEAT ALL FIENDS' : `${t.nearbyPortal.label.toUpperCase()} [F / TAP]`;
     } else {
       this.hudRefs.portalBtn.classList.add('hidden');
     }
 
     // Update Quest Tracker HUD
     const qv = t.questView;
-    this.hudRefs.questChapterSpan.textContent = `📜 ${qv.chapterTitle}`;
+    const route = this.root.querySelector<HTMLElement>('.zone-route-steps');
+    if (route) { if (qv.stage === 'chronicle') route.style.display = 'none'; else route.style.removeProperty('display'); }
+    this.hudRefs.questChapterSpan.textContent = qv.chapterTitle;
     this.hudRefs.questStepPill.textContent = qv.isComplete
       ? '★ COMPLETED'
       : `STEP ${qv.stepNumber}/${qv.totalSteps}`;
@@ -1328,18 +1454,28 @@ export class UIManager {
     }
 
     // Update Companion Party Roster
-    this.hudRefs.companionListDiv.innerHTML = t.companions
+    const companionMarkup = t.companions
       .map(
         (c) => `
         <div class="companion-row">
-          <span><strong style="color:${c.elementColor}">${c.icon} ${this.escapeHtml(c.name)}</strong> <span style="color:#9aa5ce">(${c.archetypeLabel})</span></span>
+          <span><strong style="color:${c.elementColor}">${icon(CLASS_ICONS[c.classId], 15)} ${this.escapeHtml(c.name)}</strong> <span style="color:#9aa5ce">(${c.archetypeLabel})</span></span>
           <span style="color:#ffd166;font-weight:700;">${this.escapeHtml(c.actionText)}</span>
         </div>
       `
       )
       .join('');
+    if (companionMarkup !== this.lastCompanionMarkup) {
+      this.hudRefs.companionListDiv.innerHTML = companionMarkup;
+      this.lastCompanionMarkup = companionMarkup;
+    }
 
-    if (t.nearbyNpc) {
+    if (t.nearbyChronicle) {
+      this.hudRefs.npcBox.classList.remove('hidden');
+      this.hudRefs.npcTitle.textContent = t.nearbyChronicle.title;
+      this.hudRefs.npcText.textContent = 'A fragment of Elarion is waiting to be heard.';
+      this.hudRefs.questActionBtn.classList.remove('hidden');
+      this.hudRefs.questActionBtn.textContent = 'Listen / Interact [F]';
+    } else if (t.nearbyNpc) {
       this.hudRefs.npcBox.classList.remove('hidden');
       this.hudRefs.npcTitle.textContent = `💬 ${t.nearbyNpc.name} • ${t.nearbyNpc.role}`;
       this.hudRefs.npcText.textContent = `"${t.nearbyNpc.dialogue}"`;
@@ -1361,6 +1497,29 @@ export class UIManager {
     } else {
       this.hudRefs.comboBox.classList.add('hidden');
     }
+
+    const minimap = this.root.querySelector<HTMLCanvasElement>('#hud-minimap');
+    if (minimap) drawMinimap(minimap, t.map);
+    const bossHud = this.root.querySelector<HTMLElement>('#boss-hud')!;
+    bossHud.classList.toggle('hidden', !t.boss);
+    if (t.boss) {
+      this.root.querySelector('#boss-name')!.textContent = t.boss.name;
+      this.root.querySelector('#boss-state')!.textContent = t.boss.enraged ? 'ENRAGED · FASTER STRIKES' : 'RIFT GUARDIAN';
+      (this.root.querySelector('#boss-fill') as HTMLElement).style.width = `${100 * t.boss.hp / t.boss.maxHp}%`;
+      this.root.querySelector('#boss-health')!.textContent = `${t.boss.hp} / ${t.boss.maxHp}`;
+    }
+    this.root.querySelector('#flask-charges')!.textContent = `${t.flaskCharges} / 3 charges`;
+    (this.root.querySelector('#btn-flask') as HTMLButtonElement).disabled = t.flaskCharges === 0 || t.hp >= t.maxHp;
+    const meter = this.root.querySelector('#expedition-meter')!;
+    meter.querySelector('.eyebrow')!.textContent = t.isSafeZone ? 'SANCTUARY' : 'EXPEDITION';
+    this.root.querySelector('#expedition-count')!.textContent = t.isSafeZone ? 'A moment of respite' : `${t.expedition.defeated} / ${t.expedition.total} fiends defeated`;
+    this.root.querySelector('#expedition-time')!.textContent = t.isSafeZone ? 'Flasks replenished · Vitality restored' : `${Math.floor(t.expedition.seconds / 60)}:${Math.floor(t.expedition.seconds % 60).toString().padStart(2, '0')} · ${Math.round(t.pathProgress * 100)}% explored`;
+    if (qv.stage === 'chronicle' && !t.isSafeZone) {
+      meter.querySelector('.eyebrow')!.textContent = 'THE LONG DAWN';
+      this.root.querySelector('#expedition-count')!.textContent = qv.progressText;
+    }
+    this.root.querySelector('#damage-vignette')!.classList.toggle('hurt', t.damageFlash);
+    this.root.querySelector('#damage-vignette')!.classList.toggle('low-health', t.hp / t.maxHp < 0.3);
 
     // Ultimate gauge
     const ultReady = t.ultimateEnergy >= 100 && t.cooldowns.ultimate.remaining <= 0;

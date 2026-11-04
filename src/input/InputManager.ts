@@ -5,6 +5,7 @@ export type ActionId = 'basic' | 'dash' | 'skill1' | 'skill2' | 'ultimate';
 export class InputManager {
   public readonly moveVector = new THREE.Vector2(0, 0);
 
+  private controlsAbort: AbortController | null = null;
   private keysDown = new Set<string>();
   private heldActions = new Set<ActionId>();
   private queuedActions = new Set<ActionId>();
@@ -29,11 +30,17 @@ export class InputManager {
     joystickKnob: HTMLElement,
     actionButtons: Map<ActionId, HTMLElement>
   ): void {
+    this.controlsAbort?.abort();
+    this.controlsAbort = new AbortController();
+    this.resetAll();
+    const listen = <K extends keyof WindowEventMap>(target: EventTarget, type: K, callback: (event: WindowEventMap[K]) => void, options: AddEventListenerOptions = {}) => {
+      target.addEventListener(type, callback as EventListener, { ...options, signal: this.controlsAbort!.signal });
+    };
     this.joystickZone = joystickZone;
     this.joystickKnob = joystickKnob;
 
     // Touch events for mobile multi-touch
-    joystickZone.addEventListener(
+    listen(joystickZone,
       'touchstart',
       (e: TouchEvent) => {
         e.preventDefault();
@@ -48,7 +55,7 @@ export class InputManager {
       { passive: false }
     );
 
-    window.addEventListener(
+    listen(window,
       'touchmove',
       (e: TouchEvent) => {
         if (this.joystickTouchId === null) return;
@@ -77,11 +84,11 @@ export class InputManager {
         }
       }
     };
-    window.addEventListener('touchend', endTouch);
-    window.addEventListener('touchcancel', endTouch);
+    listen(window,'touchend', endTouch);
+    listen(window,'touchcancel', endTouch);
 
     // Mouse fallback on the virtual joystick for desktop testing
-    joystickZone.addEventListener('pointerdown', (e: PointerEvent) => {
+    listen(joystickZone,'pointerdown', (e: PointerEvent) => {
       if (e.pointerType === 'touch') return;
       e.preventDefault();
       this.joystickPointerDown = true;
@@ -91,12 +98,12 @@ export class InputManager {
       joystickZone.classList.add('active');
     });
 
-    window.addEventListener('pointermove', (e: PointerEvent) => {
+    listen(window,'pointermove', (e: PointerEvent) => {
       if (!this.joystickPointerDown || e.pointerType === 'touch') return;
       this.updateJoystickFromPoint(e.clientX, e.clientY);
     });
 
-    window.addEventListener('pointerup', (e: PointerEvent) => {
+    listen(window,'pointerup', (e: PointerEvent) => {
       if (!this.joystickPointerDown || e.pointerType === 'touch') return;
       this.joystickPointerDown = false;
       this.joystickInput.set(0, 0);
@@ -108,7 +115,7 @@ export class InputManager {
 
     // Bind Action Buttons (both Touch and Pointer/Click)
     for (const [actionId, btn] of actionButtons.entries()) {
-      btn.addEventListener(
+      listen(btn,
         'touchstart',
         (e: TouchEvent) => {
           e.preventDefault();
@@ -119,13 +126,13 @@ export class InputManager {
         { passive: false }
       );
 
-      btn.addEventListener('touchend', (e: TouchEvent) => {
+      listen(btn,'touchend', (e: TouchEvent) => {
         e.preventDefault();
         this.heldActions.delete(actionId);
         btn.classList.remove('pressed');
       });
 
-      btn.addEventListener('pointerdown', (e: PointerEvent) => {
+      listen(btn,'pointerdown', (e: PointerEvent) => {
         if (e.pointerType === 'touch') return;
         e.preventDefault();
         e.stopPropagation();
@@ -133,17 +140,27 @@ export class InputManager {
         btn.classList.add('pressed');
       });
 
-      btn.addEventListener('pointerup', (e: PointerEvent) => {
+      listen(btn,'pointerup', (e: PointerEvent) => {
         if (e.pointerType === 'touch') return;
         this.heldActions.delete(actionId);
         btn.classList.remove('pressed');
       });
 
-      btn.addEventListener('pointerleave', () => {
+      listen(btn,'touchcancel', () => { this.heldActions.delete(actionId); btn.classList.remove('pressed'); });
+      listen(btn,'pointercancel', () => { this.heldActions.delete(actionId); btn.classList.remove('pressed'); });
+      listen(btn,'pointerleave', () => {
         this.heldActions.delete(actionId);
         btn.classList.remove('pressed');
       });
     }
+  }
+
+  public bindCanvas(canvas: HTMLCanvasElement): void {
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button === 0 && event.pointerType !== 'touch') this.triggerAction('basic', true);
+    });
+    window.addEventListener('pointerup', () => this.heldActions.delete('basic'));
+    canvas.addEventListener('contextmenu', event => event.preventDefault());
   }
 
   private updateJoystickFromPoint(clientX: number, clientY: number): void {
@@ -204,12 +221,14 @@ export class InputManager {
   private isTypingInInput(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
     const tag = target.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (this.isTypingInInput(e.target)) return;
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     this.keysDown.add(e.code);
+    if (e.repeat) return;
 
     switch (e.code) {
       case 'KeyJ':
@@ -244,6 +263,10 @@ export class InputManager {
   };
 
   public resetAll = (): void => {
+    this.joystickTouchId = null;
+    this.joystickPointerDown = false;
+    this.joystickZone?.classList.remove('active');
+    if (this.joystickKnob) this.joystickKnob.style.transform = 'translate3d(0,0,0)';
     this.keysDown.clear();
     this.heldActions.clear();
     this.queuedActions.clear();

@@ -1,4 +1,5 @@
 import { CharacterQuestState } from './quest';
+import type { CampaignState } from './campaign';
 
 export const MAX_CHARACTERS_PER_ACCOUNT = 3 as const;
 
@@ -11,7 +12,8 @@ export type ZoneId =
   | 'stomping_grounds'
   | 'market_crossing'
   | 'sunken_ruins'
-  | 'abyssal_sanctum';
+  | 'abyssal_sanctum'
+  | 'whispering_woods' | 'ember_coast' | 'glass_desert' | 'frostmarch' | 'crown_of_night' | 'world_heart';
 
 export interface CompanionStatusView {
   classId: CharacterClassId;
@@ -156,7 +158,19 @@ export interface CharacterSaveData {
   currentHp: number;
   ultimateEnergy: number;
   currentZone: ZoneId;
+  journeyState?: {
+    zone: ZoneId;
+    seed: number | null;
+    defeatedEnemyIds: string[];
+    enemies: Array<{ id: string; hp: number; x: number; z: number }>;
+    pendingLoot: Array<{ x: number; z: number; gold: number; item: InventoryItem | null }>;
+    flaskCharges: number;
+    elapsedSeconds: number;
+    damageTaken: number;
+    goldEarned: number;
+  };
   questState?: CharacterQuestState;
+  campaign?: CampaignState;
   position: { x: number; y: number; z: number };
   currentWave: number;
   highestWave: number;

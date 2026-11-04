@@ -3,14 +3,15 @@ import * as THREE from 'three';
 export class IsometricCameraController {
   public readonly camera: THREE.PerspectiveCamera;
   private currentFocus = new THREE.Vector3(0, 0, 0);
+  public shakeEnabled = true;
   private shakeTimer = 0;
   private shakeIntensity = 0;
   private zoomPunch = 0;
 
   // Isometric offset angle (45 deg yaw, ~42 deg pitch)
   private readonly baseOffset = new THREE.Vector3(0, 14.5, 13.5);
-  private readonly previewPosition = new THREE.Vector3(0, 2.15, 4.95);
-  private readonly previewLookAt = new THREE.Vector3(0, 1.1, 0);
+  private readonly previewPosition = new THREE.Vector3(2.8, 3.3, 8.7);
+  private readonly previewLookAt = new THREE.Vector3(1.7, 1.0, 0);
   private cutsceneShot: {
     cameraOffset: THREE.Vector3;
     lookAtOffset: THREE.Vector3;
@@ -68,6 +69,7 @@ export class IsometricCameraController {
   }
 
   public triggerShake(intensity = 0.35, duration = 0.2): void {
+    if (!this.shakeEnabled) return;
     this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
     this.shakeTimer = Math.max(this.shakeTimer, duration);
   }
