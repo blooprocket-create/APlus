@@ -140,16 +140,16 @@ export class CharacterRig {
     this.hairBackGroup.position.set(0, 0.05, -0.25);
     this.headGroup.add(this.hairBackGroup);
 
-    if (classId === 'bladedancer') {
-      // High flowing ponytail + crimson ribbon
+    if (classId === 'assassin') {
+      // High flowing shinobi ponytail + shadow mask
       const tailGeo = new THREE.ConeGeometry(0.14, 0.65, 8);
       tailGeo.translate(0, -0.28, 0);
       const tail = new THREE.Mesh(tailGeo, hairMat);
       tail.rotation.x = 0.65;
       attachAnimeOutline(tail, 1.06);
       this.hairBackGroup.add(tail);
-    } else if (classId === 'astral_weaver') {
-      // Twin astral tails + star halo
+    } else if (classId === 'mage') {
+      // Twin astral tails + floating witch/archon halo
       for (const dir of [-1, 1]) {
         const twinGeo = new THREE.ConeGeometry(0.1, 0.62, 8);
         twinGeo.translate(0, -0.26, 0);
@@ -160,7 +160,7 @@ export class CharacterRig {
         this.hairBackGroup.add(twin);
       }
     } else {
-      // Valkyrie winged crown diadem
+      // Spear Warrior Dragoon winged crest diadem
       for (const dir of [-1, 1]) {
         const wingGeo = new THREE.BoxGeometry(0.05, 0.34, 0.16);
         const wingMat = createAnimeToonMaterial({
@@ -231,45 +231,54 @@ export class CharacterRig {
     });
     const hiltMat = createAnimeToonMaterial({ color: 0x22223b });
 
-    if (classId === 'bladedancer') {
-      // Odachi Katana
-      const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 8), hiltMat);
-      hilt.rotation.x = Math.PI / 2;
-      const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.03, 12), bladeMat);
-      tsuba.rotation.x = Math.PI / 2;
-      tsuba.position.z = 0.16;
+    if (classId === 'assassin') {
+      // Dual Ranged Kunai + Shadow Chakram Ring
+      const kunaiRing = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.025, 8, 18), bladeMat);
+      kunaiRing.position.set(0, 0, 0.08);
+      const kunaiBladeGeo = new THREE.ConeGeometry(0.09, 0.52, 4);
+      kunaiBladeGeo.rotateX(Math.PI / 2);
+      kunaiBladeGeo.translate(0, 0, 0.44);
+      const kunaiBlade = new THREE.Mesh(kunaiBladeGeo, bladeMat);
+      attachAnimeOutline(kunaiBlade, 1.08);
+      this.weaponGroup.add(kunaiRing, kunaiBlade);
 
-      const bladeGeo = new THREE.BoxGeometry(0.035, 0.09, 1.45);
-      bladeGeo.translate(0, 0, 0.88);
-      const blade = new THREE.Mesh(bladeGeo, bladeMat);
-      attachAnimeOutline(blade, 1.08);
-      this.weaponGroup.add(hilt, tsuba, blade);
-    } else if (classId === 'astral_weaver') {
-      // Floating Arcane Catalyst + Orbiting Rings
+      // Off-hand Shadow Chakram on Left Arm
+      const chakram = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.035, 8, 24), bladeMat);
+      chakram.position.set(-0.08, -0.42, 0.22);
+      chakram.rotation.y = Math.PI / 2;
+      attachAnimeOutline(chakram, 1.06);
+      this.leftArmPivot.add(chakram);
+    } else if (classId === 'mage') {
+      // Arcane Staff + Floating Orbiting Catalyst Rings
+      const staffShaftGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.45, 8);
+      staffShaftGeo.rotateX(Math.PI / 2);
+      staffShaftGeo.translate(0, 0, 0.35);
+      const staffShaft = new THREE.Mesh(staffShaftGeo, hiltMat);
+
       const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), bladeMat);
-      core.position.set(0, 0.15, 0.45);
+      core.position.set(0, 0.08, 1.15);
       const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.025, 8, 24), bladeMat);
       ring1.position.copy(core.position);
       ring1.rotation.x = Math.PI / 3;
-      this.weaponGroup.add(core, ring1);
+      this.weaponGroup.add(staffShaft, core, ring1);
     } else {
-      // Valkyrie Thunder Halberd + Offhand Shield
-      const shaftGeo = new THREE.CylinderGeometry(0.038, 0.038, 1.85, 8);
+      // Spear Warrior Long Dragon-Lance + Offhand Crest Shield
+      const shaftGeo = new THREE.CylinderGeometry(0.038, 0.038, 2.05, 8);
       shaftGeo.rotateX(Math.PI / 2);
-      shaftGeo.translate(0, 0, 0.55);
+      shaftGeo.translate(0, 0, 0.65);
       const shaft = new THREE.Mesh(shaftGeo, hiltMat);
 
-      const spearTipGeo = new THREE.ConeGeometry(0.14, 0.55, 6);
+      const spearTipGeo = new THREE.ConeGeometry(0.14, 0.68, 6);
       spearTipGeo.rotateX(Math.PI / 2);
-      spearTipGeo.translate(0, 0, 1.65);
+      spearTipGeo.translate(0, 0, 1.88);
       const spearTip = new THREE.Mesh(spearTipGeo, bladeMat);
       attachAnimeOutline(spearTip, 1.08);
 
-      const axeWingGeo = new THREE.BoxGeometry(0.04, 0.44, 0.32);
-      axeWingGeo.translate(0, 0.12, 1.32);
-      const axeWing = new THREE.Mesh(axeWingGeo, bladeMat);
+      const crossGuardGeo = new THREE.BoxGeometry(0.36, 0.06, 0.12);
+      crossGuardGeo.translate(0, 0, 1.52);
+      const crossGuard = new THREE.Mesh(crossGuardGeo, bladeMat);
 
-      this.weaponGroup.add(shaft, spearTip, axeWing);
+      this.weaponGroup.add(shaft, spearTip, crossGuard);
 
       // Shield on Left Arm
       const shieldGeo = new THREE.OctahedronGeometry(0.32, 0);
@@ -316,32 +325,63 @@ export class CharacterRig {
       this.hairBackGroup.rotation.x = 0.12 + breath * 0.05;
     }
 
-    // Combat Attack Swing Animation
+    // Combat Attack Swing Animation — tailored per class cadence & style!
     if (state.attackComboStep > 0) {
       const p = state.attackSwingProgress; // 0 -> 1
       const arc = Math.sin(p * Math.PI);
-      if (state.attackComboStep === 1) {
-        // Horizontal cleave right-to-left
-        this.rightArmPivot.rotation.x = -0.9;
-        this.rightArmPivot.rotation.y = THREE.MathUtils.lerp(-1.2, 1.3, p);
-        this.bodyPivot.rotation.y = THREE.MathUtils.lerp(-0.35, 0.4, p);
-      } else if (state.attackComboStep === 2) {
-        // Reverse upward diagonal slash
-        this.rightArmPivot.rotation.x = THREE.MathUtils.lerp(-0.4, -1.6, p);
-        this.rightArmPivot.rotation.y = THREE.MathUtils.lerp(1.2, -1.1, p);
-        this.bodyPivot.rotation.y = THREE.MathUtils.lerp(0.35, -0.35, p);
-      } else if (state.attackComboStep === 3) {
-        // 360 spinning finisher
-        this.rightArmPivot.rotation.x = -1.1;
-        this.bodyPivot.rotation.y = p * Math.PI * 2;
+
+      if (this.classId === 'warrior') {
+        if (state.attackComboStep === 1 || state.attackComboStep === 2) {
+          // Piercing forward spear thrust!
+          this.rightArmPivot.rotation.x = -1.35;
+          this.rightArmPivot.rotation.y = state.attackComboStep === 1 ? -0.1 : 0.12;
+          this.weaponGroup.position.z = 0.08 + arc * 0.85;
+          this.bodyPivot.rotation.y = THREE.MathUtils.lerp(-0.25, 0.25, p);
+          this.bodyPivot.rotation.x = 0.28 * arc;
+        } else if (state.attackComboStep === 3) {
+          // 360° Heavy Dragon-Halberd Sweep
+          this.rightArmPivot.rotation.x = -1.1;
+          this.weaponGroup.position.z = 0.25;
+          this.bodyPivot.rotation.y = p * Math.PI * 2;
+        } else {
+          this.rightArmPivot.rotation.x = -1.55 * arc;
+          this.weaponGroup.position.z = 0.08 + arc * 0.7;
+        }
+      } else if (this.classId === 'mage') {
+        // Rhythmic ranged spellcasting gestures
+        this.weaponGroup.position.z = 0.08;
+        if (state.attackComboStep === 1) {
+          this.rightArmPivot.rotation.x = -1.45 * arc;
+          this.leftArmPivot.rotation.x = -0.6 * arc;
+        } else if (state.attackComboStep === 2) {
+          this.leftArmPivot.rotation.x = -1.5 * arc;
+          this.rightArmPivot.rotation.x = -1.1 * arc;
+        } else {
+          // Two-handed Nova Comet / Skill invocation + slight levitation
+          this.rightArmPivot.rotation.x = -1.65 * arc;
+          this.leftArmPivot.rotation.x = -1.65 * arc;
+          this.bodyPivot.position.y = 0.85 + arc * 0.28;
+        }
       } else {
-        // Skill / Ultimate cast pose
-        this.rightArmPivot.rotation.x = -1.45 * arc;
-        this.rightArmPivot.rotation.y = 0;
-        this.leftArmPivot.rotation.x = -1.2 * arc;
-        this.bodyPivot.rotation.y = 0;
+        // Ranged Assassin: rapid-fire alternating kunai throws + chakram spin
+        this.weaponGroup.position.z = 0.08;
+        if (state.attackComboStep === 1) {
+          this.rightArmPivot.rotation.x = -1.55 * arc;
+          this.bodyPivot.rotation.y = THREE.MathUtils.lerp(-0.4, 0.35, p);
+        } else if (state.attackComboStep === 2) {
+          this.leftArmPivot.rotation.x = -1.55 * arc;
+          this.rightArmPivot.rotation.x = -1.35 * arc;
+          this.bodyPivot.rotation.y = THREE.MathUtils.lerp(0.4, -0.35, p);
+        } else {
+          // Acrobatic spin while hurling Chakram & backstepping
+          this.rightArmPivot.rotation.x = -1.3;
+          this.leftArmPivot.rotation.x = -1.3;
+          this.bodyPivot.rotation.y = -p * Math.PI * 2;
+          this.bodyPivot.position.y = 0.85 + arc * 0.36;
+        }
       }
     } else {
+      this.weaponGroup.position.z = THREE.MathUtils.lerp(this.weaponGroup.position.z, 0.08, dt * 12);
       this.bodyPivot.rotation.y = THREE.MathUtils.lerp(this.bodyPivot.rotation.y, 0, dt * 12);
       if (!state.isMoving) {
         this.rightArmPivot.rotation.x = THREE.MathUtils.lerp(

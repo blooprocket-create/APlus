@@ -1,4 +1,5 @@
-import { CHARACTER_CLASSES } from '../data/classes';
+import { CHARACTER_CLASSES, normalizeCharacterClassId } from '../data/classes';
+import { createDefaultQuestState, normalizeQuestState } from '../game/QuestEngine';
 import {
   AccountProfile,
   CharacterSlotIndex,
@@ -112,9 +113,17 @@ export class PersistenceManager {
 
   /**
    * Lists the characters belonging to a specific account, sorted by slotIndex (0..2).
+   * Normalizes legacy class IDs and zone fields if loaded from an older save schema.
    */
   async getCharactersForAccount(accountId: string): Promise<CharacterSaveData[]> {
-    return this.adapter.listCharactersByAccount(accountId);
+    const rawList = await this.adapter.listCharactersByAccount(accountId);
+    return rawList.map((ch) => ({
+      ...ch,
+      classId: normalizeCharacterClassId(ch.classId as string),
+      currentZone: ch.currentZone ?? 'starting_town',
+      stompingGroundsClears: ch.stompingGroundsClears ?? 0,
+      questState: normalizeQuestState(ch.questState),
+    }));
   }
 
   /**
@@ -172,7 +181,8 @@ export class PersistenceManager {
       targetSlot = candidate;
     }
 
-    const classDef = CHARACTER_CLASSES[input.classId];
+    const normalizedClassId = normalizeCharacterClassId(input.classId as string);
+    const classDef = CHARACTER_CLASSES[normalizedClassId];
     if (!classDef) {
       throw new Error(`Unknown character class: ${input.classId}`);
     }
@@ -185,7 +195,7 @@ export class PersistenceManager {
       accountId: input.accountId,
       slotIndex: targetSlot,
       name: trimmedName,
-      classId: input.classId,
+      classId: normalizedClassId,
       level: 1,
       xp: 0,
       xpToNextLevel: xpRequiredForLevel(1),
@@ -194,9 +204,12 @@ export class PersistenceManager {
       baseStats: structuredClone(classDef.baseStats),
       currentHp: classDef.baseStats.maxHp + starterWeapon.maxHpBonus,
       ultimateEnergy: 35,
-      position: { x: 0, y: 0, z: 0 },
+      currentZone: 'starting_town',
+      questState: createDefaultQuestState(),
+      position: { x: 0, y: 0, z: 3.5 },
       currentWave: 1,
       highestWave: 1,
+      stompingGroundsClears: 0,
       enemiesDefeated: 0,
       playTimeSeconds: 0,
       equipped: {

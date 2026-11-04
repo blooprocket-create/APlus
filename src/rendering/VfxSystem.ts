@@ -215,6 +215,140 @@ export class VfxSystem {
   }
 
   /**
+   * Spawns a piercing linear Spear Thrust lance beam + wind sonic rings for the Spear Warrior.
+   */
+  public spawnSpearThrustBeam(
+    origin: THREE.Vector3,
+    facingYaw: number,
+    length: number,
+    colorHex: number,
+    accentHex: number
+  ): void {
+    const group = new THREE.Group();
+    group.position.copy(origin);
+    group.position.y = 0.95;
+    group.rotation.y = facingYaw;
+
+    const beamGeo = new THREE.ConeGeometry(0.42, length, 10, 1, true);
+    beamGeo.rotateX(Math.PI / 2);
+    beamGeo.translate(0, 0, length * 0.52);
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+
+    const coreGeo = new THREE.CylinderGeometry(0.08, 0.18, length * 0.95, 8);
+    coreGeo.rotateX(Math.PI / 2);
+    coreGeo.translate(0, 0, length * 0.48);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: accentHex,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+
+    // Sonic ring around the spear shaft
+    const sonicGeo = new THREE.RingGeometry(0.35, 0.65, 20);
+    const sonicMat = new THREE.MeshBasicMaterial({
+      color: accentHex,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const sonicRing = new THREE.Mesh(sonicGeo, sonicMat);
+    sonicRing.position.z = 1.2;
+
+    group.add(beamMesh, coreMesh, sonicRing);
+    this.scene.add(group);
+
+    this.activeMeshes.push({
+      mesh: group,
+      age: 0,
+      duration: 0.24,
+      materials: [beamMat, coreMat, sonicMat],
+      onUpdate: (p) => {
+        const zStretch = 0.55 + p * 0.55;
+        beamMesh.scale.set(1 - p * 0.4, 1 - p * 0.4, zStretch);
+        sonicRing.position.z = 0.9 + p * (length * 0.75);
+        sonicRing.scale.setScalar(1 + p * 0.9);
+        beamMat.opacity = (1 - p) * 0.9;
+        coreMat.opacity = (1 - p) * 0.95;
+        sonicMat.opacity = (1 - p) * 0.85;
+      },
+    });
+  }
+
+  /**
+   * Spawns a telegraph warning circle followed by a falling celestial meteor for the Mage.
+   */
+  public spawnFallingMeteor(
+    targetPos: THREE.Vector3,
+    radius: number,
+    duration: number,
+    colorHex: number,
+    accentHex: number,
+    onImpact: () => void
+  ): void {
+    const group = new THREE.Group();
+    group.position.set(targetPos.x, 0.04, targetPos.z);
+
+    const ringGeo = new THREE.RingGeometry(radius * 0.88, radius, 32);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+
+    const meteorGeo = new THREE.DodecahedronGeometry(0.65, 0);
+    const meteorMat = new THREE.MeshBasicMaterial({
+      color: accentHex,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const meteorMesh = new THREE.Mesh(meteorGeo, meteorMat);
+    meteorMesh.position.set(-2.5, 12.0, -1.5);
+
+    group.add(ringMesh, meteorMesh);
+    this.scene.add(group);
+
+    let impacted = false;
+    this.activeMeshes.push({
+      mesh: group,
+      age: 0,
+      duration,
+      materials: [ringMat, meteorMat],
+      onUpdate: (p, dt) => {
+        ringMesh.rotation.z += dt * 4;
+        meteorMesh.position.set(
+          THREE.MathUtils.lerp(-2.5, 0, p),
+          THREE.MathUtils.lerp(12.0, 0.3, p),
+          THREE.MathUtils.lerp(-1.5, 0, p)
+        );
+        meteorMesh.rotation.x += dt * 8;
+        meteorMesh.rotation.y += dt * 6;
+        if (p >= 0.92 && !impacted) {
+          impacted = true;
+          onImpact();
+        }
+      },
+    });
+  }
+
+  /**
    * Spawns a dash afterimage silhouette at the given position.
    */
   public spawnDashAfterimage(position: THREE.Vector3, colorHex: number): void {

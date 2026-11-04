@@ -1,12 +1,21 @@
+import { CharacterQuestState } from './quest';
+
 export const MAX_CHARACTERS_PER_ACCOUNT = 3 as const;
 
 export type CharacterSlotIndex = 0 | 1 | 2;
 
-export type CharacterClassId = 'bladedancer' | 'astral_weaver' | 'valkyrie';
+export type CharacterClassId = 'warrior' | 'mage' | 'assassin';
+
+export type ZoneId = 'starting_town' | 'stomping_grounds' | 'market_crossing';
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'mythic';
 
 export type EquipmentSlot = 'weapon' | 'charm';
+
+export type AttackDeliveryStyle =
+  | 'spear_melee'
+  | 'arcane_caster'
+  | 'kunai_ranged';
 
 export interface InventoryItem {
   id: string;
@@ -49,6 +58,7 @@ export interface SkillDefinition {
 export interface CharacterClassDefinition {
   id: CharacterClassId;
   name: string;
+  archetypeLabel: string;
   title: string;
   element: string;
   elementColor: string;
@@ -56,6 +66,8 @@ export interface CharacterClassDefinition {
   secondaryColorHex: number;
   hairColorHex: number;
   weaponColorHex: number;
+  deliveryStyle: AttackDeliveryStyle;
+  cadenceDescription: string;
   lore: string;
   playstyle: string;
   baseStats: CharacterStats;
@@ -92,9 +104,12 @@ export interface CharacterSaveData {
   baseStats: CharacterStats;
   currentHp: number;
   ultimateEnergy: number;
+  currentZone: ZoneId;
+  questState?: CharacterQuestState;
   position: { x: number; y: number; z: number };
   currentWave: number;
   highestWave: number;
+  stompingGroundsClears: number;
   enemiesDefeated: number;
   playTimeSeconds: number;
   equipped: {

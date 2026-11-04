@@ -1,23 +1,23 @@
 import { CharacterClassId, EquipmentSlot, InventoryItem, ItemRarity } from '../types/game';
 
 const WEAPON_NAMES: Record<CharacterClassId, string[]> = {
-  bladedancer: [
-    'Sakura Edge Katana',
-    'Crimson Dusk Odachi',
-    'Muramasa Riftblade',
-    'Eternity Bloodmoon Tachi',
+  warrior: [
+    'Stormguard Halberd',
+    'Golden Dawn Partisan',
+    'Dragoon Thunder-Spear',
+    'Heavensfall Aegis Lance',
   ],
-  astral_weaver: [
+  mage: [
     'Starlight Astrolabe',
     'Nebula Echo Grimoire',
     'Voidweaver Chronos Codex',
     'Celestial Sovereign Atlas',
   ],
-  valkyrie: [
-    'Stormguard Halberd',
-    'Golden Dawn Partisan',
-    'Valkyria Thunder Lance',
-    'heavensfall Aegis Spear',
+  assassin: [
+    'Shadowfang Twin-Kunai',
+    'Crimson Dusk Chakram',
+    'Phantom Eclipse Shuriken',
+    'Eternity Nightblade Daggers',
   ],
 };
 
@@ -67,11 +67,11 @@ export function generateLootItem(
   const icon =
     slot === 'charm'
       ? '🔮'
-      : classId === 'bladedancer'
-        ? '⚔️'
-        : classId === 'astral_weaver'
+      : classId === 'warrior'
+        ? '🔱'
+        : classId === 'mage'
           ? '💠'
-          : '🔱';
+          : '🗡️';
 
   return {
     id: `item_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,

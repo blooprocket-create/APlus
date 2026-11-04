@@ -13,12 +13,19 @@ import {
   CharacterSlotIndex,
   CharacterSaveData,
   MAX_CHARACTERS_PER_ACCOUNT,
+  ZoneId,
 } from '../types/game';
 
 const DEFAULT_NAMES: Record<CharacterClassId, string> = {
-  bladedancer: 'Akatsuki',
-  astral_weaver: 'Celestia',
-  valkyrie: 'Brynhildr',
+  warrior: 'Brynhildr',
+  mage: 'Celestia',
+  assassin: 'Akatsuki',
+};
+
+const ZONE_LABELS: Record<ZoneId, string> = {
+  starting_town: 'Starting Town (Safe)',
+  stomping_grounds: 'Stomping Grounds',
+  market_crossing: 'Market Crossing (Safe)',
 };
 
 export class UIManager {
@@ -33,8 +40,8 @@ export class UIManager {
     null,
   ];
   private selectedSlotIndex: CharacterSlotIndex = 0;
-  private creationClassId: CharacterClassId = 'bladedancer';
-  private creationNameDraft = DEFAULT_NAMES.bladedancer;
+  private creationClassId: CharacterClassId = 'warrior';
+  private creationNameDraft = DEFAULT_NAMES.warrior;
   private errorMessage: string | null = null;
 
   // Live HUD DOM elements for fast 60fps updates without full DOM rebuilds
@@ -49,6 +56,20 @@ export class UIManager {
     saveBadge: HTMLElement;
     waveTitle: HTMLElement;
     waveSub: HTMLElement;
+    stepTown: HTMLElement;
+    stepStomping: HTMLElement;
+    stepMarket: HTMLElement;
+    pathProgressWrap: HTMLElement;
+    pathProgressFill: HTMLElement;
+    portalBtn: HTMLButtonElement;
+    npcBox: HTMLElement;
+    npcTitle: HTMLElement;
+    npcText: HTMLElement;
+    questActionBtn: HTMLButtonElement;
+    questStepPill: HTMLElement;
+    questObjTitle: HTMLElement;
+    questObjHint: HTMLElement;
+    questObjProgress: HTMLElement;
     comboBox: HTMLElement;
     comboRank: HTMLElement;
     comboHits: HTMLElement;
@@ -77,12 +98,12 @@ export class UIManager {
     let account = await this.persistence.getActiveAccount();
     if (!account) {
       account = await this.persistence.loginOrCreateAccount('astral_pioneer', 'Astral Pioneer');
-      // Seed 1 starter character in Slot 1 so the player can either jump right in or create up to 2 more
+      // Seed 1 starter character in Slot 1 in Starting Town
       await this.persistence.createCharacter({
         accountId: account.id,
         slotIndex: 0,
-        name: 'Akatsuki',
-        classId: 'bladedancer',
+        name: 'Brynhildr',
+        classId: 'warrior',
       });
     }
     this.activeAccount = account;
@@ -126,6 +147,7 @@ export class UIManager {
         if (char) {
           const cDef = CHARACTER_CLASSES[char.classId];
           const pwr = computePowerRating(char);
+          const zoneLabel = ZONE_LABELS[char.currentZone ?? 'starting_town'];
           return `
             <div class="char-slot-card ${isSelected ? 'selected' : ''}" data-slot="${slotIdx}">
               <div class="slot-left">
@@ -134,7 +156,7 @@ export class UIManager {
                 </div>
                 <div class="slot-info">
                   <h4>${this.escapeHtml(char.name)}</h4>
-                  <p>${cDef.name} • Wave ${char.currentWave}</p>
+                  <p>${cDef.archetypeLabel} • ${zoneLabel}</p>
                 </div>
               </div>
               <div class="slot-lv">
@@ -167,6 +189,7 @@ export class UIManager {
       const pwr = computePowerRating(selectedChar);
       const mins = Math.floor(selectedChar.playTimeSeconds / 60);
       const secs = Math.floor(selectedChar.playTimeSeconds % 60);
+      const zoneName = ZONE_LABELS[selectedChar.currentZone ?? 'starting_town'];
 
       rightPanelHtml = `
         <div class="panel-header">
@@ -174,24 +197,24 @@ export class UIManager {
           <span class="slot-counter">⚡ PWR ${pwr}</span>
         </div>
         <p style="font-size:0.78rem;color:${cDef.elementColor};font-weight:800;margin-bottom:4px;">
-          ${cDef.name} — ${cDef.title}
+          ${cDef.archetypeLabel} (${cDef.name}) — ${cDef.title}
         </p>
-        <p style="font-size:0.74rem;color:var(--text-muted);margin-bottom:8px;">
-          ${cDef.lore}
+        <p style="font-size:0.72rem;color:#ffd166;margin-bottom:6px;">
+          ✦ ${cDef.cadenceDescription}
         </p>
         <div class="stat-grid">
           <div class="stat-box"><span>Level</span><span>${selectedChar.level} (${selectedChar.xp}/${selectedChar.xpToNextLevel} XP)</span></div>
-          <div class="stat-box"><span>Sanctuary Wave</span><span>Wave ${selectedChar.currentWave} (Best ${selectedChar.highestWave})</span></div>
+          <div class="stat-box"><span>Location</span><span>${zoneName}</span></div>
           <div class="stat-box"><span>Max HP</span><span>${eff.maxHp}</span></div>
-          <div class="stat-box"><span>Attack</span><span>${eff.attack}</span></div>
+          <div class="stat-box"><span>Attack / Spd</span><span>${eff.attack} (${eff.attackSpeed}x)</span></div>
           <div class="stat-box"><span>Crit Rate / Dmg</span><span>${Math.round(eff.critRate * 100)}% / ${Math.round(eff.critDamage * 100)}%</span></div>
           <div class="stat-box"><span>Gold / Crystals</span><span>${selectedChar.gold}G / ${selectedChar.aetherCrystals}✦</span></div>
           <div class="stat-box"><span>Weapon</span><span>${selectedChar.equipped.weapon?.name ?? 'None'}</span></div>
-          <div class="stat-box"><span>Playtime / Kills</span><span>${mins}m ${secs}s • ${selectedChar.enemiesDefeated}</span></div>
+          <div class="stat-box"><span>Wilds / Kills</span><span>${selectedChar.stompingGroundsClears ?? 0} • ${selectedChar.enemiesDefeated} (${mins}m ${secs}s)</span></div>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px;">
           <button id="btn-enter-world" class="btn-anime btn-primary" style="flex:1;padding:12px;">
-            ▶ ENTER ASTRAL SANCTUARY
+            ▶ ENTER WORLD (${zoneName.split(' ')[0].toUpperCase()})
           </button>
           <button id="btn-delete-char" class="btn-anime btn-danger" title="Delete Character">
             🗑
@@ -204,7 +227,7 @@ export class UIManager {
         (cls) => `
           <div class="class-tab ${cls.id === this.creationClassId ? 'active' : ''}" data-class="${cls.id}">
             <div>${cls.starterWeapon.icon}</div>
-            <div>${cls.name.split(' ')[1] || cls.name}</div>
+            <div>${cls.archetypeLabel}</div>
           </div>
         `
       ).join('');
@@ -222,18 +245,18 @@ export class UIManager {
       rightPanelHtml = `
         <div class="panel-header">
           <span class="panel-title">AWAKEN HERO // SLOT ${this.selectedSlotIndex + 1}</span>
-          <span class="slot-counter">${cDef.element}</span>
+          <span class="slot-counter">${cDef.archetypeLabel}</span>
         </div>
         <div class="class-tabs">${classTabs}</div>
         <p style="font-size:0.78rem;color:${cDef.elementColor};font-weight:800;margin-bottom:3px;">
           ${cDef.name} — ${cDef.title}
         </p>
-        <p style="font-size:0.73rem;color:var(--text-muted);margin-bottom:8px;">
-          ${cDef.playstyle}
+        <p style="font-size:0.72rem;color:#ffd166;margin-bottom:6px;">
+          ✦ ${cDef.cadenceDescription}
         </p>
         <div class="skill-preview-list">${skillsHtml}</div>
         <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-          CHARACTER NAME (Persisted to Slot ${this.selectedSlotIndex + 1})
+          CHARACTER NAME (Starts in Starting Town Safe Zone)
         </label>
         <input
           id="input-char-name"
@@ -249,7 +272,7 @@ export class UIManager {
             : ''
         }
         <button id="btn-create-char" class="btn-anime btn-primary" style="width:100%;padding:12px;">
-          ✦ AWAKEN &amp; ENTER WORLD
+          ✦ AWAKEN IN STARTING TOWN
         </button>
       `;
     }
@@ -446,32 +469,54 @@ export class UIManager {
     this.root.innerHTML = `
       <div class="hud-screen">
         <div class="hud-top">
-          <div class="hero-status-card">
-            <div class="hero-status-top">
-              <div class="hero-name-row">
-                <span>${cDef.starterWeapon.icon} ${this.escapeHtml(character.name)}</span>
-                <span id="hud-lv" class="lv-pill">LV.${character.level}</span>
+          <div>
+            <div class="hero-status-card">
+              <div class="hero-status-top">
+                <div class="hero-name-row">
+                  <span>${cDef.starterWeapon.icon} ${this.escapeHtml(character.name)}</span>
+                  <span id="hud-lv" class="lv-pill">LV.${character.level}</span>
+                </div>
+                <span id="hud-save-badge" class="save-badge">✓ Saved</span>
               </div>
-              <span id="hud-save-badge" class="save-badge">✓ Saved</span>
+              <div class="bar-track">
+                <div id="hud-hp-fill" class="bar-fill-hp" style="width: 100%"></div>
+                <div id="hud-hp-label" class="bar-label">${character.currentHp} HP</div>
+              </div>
+              <div class="bar-track" style="height: 8px">
+                <div id="hud-xp-fill" class="bar-fill-xp" style="width: 0%"></div>
+                <div id="hud-xp-label" class="bar-label" style="font-size:0.55rem">XP</div>
+              </div>
+              <div class="currency-row">
+                <span id="hud-gold">🪙 ${character.gold}G</span>
+                <span id="hud-crystals" style="color:#4cc9f0">✦ ${character.aetherCrystals}</span>
+                <span style="color:#9aa5ce">Slot ${character.slotIndex + 1}/3</span>
+              </div>
             </div>
-            <div class="bar-track">
-              <div id="hud-hp-fill" class="bar-fill-hp" style="width: 100%"></div>
-              <div id="hud-hp-label" class="bar-label">${character.currentHp} HP</div>
-            </div>
-            <div class="bar-track" style="height: 8px">
-              <div id="hud-xp-fill" class="bar-fill-xp" style="width: 0%"></div>
-              <div id="hud-xp-label" class="bar-label" style="font-size:0.55rem">XP</div>
-            </div>
-            <div class="currency-row">
-              <span id="hud-gold">🪙 ${character.gold}G</span>
-              <span id="hud-crystals" style="color:#4cc9f0">✦ ${character.aetherCrystals}</span>
-              <span style="color:#9aa5ce">Slot ${character.slotIndex + 1}/3</span>
+
+            <div id="hud-quest-tracker" class="quest-tracker-card">
+              <div class="quest-tracker-header">
+                <span>📜 ACTIVE QUEST</span>
+                <span id="hud-quest-step" class="quest-step-pill">STEP 1/5</span>
+              </div>
+              <div id="hud-quest-title" class="quest-obj-title">Speak with Commander Vael</div>
+              <div id="hud-quest-hint" class="quest-obj-hint">Walk north toward Commander Vael in Starting Town.</div>
+              <div id="hud-quest-progress" class="quest-obj-progress">0 / 1 Spoken</div>
             </div>
           </div>
 
           <div class="wave-card">
-            <div id="hud-wave-title" class="wave-title">WAVE ${character.currentWave}</div>
-            <div id="hud-wave-sub" class="wave-sub">Astral Sanctuary</div>
+            <div class="zone-route-steps">
+              <span id="step-town" class="zone-step active">🏰 Starting Town</span>
+              <span>➔</span>
+              <span id="step-stomping" class="zone-step">⚔️ Stomping Grounds</span>
+              <span>➔</span>
+              <span id="step-market" class="zone-step">🏮 Market Crossing</span>
+            </div>
+            <div id="hud-wave-title" class="wave-title">STARTING TOWN</div>
+            <div id="hud-wave-sub" class="wave-sub">Safe Zone • Walk North to Portal</div>
+            <div id="hud-path-progress-wrap" class="path-progress-wrap" style="display:none;">
+              <div id="hud-path-progress-fill" class="path-progress-fill" style="width:0%"></div>
+            </div>
           </div>
 
           <div class="hud-top-right">
@@ -498,6 +543,19 @@ export class UIManager {
         <div id="hud-ult-cutin" class="ultimate-cutin hidden">
           <div id="hud-ult-sub" style="font-size:0.78rem;font-weight:800;letter-spacing:0.15em;color:var(--accent-gold);"></div>
           <div id="hud-ult-title" style="font-size:1.65rem;font-weight:900;font-style:italic;text-transform:uppercase;color:#fff;"></div>
+        </div>
+
+        <div class="portal-prompt-wrap">
+          <div id="hud-npc-box" class="npc-dialogue-box hidden">
+            <div id="hud-npc-title" style="font-weight:900;color:var(--accent-gold);margin-bottom:2px;"></div>
+            <div id="hud-npc-text" style="color:#f8f9fa;"></div>
+            <button id="hud-quest-action-btn" class="quest-action-btn hidden">
+              ✦ Accept Quest
+            </button>
+          </div>
+          <button id="hud-portal-btn" class="portal-prompt-btn hidden">
+            🌀 ENTER PORTAL [F / TAP]
+          </button>
         </div>
 
         <div class="hud-bottom">
@@ -551,6 +609,20 @@ export class UIManager {
       saveBadge: this.root.querySelector('#hud-save-badge')!,
       waveTitle: this.root.querySelector('#hud-wave-title')!,
       waveSub: this.root.querySelector('#hud-wave-sub')!,
+      stepTown: this.root.querySelector('#step-town')!,
+      stepStomping: this.root.querySelector('#step-stomping')!,
+      stepMarket: this.root.querySelector('#step-market')!,
+      pathProgressWrap: this.root.querySelector('#hud-path-progress-wrap')!,
+      pathProgressFill: this.root.querySelector('#hud-path-progress-fill')!,
+      portalBtn: this.root.querySelector('#hud-portal-btn')!,
+      npcBox: this.root.querySelector('#hud-npc-box')!,
+      npcTitle: this.root.querySelector('#hud-npc-title')!,
+      npcText: this.root.querySelector('#hud-npc-text')!,
+      questActionBtn: this.root.querySelector('#hud-quest-action-btn')!,
+      questStepPill: this.root.querySelector('#hud-quest-step')!,
+      questObjTitle: this.root.querySelector('#hud-quest-title')!,
+      questObjHint: this.root.querySelector('#hud-quest-hint')!,
+      questObjProgress: this.root.querySelector('#hud-quest-progress')!,
       comboBox: this.root.querySelector('#hud-combo-box')!,
       comboRank: this.root.querySelector('#hud-combo-rank')!,
       comboHits: this.root.querySelector('#hud-combo-hits')!,
@@ -592,6 +664,14 @@ export class UIManager {
 
     this.root.querySelector('#btn-hero-sheet')?.addEventListener('click', () => {
       this.openHeroInventoryModal();
+    });
+
+    this.hudRefs.portalBtn.addEventListener('click', () => {
+      this.engine.tryTraverseNearbyPortal();
+    });
+
+    this.hudRefs.questActionBtn.addEventListener('click', () => {
+      this.engine.interactWithNearbyQuestNpc();
     });
 
     this.engine.startGameplayWithCharacter(character);
@@ -685,8 +765,50 @@ export class UIManager {
     this.hudRefs.crystalSpan.textContent = `✦ ${t.aetherCrystals}`;
     this.hudRefs.saveBadge.textContent = `✓ ${t.lastSavedText}`;
 
-    this.hudRefs.waveTitle.textContent = `WAVE ${t.wave}`;
-    this.hudRefs.waveSub.textContent = `${t.enemiesRemaining} Fiends Remaining`;
+    this.hudRefs.waveTitle.textContent = t.zoneTitle;
+    this.hudRefs.waveSub.textContent = t.zoneSubtitle;
+
+    this.hudRefs.stepTown.classList.toggle('active', t.zoneId === 'starting_town');
+    this.hudRefs.stepStomping.classList.toggle('active', t.zoneId === 'stomping_grounds');
+    this.hudRefs.stepMarket.classList.toggle('active', t.zoneId === 'market_crossing');
+
+    if (t.zoneId === 'stomping_grounds') {
+      this.hudRefs.pathProgressWrap.style.display = 'block';
+      this.hudRefs.pathProgressFill.style.width = `${Math.round(t.pathProgress * 100)}%`;
+    } else {
+      this.hudRefs.pathProgressWrap.style.display = 'none';
+    }
+
+    if (t.nearbyPortal) {
+      this.hudRefs.portalBtn.classList.remove('hidden');
+      this.hudRefs.portalBtn.textContent = `🌀 ${t.nearbyPortal.label.toUpperCase()} [F / TAP]`;
+    } else {
+      this.hudRefs.portalBtn.classList.add('hidden');
+    }
+
+    // Update Quest Tracker HUD
+    const qv = t.questView;
+    this.hudRefs.questStepPill.textContent = qv.isComplete
+      ? '★ COMPLETED'
+      : `STEP ${qv.stepNumber}/${qv.totalSteps}`;
+    this.hudRefs.questObjTitle.textContent = qv.objectiveTitle;
+    this.hudRefs.questObjHint.textContent = qv.objectiveHint;
+    this.hudRefs.questObjProgress.textContent = qv.progressText;
+
+    if (t.nearbyNpc) {
+      this.hudRefs.npcBox.classList.remove('hidden');
+      this.hudRefs.npcTitle.textContent = `💬 ${t.nearbyNpc.name} • ${t.nearbyNpc.role}`;
+      this.hudRefs.npcText.textContent = `"${t.nearbyNpc.dialogue}"`;
+      if (qv.actionButtonLabel) {
+        this.hudRefs.questActionBtn.classList.remove('hidden');
+        this.hudRefs.questActionBtn.textContent = qv.actionButtonLabel;
+      } else {
+        this.hudRefs.questActionBtn.classList.add('hidden');
+      }
+    } else {
+      this.hudRefs.npcBox.classList.add('hidden');
+      this.hudRefs.questActionBtn.classList.add('hidden');
+    }
 
     if (t.comboCount >= 2) {
       this.hudRefs.comboBox.classList.remove('hidden');
