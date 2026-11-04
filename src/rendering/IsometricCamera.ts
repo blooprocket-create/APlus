@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getViewportProfile } from '../platform/Viewport';
 
 export class IsometricCameraController {
   public readonly camera: THREE.PerspectiveCamera;
@@ -52,13 +53,16 @@ export class IsometricCameraController {
   }
 
   public updateAspect(): void {
-    const w = window.innerWidth;
-    const h = Math.max(1, window.innerHeight);
+    const viewport = getViewportProfile();
+    const w = viewport.width;
+    const h = viewport.height;
     const aspect = w / h;
     this.camera.aspect = aspect;
 
     // On narrow portrait mobile screens, widen FOV slightly so horizontal arena visibility stays generous
-    if (aspect < 0.85) {
+    if (viewport.touchUI && viewport.landscape) {
+      this.camera.fov = h < 500 ? 50 : 47;
+    } else if (aspect < 0.85) {
       this.camera.fov = 56;
     } else if (aspect < 1.2) {
       this.camera.fov = 50;

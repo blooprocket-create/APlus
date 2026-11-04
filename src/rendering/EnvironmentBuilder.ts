@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getViewportProfile } from '../platform/Viewport';
 import { ChronicleChapter, ChronicleSite } from '../types/campaign';
 import { buildChronicleEnvironment } from './ChronicleEnvironment';
 import { disposeObject } from './SceneResources';
@@ -102,8 +103,8 @@ export class EnvironmentBuilder {
     const sunLight = new THREE.DirectionalLight(0xffe2b1, 2.0);
     sunLight.position.set(16, 32, 20);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.mapSize.width = getViewportProfile().touchUI ? 512 : 1024;
+    sunLight.shadow.mapSize.height = sunLight.shadow.mapSize.width;
     sunLight.shadow.camera.near = 5;
     sunLight.shadow.camera.far = 140;
     const d = 40;

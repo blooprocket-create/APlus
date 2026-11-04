@@ -1,6 +1,8 @@
 import './ui/styles.css';
 import './ui/chronicle.css';
 import './ui/chronicle-story.css';
+import './ui/mobile.css';
+import { MobileDisplay } from './platform/MobileDisplay';
 import { GameEngine } from './game/GameEngine';
 import { PersistenceManager } from './persistence/PersistenceManager';
 import { UIManager } from './ui/UIManager';
@@ -13,7 +15,9 @@ async function main(): Promise<void> {
   const persistence = new PersistenceManager();
   let ui: UIManager | null = null;
 
-  const engine = new GameEngine(canvas, damageLayer, persistence, {
+  let engine: GameEngine | null = null;
+  const display = new MobileDisplay(document.getElementById('app')!, () => engine?.resizeToViewport(), blocked => engine?.setPaused('orientation', blocked));
+  engine = new GameEngine(canvas, damageLayer, persistence, {
     onHudUpdate: (telemetry) => ui?.updateHud(telemetry),
     onBannerNotification: (title, subtitle) => ui?.showBanner(title, subtitle),
     onUltimateCutIn: (className, skillName, colorCss) =>
@@ -30,6 +34,7 @@ async function main(): Promise<void> {
 
   ui = new UIManager(uiRoot, persistence, engine);
   await ui.bootstrap();
+  display.refresh(true);
 }
 
 void main().catch(() => {

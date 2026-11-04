@@ -1,4 +1,5 @@
 const paths: Record<string, string> = {
+  fullscreen: '<path d="M3 9V3h6m6 0h6v6M3 15v6h6m6 0h6v-6"/>',
   star: '<path d="M12 1l2.8 7.2L22 11l-7.2 2.8L12 21l-2.8-7.2L2 11l7.2-2.8z"/><path d="M20 2v4m-2-2h4"/>',
   spear: '<path d="M5 21L17 5m-4 1l7-4-1 8-2-5-4 1zM7 14l4 3"/>',
   tome: '<path d="M3 4h6l3 2 3-2h6v15h-6l-3 2-3-2H3zM12 6v15M6 8h3m-3 4h3m6-4h3m-3 4h3"/>',

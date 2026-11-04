@@ -182,6 +182,20 @@ describe('gameplay integration', () => {
     expect(engine.isPaused).toBe(false);
   });
 
+  it('preserves the rotation pause through hero changes and other menus', () => {
+    engine.setPaused('orientation', true);
+    engine.setPaused('menu', true);
+    engine.setPaused('menu', false);
+    expect(engine.isPaused).toBe(true);
+    const character = structuredClone(state.activeCharacter);
+    engine.setPreviewCharacter('warrior');
+    expect(engine.isPaused).toBe(true);
+    engine.startGameplayWithCharacter(character);
+    expect(engine.isPaused).toBe(true);
+    engine.setPaused('orientation', false);
+    expect(engine.isPaused).toBe(false);
+  });
+
   it('keeps defeat on screen until the player revives, preserving rewards', () => {
     startCombat();
     const char = state.activeCharacter;

@@ -8,6 +8,7 @@ import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
 import { chapterUnlocked, endingText, ensureCampaign } from '../game/CampaignEngine';
 import { ChronicleInteraction } from '../types/campaign';
 import { FinisherFrame } from '../game/FinisherTimeline';
+import { getViewportProfile, toggleGameFullscreen } from '../platform/Viewport';
 import { icon, CLASS_ICONS } from './icons';
 import { drawMinimap } from './Minimap';
 import { GameEngine, HudTelemetry, ExpeditionReport } from '../game/GameEngine';
@@ -220,6 +221,7 @@ export class UIManager {
           <span class="edition-label">THE LONG DAWN <i></i> SIX ACTS</span>
           <div class="lobby-tools interactive">
             <button id="btn-world-atlas" class="lobby-atlas-button">${icon('map', 17)} THE LONG DAWN</button>
+            <button id="btn-fullscreen" class="quiet-button fullscreen-button" aria-label="Toggle fullscreen">${icon('fullscreen', 19)}</button>
             <button id="btn-lobby-help" class="quiet-button" aria-label="How to play">?</button>
             <button id="btn-lobby-audio" class="quiet-button" aria-label="Toggle sound">${icon(this.engine.audio.muted ? 'mute' : 'sound', 19)}</button>
             <button id="btn-switch-account" class="profile-button"><span class="profile-avatar">${this.escapeHtml(this.activeAccount.displayName.slice(0, 1))}</span><span>${this.escapeHtml(this.activeAccount.displayName)}<small>LOCAL PROFILE</small></span></button>
@@ -248,6 +250,7 @@ export class UIManager {
         </main>
         <footer class="lobby-footer"><div class="journey-route">${route}</div><span class="local-save"><span class="status-dot"></span> PROGRESS SAVED ON THIS DEVICE</span></footer>
       </div>`;
+    this.bindFullscreenButton();
     this.root.querySelector('#btn-world-atlas')?.addEventListener('click', () => this.openAtlas());
     this.root.querySelector('#btn-finisher-preview')?.addEventListener('click', () => this.engine.previewBossFinisher(cDef.id));
     this.root.querySelector('#btn-lobby-help')?.addEventListener('click', () => this.openHelp());
@@ -492,8 +495,8 @@ export class UIManager {
           <div class="hud-top-right">
             <div class="minimap-wrap"><span class="map-north">N</span><canvas id="hud-minimap" width="220" height="220" aria-label="Local map: red fiends, gold allies, green portals"></canvas><div class="map-legend"><i></i> FIENDS <i></i> PORTALS</div></div>
             <div class="hud-btn-group">
-              <button id="btn-hero-sheet" class="btn-anime btn-cyan" style="padding:6px 10px;font-size:0.7rem;">
-                ${icon('bag', 16)} Gear <kbd>I</kbd>
+              <button id="btn-hero-sheet" class="btn-anime btn-cyan" aria-label="Equipment and inventory" style="padding:6px 10px;font-size:0.7rem;">
+                ${icon('bag', 16)} <span class="hud-menu-label">Gear</span> <kbd>I</kbd>
               </button>
               <button id="btn-comp-sheet" class="btn-anime secondary-hud-action" style="padding:6px 10px;font-size:0.7rem;">
                 Triad
@@ -508,8 +511,8 @@ export class UIManager {
                 Heroes
               </button>
             </div>
-            <button id="btn-world-atlas" class="hud-atlas-button interactive">${icon('map', 16)} WORLD ATLAS <kbd>M</kbd></button>
-            <div class="hud-utilities interactive"><button id="btn-hud-help" class="quiet-button" aria-label="How to play">?</button><button id="btn-pause" class="quiet-button" aria-label="Pause game">${icon('pause', 18)}</button></div>
+            <button id="btn-world-atlas" aria-label="World atlas and journal" class="hud-atlas-button interactive">${icon('map', 16)} <span class="hud-menu-label">WORLD ATLAS</span> <kbd>M</kbd></button>
+            <div class="hud-utilities interactive"><button id="btn-hud-help" class="quiet-button" aria-label="How to play">?</button><button id="btn-pause" class="quiet-button" aria-label="Pause game">${icon('pause', 18)}</button><button id="btn-fullscreen" class="quiet-button fullscreen-button" aria-label="Toggle fullscreen">${icon('fullscreen', 18)}</button></div>
             <div id="hud-combo-box" class="combo-box hidden">
               <div id="hud-combo-rank" class="combo-rank">S</div>
               <div id="hud-combo-hits" class="combo-hits">12 HITS</div>
@@ -646,6 +649,7 @@ export class UIManager {
 
     this.engine.input.bindVirtualControls(joystickZone, joystickKnob, actionMap);
 
+    this.bindFullscreenButton();
     this.root.querySelector('#btn-world-atlas')?.addEventListener('click', () => this.openAtlas());
     this.root.querySelector('#btn-pause')?.addEventListener('click', () => this.openPauseMenu());
     this.root.querySelector('#btn-hud-help')?.addEventListener('click', () => this.openHelp());
@@ -1201,6 +1205,17 @@ export class UIManager {
     });
   }
 
+  private bindFullscreenButton(): void {
+    const button = this.root.querySelector<HTMLButtonElement>('#btn-fullscreen');
+    if (!button) return;
+    button.hidden = !document.documentElement.requestFullscreen;
+    button.addEventListener('click', async () => {
+      if (!await toggleGameFullscreen()) this.openOverlay('The horizon is still yours.', '<p>Fullscreen is unavailable in this browser. Rotate your phone sideways to keep playing here.</p>', [
+        { label: 'Continue in the browser', action: () => this.closeOverlay() },
+      ]);
+    });
+  }
+
   private closeDeck(): void {
     this.root.querySelector('#command-deck-modal')?.remove();
     this.engine.setPaused('deck', false);
@@ -1223,7 +1238,7 @@ export class UIManager {
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-labelledby', 'menu-title');
-    overlay.innerHTML = `<section class="game-menu-card"><div class="menu-emblem">${icon('star', 36)}</div><span class="eyebrow">${eyebrow}</span><h2 id="menu-title">${title}</h2><div class="menu-content">${content}</div><div class="menu-actions">${actions.map((action, i) => `<button class="btn-anime ${i === 0 ? 'btn-primary' : ''}" data-menu-action="${i}">${action.label}</button>`).join('')}</div></section>`;
+    overlay.innerHTML = `<section class="game-menu-card"><header class="game-menu-heading"><div class="menu-emblem">${icon('star', 36)}</div><span class="eyebrow">${eyebrow}</span><h2 id="menu-title">${title}</h2></header><div class="menu-content">${content}</div><div class="menu-actions">${actions.map((action, i) => `<button class="btn-anime ${i === 0 ? 'btn-primary' : ''}" data-menu-action="${i}">${action.label}</button>`).join('')}</div></section>`;
     actions.forEach((action, i) => overlay.querySelector(`[data-menu-action="${i}"]`)?.addEventListener('click', async () => {
       const button = overlay.querySelector<HTMLButtonElement>(`[data-menu-action="${i}"]`)!;
       button.disabled = true;
@@ -1259,7 +1274,9 @@ export class UIManager {
   }
 
   private openHelp(): void {
-    this.openOverlay('Every legend starts here.', `<p>Follow the gold compass to memory stones, sealed shrines, and guardians. The Long Dawn spans twelve chapters in six belllands. Press M for the world atlas, journal, and recovered histories.</p><div class="controls-guide"><span>Move</span><kbd>W A S D / Arrows</kbd><span>Attack · hold to chain</span><kbd>Left mouse / J / Space</kbd><span>Evade · brief invulnerability</span><kbd>Shift / K</kbd><span>Abilities / Ultimate</span><kbd>Q · E / R</kbd><span>Heal · 40% vitality</span><kbd>H</kbd><span>Talk / Enter portal</span><kbd>F / Enter</kbd><span>World atlas / journal</span><kbd>M</kbd><span>Gear / Pause</span><kbd>I / Esc</kbd></div><p class="help-tip">Leave red circles before they fill. Some guardian rings have a safe center. Dash through a strike to gain 12 Eclipse energy. Your three flask charges refill in sanctuaries. On touchscreens, use the thumbstick and ability buttons.</p>`, [
+    const touch = getViewportProfile().touchUI;
+    const controls = touch ? `<div class="touch-controls-guide"><p><strong>Move:</strong> drag the left thumbstick. Keep that thumb down while attacking.</p><p><strong>Fight:</strong> hold Attack to chain strikes. Tap Evade or an ability with another finger. Eclipse unlocks at 100% energy.</p><p><strong>Explore:</strong> tap the center prompt beside a person, memory, or portal. The map, bag, and pause icons sit in the upper right. The flask restores health when you are hurt.</p></div>` : `<div class="controls-guide"><span>Move</span><kbd>W A S D / Arrows</kbd><span>Attack · hold to chain</span><kbd>Left mouse / J / Space</kbd><span>Evade · brief invulnerability</span><kbd>Shift / K</kbd><span>Abilities / Ultimate</span><kbd>Q · E / R</kbd><span>Heal · 40% vitality</span><kbd>H</kbd><span>Talk / Enter portal</span><kbd>F / Enter</kbd><span>World atlas / journal</span><kbd>M</kbd><span>Gear / Pause</span><kbd>I / Esc</kbd></div>`;
+    this.openOverlay('Every legend starts here.', `<p>Follow the gold compass to memory stones, sealed shrines, and guardians. The Long Dawn spans twelve chapters in six belllands. ${touch ? 'Tap the map icon for' : 'Press M for'} the world atlas, journal, and recovered histories.</p>${controls}<p class="help-tip">Leave red circles before they fill. Some guardian rings have a safe center. Dash through a strike to gain 12 Eclipse energy. Your three flask charges refill in sanctuaries. On touchscreens, use the thumbstick and ability buttons.</p>`, [
       { label: this.hudRefs ? 'Ready to venture forth' : 'Choose your hero', action: () => this.closeOverlay() },
     ], 'FIELD GUIDE');
   }

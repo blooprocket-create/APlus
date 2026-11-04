@@ -3,274 +3,171 @@ import * as THREE from 'three';
 export type ActionId = 'basic' | 'dash' | 'skill1' | 'skill2' | 'ultimate';
 
 export class InputManager {
-  public readonly moveVector = new THREE.Vector2(0, 0);
-
+  public readonly moveVector = new THREE.Vector2();
   private controlsAbort: AbortController | null = null;
   private keysDown = new Set<string>();
   private heldActions = new Set<ActionId>();
   private queuedActions = new Set<ActionId>();
-
-  // Virtual Joystick state
+  private actionPointers = new Map<number, { action: ActionId; button: HTMLElement }>();
+  private canvasPointers = new Set<number>();
   private joystickZone: HTMLElement | null = null;
   private joystickKnob: HTMLElement | null = null;
-  private joystickTouchId: number | null = null;
-  private joystickPointerDown = false;
-  private joystickOrigin = new THREE.Vector2(0, 0);
-  private joystickInput = new THREE.Vector2(0, 0);
-  private readonly maxRadius = 48;
+  private joystickPointerId: number | null = null;
+  private joystickOrigin = new THREE.Vector2();
+  private joystickInput = new THREE.Vector2();
+  private maxRadius = 40;
 
   constructor() {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.resetAll);
+    window.addEventListener('pointerup', this.releasePointer);
+    window.addEventListener('pointercancel', this.releasePointer);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.resetAll(); });
   }
 
-  public bindVirtualControls(
-    joystickZone: HTMLElement,
-    joystickKnob: HTMLElement,
-    actionButtons: Map<ActionId, HTMLElement>
-  ): void {
+  public bindVirtualControls(joystickZone: HTMLElement, joystickKnob: HTMLElement, actionButtons: Map<ActionId, HTMLElement>): void {
+    this.resetAll();
     this.controlsAbort?.abort();
     this.controlsAbort = new AbortController();
-    this.resetAll();
-    const listen = <K extends keyof WindowEventMap>(target: EventTarget, type: K, callback: (event: WindowEventMap[K]) => void, options: AddEventListenerOptions = {}) => {
-      target.addEventListener(type, callback as EventListener, { ...options, signal: this.controlsAbort!.signal });
-    };
+    const signal = this.controlsAbort.signal;
     this.joystickZone = joystickZone;
     this.joystickKnob = joystickKnob;
-
-    // Touch events for mobile multi-touch
-    listen(joystickZone,
-      'touchstart',
-      (e: TouchEvent) => {
-        e.preventDefault();
-        if (this.joystickTouchId !== null) return;
-        const touch = e.changedTouches[0];
-        this.joystickTouchId = touch.identifier;
-        const rect = joystickZone.getBoundingClientRect();
-        this.joystickOrigin.set(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        this.updateJoystickFromPoint(touch.clientX, touch.clientY);
-        joystickZone.classList.add('active');
-      },
-      { passive: false }
-    );
-
-    listen(window,
-      'touchmove',
-      (e: TouchEvent) => {
-        if (this.joystickTouchId === null) return;
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          const t = e.changedTouches[i];
-          if (t.identifier === this.joystickTouchId) {
-            this.updateJoystickFromPoint(t.clientX, t.clientY);
-            break;
-          }
-        }
-      },
-      { passive: false }
-    );
-
-    const endTouch = (e: TouchEvent) => {
-      if (this.joystickTouchId === null) return;
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === this.joystickTouchId) {
-          this.joystickTouchId = null;
-          this.joystickInput.set(0, 0);
-          if (this.joystickKnob) {
-            this.joystickKnob.style.transform = 'translate3d(0px, 0px, 0)';
-          }
-          this.joystickZone?.classList.remove('active');
-          break;
-        }
-      }
-    };
-    listen(window,'touchend', endTouch);
-    listen(window,'touchcancel', endTouch);
-
-    // Mouse fallback on the virtual joystick for desktop testing
-    listen(joystickZone,'pointerdown', (e: PointerEvent) => {
-      if (e.pointerType === 'touch') return;
-      e.preventDefault();
-      this.joystickPointerDown = true;
+    joystickZone.addEventListener('pointerdown', event => {
+      if (this.joystickPointerId !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      event.preventDefault();
+      this.joystickPointerId = event.pointerId;
       const rect = joystickZone.getBoundingClientRect();
       this.joystickOrigin.set(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      this.updateJoystickFromPoint(e.clientX, e.clientY);
+      this.maxRadius = Math.max(24, Math.min(rect.width, rect.height) * 0.32);
+      this.capture(joystickZone, event.pointerId);
+      this.updateJoystick(event.clientX, event.clientY);
       joystickZone.classList.add('active');
-    });
+    }, { signal });
+    joystickZone.addEventListener('pointermove', event => {
+      if (event.pointerId !== this.joystickPointerId) return;
+      event.preventDefault();
+      this.updateJoystick(event.clientX, event.clientY);
+    }, { signal });
+    joystickZone.addEventListener('lostpointercapture', this.releasePointer, { signal });
 
-    listen(window,'pointermove', (e: PointerEvent) => {
-      if (!this.joystickPointerDown || e.pointerType === 'touch') return;
-      this.updateJoystickFromPoint(e.clientX, e.clientY);
-    });
-
-    listen(window,'pointerup', (e: PointerEvent) => {
-      if (!this.joystickPointerDown || e.pointerType === 'touch') return;
-      this.joystickPointerDown = false;
-      this.joystickInput.set(0, 0);
-      if (this.joystickKnob) {
-        this.joystickKnob.style.transform = 'translate3d(0px, 0px, 0)';
-      }
-      this.joystickZone?.classList.remove('active');
-    });
-
-    // Bind Action Buttons (both Touch and Pointer/Click)
-    for (const [actionId, btn] of actionButtons.entries()) {
-      listen(btn,
-        'touchstart',
-        (e: TouchEvent) => {
-          e.preventDefault();
-          e.stopPropagation();
-          this.triggerAction(actionId, true);
-          btn.classList.add('pressed');
-        },
-        { passive: false }
-      );
-
-      listen(btn,'touchend', (e: TouchEvent) => {
-        e.preventDefault();
-        this.heldActions.delete(actionId);
-        btn.classList.remove('pressed');
-      });
-
-      listen(btn,'pointerdown', (e: PointerEvent) => {
-        if (e.pointerType === 'touch') return;
-        e.preventDefault();
-        e.stopPropagation();
-        this.triggerAction(actionId, true);
-        btn.classList.add('pressed');
-      });
-
-      listen(btn,'pointerup', (e: PointerEvent) => {
-        if (e.pointerType === 'touch') return;
-        this.heldActions.delete(actionId);
-        btn.classList.remove('pressed');
-      });
-
-      listen(btn,'touchcancel', () => { this.heldActions.delete(actionId); btn.classList.remove('pressed'); });
-      listen(btn,'pointercancel', () => { this.heldActions.delete(actionId); btn.classList.remove('pressed'); });
-      listen(btn,'pointerleave', () => {
-        this.heldActions.delete(actionId);
-        btn.classList.remove('pressed');
-      });
+    for (const [action, button] of actionButtons) {
+      button.addEventListener('pointerdown', event => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (button instanceof HTMLButtonElement && button.disabled) return;
+        event.preventDefault(); event.stopPropagation();
+        this.actionPointers.set(event.pointerId, { action, button });
+        this.queuedActions.add(action);
+        this.capture(button, event.pointerId);
+        button.classList.add('pressed');
+      }, { signal });
+      button.addEventListener('lostpointercapture', this.releasePointer, { signal });
+      // Keyboard / assistive activation has no pointerdown. Native taps are handled above.
+      button.addEventListener('click', event => {
+        if (event.detail === 0 && !(button instanceof HTMLButtonElement && button.disabled)) this.triggerAction(action);
+      }, { signal });
     }
   }
+
+  private capture(element: HTMLElement, pointerId: number): void {
+    try { element.setPointerCapture(pointerId); } catch { /* A cancelled pointer may already have ended. */ }
+  }
+
+  private releasePointer = (event: PointerEvent): void => {
+    const wasCanvas = this.canvasPointers.delete(event.pointerId);
+    const released = this.actionPointers.get(event.pointerId);
+    this.actionPointers.delete(event.pointerId);
+    // A browser gesture or interrupted capture must not leave an unconsumed attack behind.
+    if (event.type !== 'pointerup') {
+      const action = released?.action ?? (wasCanvas ? 'basic' : null);
+      if (action && ![...this.actionPointers.values()].some(pointer => pointer.action === action) && !(action === 'basic' && this.canvasPointers.size)) this.queuedActions.delete(action);
+    }
+    if (released && ![...this.actionPointers.values()].some(pointer => pointer.button === released.button)) released.button.classList.remove('pressed');
+    if (event.pointerId === this.joystickPointerId) {
+      this.joystickPointerId = null;
+      this.joystickInput.set(0, 0);
+      this.moveVector.set(0, 0);
+      this.joystickZone?.classList.remove('active');
+      if (this.joystickKnob) this.joystickKnob.style.transform = 'translate3d(0,0,0)';
+    }
+  };
 
   public bindCanvas(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('pointerdown', event => {
-      if (event.button === 0 && event.pointerType !== 'touch') this.triggerAction('basic', true);
+      if (event.button === 0 && event.pointerType !== 'touch') {
+        this.canvasPointers.add(event.pointerId);
+        this.queuedActions.add('basic');
+        this.capture(canvas, event.pointerId);
+      }
     });
-    window.addEventListener('pointerup', () => this.heldActions.delete('basic'));
+    canvas.addEventListener('lostpointercapture', this.releasePointer);
     canvas.addEventListener('contextmenu', event => event.preventDefault());
   }
 
-  private updateJoystickFromPoint(clientX: number, clientY: number): void {
-    const dx = clientX - this.joystickOrigin.x;
-    const dy = clientY - this.joystickOrigin.y;
-    const dist = Math.hypot(dx, dy);
-    const clampedDist = Math.min(dist, this.maxRadius);
-    const angle = Math.atan2(dy, dx);
-
-    const knobX = Math.cos(angle) * clampedDist;
-    const knobY = Math.sin(angle) * clampedDist;
-
-    if (this.joystickKnob) {
-      this.joystickKnob.style.transform = `translate3d(${knobX.toFixed(1)}px, ${knobY.toFixed(1)}px, 0)`;
-    }
-
-    if (clampedDist < 6) {
-      this.joystickInput.set(0, 0);
-    } else {
-      this.joystickInput.set(knobX / this.maxRadius, knobY / this.maxRadius);
-    }
+  private updateJoystick(clientX: number, clientY: number): void {
+    const dx = clientX - this.joystickOrigin.x; const dy = clientY - this.joystickOrigin.y;
+    const distance = Math.hypot(dx, dy);
+    const strength = Math.min(distance, this.maxRadius);
+    const x = distance > 0 ? dx / distance * strength : 0;
+    const y = distance > 0 ? dy / distance * strength : 0;
+    if (this.joystickKnob) this.joystickKnob.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`;
+    if (strength < this.maxRadius * 0.12) this.joystickInput.set(0, 0);
+    else this.joystickInput.set(x / this.maxRadius, y / this.maxRadius);
   }
 
   public triggerAction(action: ActionId, hold = false): void {
     this.queuedActions.add(action);
-    if (hold) {
-      this.heldActions.add(action);
-    }
+    if (hold) this.heldActions.add(action);
   }
 
   public consumeAction(action: ActionId): boolean {
-    if (this.queuedActions.has(action)) {
-      this.queuedActions.delete(action);
-      return true;
-    }
-    return this.heldActions.has(action);
+    if (this.queuedActions.delete(action)) return true;
+    return this.heldActions.has(action) || (action === 'basic' && (this.canvasPointers.size > 0 || [...this.actionPointers.values()].some(pointer => pointer.action === 'basic')));
   }
 
   public update(): void {
-    // Combine keyboard WASD/Arrows with Virtual Joystick
-    let kx = 0;
-    let ky = 0;
-    if (this.keysDown.has('KeyA') || this.keysDown.has('ArrowLeft')) kx -= 1;
-    if (this.keysDown.has('KeyD') || this.keysDown.has('ArrowRight')) kx += 1;
-    if (this.keysDown.has('KeyW') || this.keysDown.has('ArrowUp')) ky -= 1;
-    if (this.keysDown.has('KeyS') || this.keysDown.has('ArrowDown')) ky += 1;
-
-    if (kx !== 0 || ky !== 0) {
-      this.moveVector.set(kx, ky).normalize();
-    } else {
-      this.moveVector.copy(this.joystickInput);
-      if (this.moveVector.lengthSq() > 1) {
-        this.moveVector.normalize();
-      }
-    }
+    let x = 0; let y = 0;
+    if (this.keysDown.has('KeyA') || this.keysDown.has('ArrowLeft')) x -= 1;
+    if (this.keysDown.has('KeyD') || this.keysDown.has('ArrowRight')) x += 1;
+    if (this.keysDown.has('KeyW') || this.keysDown.has('ArrowUp')) y -= 1;
+    if (this.keysDown.has('KeyS') || this.keysDown.has('ArrowDown')) y += 1;
+    if (x || y) this.moveVector.set(x, y).normalize();
+    else this.moveVector.copy(this.joystickInput).clampLength(0, 1);
   }
 
-  private isTypingInInput(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return false;
-    const tag = target.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+  private isTyping(target: EventTarget | null): boolean {
+    return target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
   }
 
-  private onKeyDown = (e: KeyboardEvent): void => {
-    if (this.isTypingInInput(e.target)) return;
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-    this.keysDown.add(e.code);
-    if (e.repeat) return;
-
-    switch (e.code) {
-      case 'KeyJ':
-      case 'Space':
-        this.triggerAction('basic', true);
-        break;
-      case 'ShiftLeft':
-      case 'ShiftRight':
-      case 'KeyK':
-        this.triggerAction('dash', false);
-        break;
-      case 'KeyQ':
-      case 'Digit1':
-        this.triggerAction('skill1', false);
-        break;
-      case 'KeyE':
-      case 'Digit2':
-        this.triggerAction('skill2', false);
-        break;
-      case 'KeyR':
-      case 'Digit3':
-        this.triggerAction('ultimate', false);
-        break;
+  private onKeyDown = (event: KeyboardEvent): void => {
+    if (this.isTyping(event.target)) return;
+    if (event.code === 'Space' && event.target instanceof HTMLElement && event.target.tagName === 'BUTTON') return;
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+    this.keysDown.add(event.code);
+    if (event.repeat) return;
+    switch (event.code) {
+      case 'KeyJ': case 'Space': this.triggerAction('basic', true); break;
+      case 'ShiftLeft': case 'ShiftRight': case 'KeyK': this.triggerAction('dash'); break;
+      case 'KeyQ': case 'Digit1': this.triggerAction('skill1'); break;
+      case 'KeyE': case 'Digit2': this.triggerAction('skill2'); break;
+      case 'KeyR': case 'Digit3': this.triggerAction('ultimate'); break;
     }
   };
 
-  private onKeyUp = (e: KeyboardEvent): void => {
-    this.keysDown.delete(e.code);
-    if (e.code === 'KeyJ' || e.code === 'Space') {
-      this.heldActions.delete('basic');
-    }
+  private onKeyUp = (event: KeyboardEvent): void => {
+    this.keysDown.delete(event.code);
+    if ((event.code === 'KeyJ' || event.code === 'Space') && !this.keysDown.has('KeyJ') && !this.keysDown.has('Space')) this.heldActions.delete('basic');
   };
 
   public resetAll = (): void => {
-    this.joystickTouchId = null;
-    this.joystickPointerDown = false;
+    const captures: Array<[HTMLElement, number]> = [...this.actionPointers].map(([id, pointer]) => [pointer.button, id]);
+    if (this.joystickZone && this.joystickPointerId !== null) captures.push([this.joystickZone, this.joystickPointerId]);
+    this.actionPointers.forEach(pointer => pointer.button.classList.remove('pressed'));
+    this.actionPointers.clear(); this.canvasPointers.clear(); this.joystickPointerId = null;
     this.joystickZone?.classList.remove('active');
     if (this.joystickKnob) this.joystickKnob.style.transform = 'translate3d(0,0,0)';
-    this.keysDown.clear();
-    this.heldActions.clear();
-    this.queuedActions.clear();
-    this.joystickInput.set(0, 0);
-    this.moveVector.set(0, 0);
+    this.keysDown.clear(); this.heldActions.clear(); this.queuedActions.clear();
+    this.joystickInput.set(0, 0); this.moveVector.set(0, 0);
+    for (const [element, id] of captures) { try { if (element.hasPointerCapture(id)) element.releasePointerCapture(id); } catch { /* Already cancelled. */ } }
   };
 }

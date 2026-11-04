@@ -1,0 +1,250 @@
+/* Shared visual viewport: browser chrome, keyboards, and rotation resize the same game surface. */
+[hidden] { display: none !important; }
+html, body { overscroll-behavior: none; touch-action: manipulation; }
+#app { position: fixed; left: var(--viewport-left, 0px); top: var(--viewport-top, 0px); width: var(--game-width, 100vw); height: var(--game-height, 100dvh); touch-action: manipulation; }
+#game-canvas, .damage-layer, .ui-root { position: absolute; inset: 0; width: 100%; height: 100%; }
+#game-canvas, .joystick-zone, .action-btn { touch-action: none; }
+.ui-root .modal-backdrop, .cutscene-overlay, .boss-finisher-overlay { position: absolute; }
+.lobby-screen, .modal-backdrop, .modal-card, .game-menu-card, .menu-content, .details-panel, .lobby-stage { touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.fullscreen-button { display: inline-flex; }
+.hud-utilities { width: auto; }
+.rotate-prompt { position: absolute; inset: 0; z-index: 200; display: grid; place-items: center; padding: max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom)) max(24px, var(--safe-left)); background: radial-gradient(ellipse at 50% 30%, #203c3f, #08151d 75%); pointer-events: auto; touch-action: manipulation; }
+.rotate-card { text-align: center; max-width: 330px; }
+.rotate-phone { width: 76px; height: 118px; display: grid; place-items: center; margin: 0 auto 34px; border: 2px solid #d7bb86; border-radius: 14px; color: #d7bb86; font: 44px Georgia, serif; transform: rotate(90deg); }
+.rotate-card h1 { font: 34px Georgia, serif; margin: 18px 0; }
+.rotate-card p { color: #a5b9ad; font-size: 14px; line-height: 1.7; }
+.rotate-card > button { display: block; width: 100%; min-height: 48px; margin-top: 18px; font-size: 13px; }
+#rotate-status { font-size: 11px; margin-top: 15px; }
+.rotation-blocked .ui-root { pointer-events: none; }
+
+/* Touch layout is independent of width: 932px-wide landscape phones still need a thumbstick. */
+.touch-ui .btn-anime, .touch-ui .quiet-button, .touch-ui .pill-btn, .touch-ui .deck-tab, .touch-ui .setting-row, .touch-ui .text-button, .touch-ui .class-tab { min-height: 44px; }
+.touch-ui .quiet-button { width: 44px; height: 44px; }
+.touch-ui input, .touch-ui select { font-size: 16px; min-height: 44px; }
+.touch-ui button { min-width: 44px; min-height: 44px; -webkit-touch-callout: none; }
+.touch-controls-guide p + p { margin-top: 12px; }
+.touch-ui kbd, .touch-ui .desktop-move-hint { display: none; }
+.touch-ui .hud-screen { padding: calc(12px + var(--safe-top)) calc(14px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(14px + var(--safe-left)); }
+.touch-ui .joystick-zone { display: flex; position: absolute; bottom: calc(18px + var(--safe-bottom)); left: calc(22px + var(--safe-left)); width: 124px; height: 124px; border: 1px solid #b0c4a35c; background: radial-gradient(circle, #a1c2a52c, #0c202888); }
+.touch-ui .joystick-zone::before { content: ''; position: absolute; inset: 15px; border: 1px solid #b4c8ae20; border-radius: 50%; }
+.touch-ui .joystick-knob { width: 46px; height: 46px; background: radial-gradient(circle at 35% 30%, #cedfc9, #628c7c); }
+.touch-ui .action-cluster { display: block; position: absolute; left: auto; right: calc(14px + var(--safe-right)); bottom: calc(12px + var(--safe-bottom)); transform: none; width: 238px; height: 166px; }
+.touch-ui .action-btn { position: absolute; inset: auto; width: 60px; height: 60px; min-height: 0; border-radius: 50%; gap: 2px; border-width: 1px; }
+.touch-ui .action-btn .skill-icon { margin: 0; }
+.touch-ui .action-btn .skill-icon svg { width: 23px; height: 23px; }
+.touch-ui .action-btn .btn-title { font-size: 8px !important; letter-spacing: .02em; }
+.touch-ui .action-btn .btn-key { display: none; }
+.touch-ui .action-btn-basic { right: 0; bottom: 0; width: 82px; height: 82px; border-width: 2px; }
+.touch-ui .action-btn-dash { right: 91px; bottom: 0; width: 64px; height: 64px; }
+.touch-ui .action-btn-skill1 { right: 85px; bottom: 76px; }
+.touch-ui .action-btn-skill2 { right: 13px; bottom: 96px; }
+.touch-ui .action-btn-ultimate { right: 163px; bottom: 44px; width: 66px; height: 66px; }
+.touch-ui .action-btn-ultimate .btn-key { display: block; font-size: 9px; }
+.touch-ui .action-btn.pressed { transform: scale(.92); }
+.touch-ui .flask-button { bottom: calc(176px + var(--safe-bottom)); right: calc(17px + var(--safe-right)); min-height: 46px; padding: 8px 12px; }
+.touch-ui .flask-button > span { display: block; font-size: 8px; }
+.touch-ui .flask-button small { font-size: 10px; }
+.touch-ui .portal-prompt-wrap { position: absolute; bottom: calc(20px + var(--safe-bottom)); width: min(350px, calc(100% - 440px - var(--safe-left) - var(--safe-right))); min-width: 185px; }
+.touch-ui .portal-prompt-btn { min-height: 48px; width: 100%; font-size: 11px; padding: 10px; }
+.touch-ui .npc-dialogue-box { width: 100%; font-size: 12px; padding: 12px; }
+.touch-ui .quest-action-btn { min-height: 46px; font-size: 12px; }
+.touch-ui .quest-tracker-card { pointer-events: auto; }
+.touch-ui .cd-overlay { font-size: 18px; }
+.touch-ui .hud-btn-group .secondary-hud-action { display: none; }
+
+@media (orientation: landscape) {
+  .touch-ui .lobby-screen { padding: calc(10px + var(--safe-top)) calc(14px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(14px + var(--safe-left)); }
+  .touch-ui .lobby-topbar { min-height: 44px; padding-bottom: 8px; gap: 12px; flex-wrap: nowrap; }
+  .touch-ui .wordmark { gap: 8px; }
+  .touch-ui .wordmark > div { font-size: 20px; }
+  .touch-ui .wordmark svg { width: 26px; height: 26px; }
+  .touch-ui .wordmark span { font-size: 6px; margin-top: 5px; }
+  .touch-ui .edition-label, .touch-ui .lobby-footer, .touch-ui .preview-caption { display: none; }
+  .touch-ui .lobby-tools { gap: 7px; }
+  .touch-ui #btn-lobby-help { display: none; }
+  .touch-ui .profile-button { padding-left: 7px; min-height: 44px; }
+  .touch-ui .profile-button > span:last-child { display: none; }
+  .touch-ui .lobby-atlas-button { min-height: 44px; font-size: 9px; padding: 8px 10px; }
+  .touch-ui .lobby-atlas-button svg { display: inline; }
+  .touch-ui .lobby-stage { display: grid; grid-template-columns: minmax(0, 1fr) min(300px, 43vw); gap: 24px; padding: 12px 0 0; overflow: visible; }
+  .touch-ui .lobby-intro { position: absolute; top: 12px; left: 0; margin: 0; }
+  .touch-ui .lobby-intro h1 { font-size: clamp(30px, 4.4vw, 46px); margin: 10px 0; }
+  .touch-ui .lobby-intro > p { display: none; }
+  .touch-ui .lobby-intro .eyebrow { font-size: 7px; letter-spacing: .1em; }
+  .touch-ui .details-panel { grid-column: 2; grid-row: 1; align-self: start; width: auto; margin: 0; max-height: calc(var(--game-height, 100dvh) - 78px - var(--safe-top) - var(--safe-bottom)); overflow-y: auto; padding: 12px 14px; }
+  .touch-ui .hero-panel-heading { padding-bottom: 8px; }
+  .touch-ui .hero-panel-heading .eyebrow { font-size: 7px; }
+  .touch-ui .hero-class-name { margin-top: 8px; font-size: 9px; }
+  .touch-ui .details-panel h2 { font-size: 27px; margin: 5px 0 8px; }
+  .touch-ui .hero-lore, .touch-ui .hero-abilities, .touch-ui .hero-panel-foot, .touch-ui .journey-resume { display: none; }
+  .touch-ui .hero-stats { margin: 8px 0 12px; padding: 8px 0; }
+  .touch-ui .hero-stats strong { font-size: 23px; }
+  .touch-ui .hero-stats small { font-size: 7px; margin-bottom: 4px; }
+  .touch-ui .journey-button { min-height: 46px; padding: 11px 14px; font-size: 12px; }
+  .touch-ui .finisher-preview-button { min-height: 44px; margin-top: 8px; padding-top: 8px; font-size: 10px; }
+  .touch-ui .details-panel:has(.class-tabs) .hero-stats, .touch-ui .details-panel:has(.class-tabs) .hero-class-name, .touch-ui .details-panel:has(.class-tabs) h2 { display: none; }
+  .touch-ui .class-tabs { margin-top: 10px; margin-bottom: 10px; }
+  .touch-ui .class-tab { min-height: 50px; font-size: 8px; gap: 5px; }
+  .touch-ui .name-label { font-size: 7px; margin-bottom: 6px; }
+  .touch-ui .input-field { margin-bottom: 9px; padding: 9px; }
+  .touch-ui .hero-roster { position: absolute; left: 0; bottom: 0; width: calc(100% - min(300px, 43vw) - 24px); padding: 0; }
+  .touch-ui .roster-caption { margin-bottom: 7px; }
+  .touch-ui .roster-caption > span { font-size: 7px; }
+  .touch-ui .slot-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .touch-ui .char-slot-card { min-height: 62px; padding: 17px 8px 8px; gap: 5px; overflow: hidden; }
+  .touch-ui .slot-info { min-width: 0; }
+  .touch-ui .slot-info strong { font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+  .touch-ui .slot-info small { font-size: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .touch-ui .slot-badge { width: 20px; }
+  .touch-ui .slot-badge svg { width: 20px; }
+  .touch-ui .slot-lv { display: none; }
+  .touch-ui .roster-number { left: 8px; right: auto; top: 5px; font-size: 7px; }
+
+  .touch-ui .hero-status-card { width: 215px; min-width: 0; padding: 10px 12px; }
+  .touch-ui .hero-name-row { font-size: 12px; gap: 8px; }
+  .touch-ui .hud-hero-name { gap: 6px; }
+  .touch-ui .hud-hero-name svg { width: 18px; }
+  .touch-ui .save-badge, .touch-ui .hero-class-label { display: none; }
+  .touch-ui .hero-status-top { margin-bottom: 4px; }
+  .touch-ui .bar-track { height: 12px; margin: 5px 0; }
+  .touch-ui .bar-label { font-size: 9px; }
+  .touch-ui .currency-row { margin-top: 6px; font-size: 10px; gap: 12px; }
+  .touch-ui .quest-tracker-card { position: absolute; left: calc(14px + var(--safe-left)); top: calc(105px + var(--safe-top)); width: 215px; max-width: 215px; margin: 0; padding: 6px 9px; background: #0b1a20b5; }
+  .touch-ui .quest-tracker-header, .touch-ui .quest-obj-hint, .touch-ui .quest-obj-progress, .touch-ui .companion-party-card, .touch-ui .expedition-meter { display: none; }
+  .touch-ui .quest-obj-title { font-size: 11px; font-weight: 500; line-height: 1.4; margin: 0; }
+  .touch-ui .wave-card { top: calc(15px + var(--safe-top)); left: 50%; transform: translateX(-50%); width: clamp(150px, 25vw, 280px); text-align: center; }
+  .touch-ui .zone-route-steps { display: none; }
+  .touch-ui .wave-title { font-size: 12px; letter-spacing: .04em; }
+  .touch-ui .wave-sub { font-size: 10px; margin-top: 5px; }
+  .touch-ui .path-progress-wrap { width: 110px; margin: 8px auto 0; }
+  .touch-ui .hud-top-right { position: absolute; top: calc(12px + var(--safe-top)); right: calc(14px + var(--safe-right)); display: grid; grid-template-columns: repeat(4, 44px); grid-template-rows: 44px; gap: 6px; width: 194px; height: auto; }
+  .touch-ui .hud-btn-group { grid-column: 1; grid-row: 1; margin: 0; width: 44px; }
+  .touch-ui .hud-btn-group .btn-anime:not(.secondary-hud-action), .touch-ui .hud-atlas-button { width: 44px; height: 44px; flex-shrink: 0; padding: 0 !important; min-height: 44px; display: flex; justify-content: center; align-items: center; border-radius: 5px; }
+  .touch-ui .hud-atlas-button { grid-column: 2; grid-row: 1; }
+  .touch-ui .hud-menu-label { display: none; }
+  .touch-ui .hud-utilities { display: contents; }
+  .touch-ui #btn-hud-help { display: none; }
+  .touch-ui #btn-pause { grid-column: 3; grid-row: 1; border-radius: 5px; }
+  .touch-ui .hud-utilities #btn-fullscreen { grid-column: 4; grid-row: 1; border-radius: 5px; }
+  .touch-ui .minimap-wrap { position: absolute; top: 54px; right: 0; width: 88px; padding-top: 3px; }
+  .touch-ui #hud-minimap { width: 88px; height: 88px; }
+  .touch-ui .map-north { top: -3px; font-size: 9px; }
+  .touch-ui .map-legend { display: none; }
+  .touch-ui .combo-box { position: absolute; right: 100px; top: 60px; padding: 0; }
+  .touch-ui .combo-rank { font-size: 30px; }
+  .touch-ui .combo-hits { font-size: 7px; max-width: 85px; }
+  .touch-ui .boss-hud { top: calc(71px + var(--safe-top)); width: min(34vw, 370px); }
+  .touch-ui .boss-hud strong { font-size: 17px; margin: 4px 0 6px; }
+  .touch-ui .boss-hud .eyebrow { font-size: 7px; }
+  .touch-ui .boss-track { height: 5px; }
+  .touch-ui #boss-health { font-size: 8px; }
+  .touch-ui .center-banner { position: absolute; top: 34%; min-width: 0; width: min(440px, 60%); padding: 10px 20px; }
+  .touch-ui #hud-banner-title { font-size: 17px !important; }
+  .touch-ui #hud-banner-sub { font-size: 11px !important; }
+  .touch-ui .loot-toast { bottom: calc(16px + var(--safe-bottom)); max-width: calc(100% - 450px); min-width: 180px; padding: 9px 12px; }
+  .touch-ui .loot-toast strong { font-size: 11px; }
+  .touch-ui .loot-toast small { font-size: 7px; }
+
+  .touch-ui .modal-backdrop { inset: 0; padding: calc(8px + var(--safe-top)) calc(10px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(10px + var(--safe-left)); }
+  .touch-ui .modal-card, .touch-ui .game-menu-card { max-height: calc(var(--game-height, 100dvh) - 16px - var(--safe-top) - var(--safe-bottom)); width: 100%; padding: 16px; overflow-y: auto; }
+  .touch-ui .game-menu-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .85fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'heading actions' 'content actions'; gap: 8px 24px; width: min(850px, 100%); }
+  .touch-ui .game-menu-heading { grid-area: heading; }
+  .touch-ui .menu-emblem { display: none; }
+  .touch-ui .game-menu-card h2 { font-size: 26px; margin: 6px 0 10px; line-height: 1.1; }
+  .touch-ui .game-menu-heading > .eyebrow { font-size: 8px; }
+  .touch-ui .menu-content { grid-area: content; min-height: 0; overflow-y: auto; padding-right: 8px; }
+  .touch-ui .menu-content p { font-size: 13px; line-height: 1.6; }
+  .touch-ui .menu-content .help-tip { font-size: 11px; margin-top: 10px; padding-top: 10px; }
+  .touch-ui .menu-actions { grid-area: actions; margin: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+  .touch-ui .menu-actions .btn-anime { min-height: 44px; padding: 10px 12px; font-size: 12px; }
+  .touch-ui .pause-settings { margin-top: 10px; }
+  .touch-ui .setting-row { padding: 12px 0; font-size: 12px; }
+  .touch-ui .controls-guide { margin: 12px 0; font-size: 11px; gap: 10px; }
+  .touch-ui .controls-guide kbd { display: block; font-size: 10px; }
+  .touch-ui .deck-tabs { position: sticky; top: -16px; background: #102127; z-index: 1; padding: 8px 0; }
+  .touch-ui .deck-tab { min-height: 44px; font-size: 11px; }
+  .touch-ui .modal-card .btn-anime, .touch-ui .modal-card .pill-btn { min-height: 44px; font-size: 12px !important; }
+  .touch-ui .modal-card .choice-card { min-height: 48px; padding: 10px; font-size: 12px; }
+  .touch-ui .inv-item { min-height: 70px; font-size: 12px; padding: 12px; }
+  .touch-ui .inspector-card { padding: 14px; }
+  .touch-ui .report-stats { padding: 15px 0; }
+  .touch-ui .report-stats strong { font-size: 25px; }
+  .touch-ui .atlas-overlay .game-menu-card { display: flex; flex-direction: column; width: min(1100px, 100%); height: calc(var(--game-height, 100dvh) - 16px - var(--safe-top) - var(--safe-bottom)); gap: 0; }
+  .touch-ui .atlas-overlay .game-menu-card h2 { font-size: 27px; margin: 5px 0 12px; }
+  .touch-ui .atlas-overlay .menu-content { flex: 1; max-height: none; overflow-y: auto; }
+  .touch-ui .atlas-overlay .menu-actions { flex-direction: row; justify-content: flex-end; padding-top: 9px; margin-top: 9px; flex-shrink: 0; }
+  .touch-ui .atlas-tabs { gap: 22px; margin-bottom: 10px; }
+  .touch-ui .atlas-tabs button { min-height: 44px; font-size: 12px; padding: 10px 0; }
+  .touch-ui .atlas-intro { font-size: 12px; padding-bottom: 12px; }
+  .touch-ui .atlas-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .touch-ui .atlas-chapter { min-height: 190px; padding: 16px; }
+  .touch-ui .atlas-chapter h3 { font-size: 23px; }
+  .touch-ui .atlas-chapter > p { font-size: 12px; }
+  .touch-ui .atlas-chapter-number { font-size: 25px; margin-bottom: 10px; }
+  .touch-ui .atlas-chapter .btn-anime { min-height: 44px; font-size: 11px; }
+  .touch-ui .codex-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .touch-ui .codex-grid p, .touch-ui .journal-entries article p { font-size: 13px; }
+  .touch-ui .chronicle-conversation .game-menu-card h2 { font-size: 25px; margin-bottom: 10px; }
+  .touch-ui .chronicle-speaker { font-size: 9px; margin-bottom: 8px; }
+  .touch-ui .menu-content .chronicle-dialogue { font: 16px/1.65 Georgia, serif; }
+  .touch-ui .chronicle-inscription { padding: 10px 14px; margin-top: 12px; font-size: 14px; }
+  .touch-ui .chronicle-page { margin-top: 10px; }
+  .touch-ui .chronicle-conversation .menu-actions .btn-anime:last-child { min-height: 44px; padding: 10px 12px; }
+  .touch-ui .boss-finisher-overlay { --bar-height: clamp(min(56px, 15dvh), calc((var(--game-height, 100dvh) - var(--game-width, 100vw) / 2.39) / 2), 28dvh); }
+  .touch-ui .finisher-letterbox.top { padding: 6px calc(14px + var(--safe-right)) 6px calc(14px + var(--safe-left)); align-items: center; }
+  .touch-ui .finisher-letterbox.top > span { max-width: none; margin: 0; font-size: 7px; }
+  .touch-ui #skip-finisher { min-height: 44px; font-size: 11px; padding: 8px; }
+  .touch-ui .finisher-letterbox.bottom { padding: 4px calc(14px + var(--safe-right)) 8px calc(14px + var(--safe-left)); }
+  .touch-ui .finisher-boss-name { font-size: 11px; }
+  .touch-ui .finisher-last-words { font-size: 11px; line-height: 1.2; margin-top: 3px; max-width: 90%; }
+  .touch-ui .finisher-progress { bottom: 3px; }
+  .touch-ui .finisher-title { top: calc(var(--bar-height) + 12px); }
+  .touch-ui .finisher-title h1 { font-size: clamp(24px, 4.5vw, 52px); }
+  .touch-ui .finisher-subtitle { font-size: 8px; margin-bottom: 7px; }
+  .touch-ui .cinematic-bar-top { padding: calc(8px + var(--safe-top)) calc(14px + var(--safe-right)) 12px calc(14px + var(--safe-left)); }
+  .touch-ui .cinematic-ep-title { font-size: 16px; }
+  .touch-ui .cinematic-bar-bottom { padding: 12px calc(14px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(14px + var(--safe-left)); }
+  .touch-ui .cinematic-dialogue-text { font-size: 13px; line-height: 1.5; }
+  .touch-ui .cinematic-dialogue-card { max-height: 42dvh; overflow-y: auto; }
+  .touch-ui .cinematic-portrait { width: 42px; height: 42px; }
+  .touch-ui #btn-next-cutscene { min-width: 80px !important; min-height: 44px; }
+}
+
+@media (orientation: landscape) and (max-height: 360px) {
+  .touch-ui .hero-status-card { padding: 7px 10px; width: 200px; }
+  .touch-ui .currency-row { margin-top: 3px; }
+  .touch-ui .quest-tracker-card { top: calc(93px + var(--safe-top)); width: 200px; }
+  .touch-ui .joystick-zone { width: 106px; height: 106px; left: calc(18px + var(--safe-left)); bottom: calc(12px + var(--safe-bottom)); }
+  .touch-ui .action-cluster { transform: scale(.88); transform-origin: bottom right; }
+  .touch-ui .flask-button { bottom: calc(158px + var(--safe-bottom)); right: calc(94px + var(--safe-right)); width: 44px; min-height: 44px; padding: 9px; }
+  .touch-ui .flask-button > span { display: none; }
+  .touch-ui .minimap-wrap { width: 68px; }
+  .touch-ui #hud-minimap { width: 68px; height: 68px; }
+  .touch-ui .wave-title { font-size: 11px; }
+  .touch-ui .wave-sub { font-size: 9px; }
+  .touch-ui .boss-hud { top: calc(69px + var(--safe-top)); }
+  .touch-ui .boss-hud strong { font-size: 14px; }
+  .touch-ui .game-menu-card { gap: 6px 16px; padding: 12px 16px; }
+  .touch-ui .game-menu-card h2 { font-size: 23px; }
+}
+
+/* Portrait is usable when explicitly selected; it never silently switches to keyboard controls. */
+@media (orientation: portrait) {
+  .touch-ui .lobby-screen { padding: calc(16px + var(--safe-top)) calc(16px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(16px + var(--safe-left)); }
+  .touch-ui .lobby-tools { gap: 5px; }
+  .touch-ui .lobby-atlas-button { font-size: 8px; padding: 8px; }
+  .touch-ui .profile-button { display: none; }
+  .touch-ui .lobby-stage { overflow-y: auto; }
+  .touch-ui .details-panel { width: min(320px, 100%); }
+  .touch-ui .game-menu-card, .touch-ui .modal-card { max-height: calc(var(--game-height, 100dvh) - 32px - var(--safe-top) - var(--safe-bottom)); }
+  .touch-ui .atlas-overlay .menu-content { max-height: calc(var(--game-height, 100dvh) - 260px); }
+  .touch-ui .portal-prompt-wrap { bottom: calc(225px + var(--safe-bottom)); width: calc(100% - 32px); }
+  .touch-ui .loot-toast { bottom: calc(225px + var(--safe-bottom)); }
+  .touch-ui .hud-top-right { width: 110px; }
+  .touch-ui .hud-utilities { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; width: 110px; }
+  .touch-ui .hud-btn-group, .touch-ui .hud-atlas-button { min-height: 44px; }
+  .touch-ui .hud-btn-group { width: 106px; }
+  .touch-ui .hud-btn-group .btn-anime { min-height: 44px; }
+  .touch-ui .hud-atlas-button { width: 106px; font-size: 8px; }
+  .touch-ui .expedition-meter { display: none; }
+}

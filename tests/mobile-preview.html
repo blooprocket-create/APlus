@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Astral — Mobile Layout Checks</title>
+  <style>
+    * { box-sizing: border-box; } body { margin: 0; padding: 20px; color: #e6eadf; background: #08151b; font: 13px system-ui; }
+    h1 { font: 24px Georgia, serif; margin: 0 0 5px; } p { color: #98b3a7; margin: 0 0 15px; }
+    nav { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; } button { min-height: 38px; border: 1px solid #5a7869; border-radius: 4px; padding: 8px 12px; color: #e5d7b4; background: #1a302f; cursor: pointer; }
+    button.active { background: #cfb88b; color: #142729; } #frame-wrap { overflow: auto; max-width: 100%; border: 1px solid #5a7869; width: fit-content; }
+    iframe { display: block; border: 0; background: #08151b; } output { display: block; margin: 12px 0; white-space: pre-wrap; color: #adcebd; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <h1>Mobile landscape layout checks</h1>
+  <p>Use 127.0.0.1 to keep QA saves separate from localhost. The frame loads the actual game.</p>
+  <nav aria-label="Test viewport">
+    <button data-width="844" data-height="390" class="active">Phone · 844 × 390</button>
+    <button data-width="667" data-height="375">Small phone · 667 × 375</button>
+    <button data-width="640" data-height="320">Browser chrome · 640 × 320</button>
+    <button data-width="932" data-height="430">Large phone · 932 × 430</button>
+    <button data-width="1024" data-height="600">Small tablet · 1024 × 600</button>
+    <button data-width="390" data-height="844">Portrait · 390 × 844</button>
+    <button id="check-layout">Check layout</button>
+  </nav>
+  <div id="frame-wrap"><iframe title="Phone game preview" src="/" width="844" height="390" allow="fullscreen" allowfullscreen></iframe></div>
+  <output id="layout-report" aria-live="polite">Viewport: 844 × 390. Waiting for the game.</output>
+  <script type="module">
+    const frame = document.querySelector('iframe');
+    const report = document.querySelector('output');
+    for (const button of document.querySelectorAll('[data-width]')) button.onclick = () => {
+      document.querySelector('.active')?.classList.remove('active'); button.classList.add('active');
+      frame.width = button.dataset.width; frame.height = button.dataset.height;
+      report.textContent = `Viewport: ${frame.width} × ${frame.height}. Click “Check layout” after the view updates.`;
+    };
+    document.querySelector('#check-layout').onclick = () => {
+      const doc = frame.contentDocument; const win = frame.contentWindow;
+      const visible = element => element && win.getComputedStyle(element).display !== 'none' && element.getBoundingClientRect().width > 0;
+      const buttons = [...doc.querySelectorAll('.action-btn, .joystick-zone, #btn-flask, #btn-pause, #btn-fullscreen, .hud-atlas-button, #btn-hero-sheet')].filter(visible);
+      const outside = buttons.filter(element => { const r = element.getBoundingClientRect(); return r.left < -1 || r.top < -1 || r.right > win.innerWidth + 1 || r.bottom > win.innerHeight + 1; });
+      const small = buttons.filter(element => { const r = element.getBoundingClientRect(); return Math.min(r.width, r.height) < 43.9; });
+      const scrolling = [...doc.querySelectorAll('.game-menu-card, .modal-card, .details-panel')].filter(visible).map(element => `${element.className}: ${Math.round(element.clientHeight)}px, scroll ${Math.round(element.scrollHeight)}px`);
+      const overlaps = [];
+      for (let a = 0; a < buttons.length; a++) for (let b = a + 1; b < buttons.length; b++) {
+        const ra = buttons[a].getBoundingClientRect(); const rb = buttons[b].getBoundingClientRect();
+        if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) overlaps.push(`${buttons[a].id} / ${buttons[b].id}`);
+      }
+      report.textContent = `Viewport: ${win.innerWidth} × ${win.innerHeight}\nTouch UI: ${doc.documentElement.classList.contains('touch-ui') ? 'enabled' : 'disabled'}\nRotation prompt: ${visible(doc.querySelector('#rotate-prompt')) ? 'shown' : 'hidden'}\nJoystick: ${visible(doc.querySelector('#joystick-zone')) ? 'visible' : 'not in this screen'}\nControls outside viewport: ${outside.map(element => element.id).join(', ') || 'none'}\nControls below 44px: ${small.map(element => element.id).join(', ') || 'none'}\nOverlapping controls: ${overlaps.join(', ') || 'none'}\n${scrolling.join('\n')}`;
+    };
+  </script>
+</body>
+</html>

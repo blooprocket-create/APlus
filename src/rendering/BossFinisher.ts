@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getViewportProfile } from '../platform/Viewport';
 import { CharacterClassId } from '../types/game';
 import { FINISHER_DURATION, FINISHER_SIGNATURES, FinisherFrame, sampleFinisher } from '../game/FinisherTimeline';
 import { CharacterRig } from './CharacterMeshBuilder';
@@ -194,8 +195,10 @@ export class BossFinisher {
     if (this.lastPhase !== frame.phase) this.camera.position.copy(desired);
     else this.camera.position.lerp(desired, 1 - Math.exp(-dt * 12));
     // Compose for the visible cinema aperture, including portrait displays.
-    const height = Math.max(1, window.innerHeight);
-    const bar = Math.min(height * 0.28, Math.max(70, (height - window.innerWidth / 2.39) / 2));
+    const viewport = getViewportProfile();
+    const height = viewport.height;
+    const minBar = viewport.touchUI && viewport.landscape ? Math.min(56, height * 0.15) : 70;
+    const bar = Math.min(height * 0.28, Math.max(minBar, (height - viewport.width / 2.39) / 2));
     const aperture = Math.max(0.3, (height - 2 * bar) / height);
     this.camera.fov = Math.min(110, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) / aperture)));
     this.camera.updateProjectionMatrix(); this.camera.lookAt(look);

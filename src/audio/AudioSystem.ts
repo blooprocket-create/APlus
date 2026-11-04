@@ -8,6 +8,7 @@ export class AudioSystem {
   private scoreBuffer: AudioBuffer | null = null;
   private scoreLoading: Promise<void> | null = null;
   private cinematicEpoch = 0;
+  private interrupted = false;
   public muted = false;
 
   constructor() {
@@ -15,12 +16,19 @@ export class AudioSystem {
     const unlock = () => {
       try {
         this.context ??= new AudioContext();
-        void this.context.resume().catch(() => {});
+        if (!this.interrupted) void this.context.resume().catch(() => {});
         void this.loadScore();
       } catch { /* Audio is optional on unsupported devices. */ }
     };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
+  }
+
+  public suspendForInterruption(paused: boolean): void {
+    this.interrupted = paused;
+    if (!this.context) return;
+    if (paused) void this.context.suspend().catch(() => {});
+    else void this.context.resume().catch(() => {});
   }
 
   public toggle(): boolean {

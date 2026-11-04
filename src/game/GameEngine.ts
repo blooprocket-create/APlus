@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getViewportProfile } from '../platform/Viewport';
 import { dressGuardian } from '../rendering/GuardianRegalia';
 import { BossFinisher } from '../rendering/BossFinisher';
 import { FinisherFrame } from './FinisherTimeline';
@@ -378,6 +379,7 @@ export class GameEngine {
     if (paused) this.pauseReasons.add(reason);
     else this.pauseReasons.delete(reason);
     this.input.resetAll();
+    if (reason === 'orientation') this.audio.suspendForInterruption(paused || document.visibilityState === 'hidden');
   }
 
   public get isPaused(): boolean { return this.pauseReasons.size > 0 || this.defeated; }
@@ -427,8 +429,9 @@ export class GameEngine {
       antialias: true,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    const viewport = getViewportProfile();
+    this.renderer.setPixelRatio(viewport.pixelRatio);
+    this.renderer.setSize(viewport.width, viewport.height, false);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -455,6 +458,7 @@ export class GameEngine {
       }
     });
     document.addEventListener('visibilitychange', () => {
+      this.audio.suspendForInterruption(document.visibilityState === 'hidden' || this.pauseReasons.has('orientation'));
       if (document.visibilityState === 'hidden') {
         void this.saveActiveCharacterNow();
       }
@@ -485,7 +489,7 @@ export class GameEngine {
    */
   public setPreviewCharacter(classId: CharacterClassId | null): void {
     this.mode = 'preview';
-    this.pauseReasons.clear();
+    for (const reason of this.pauseReasons) if (reason !== 'orientation') this.pauseReasons.delete(reason);
     this.defeated = false;
     this.input.resetAll();
     this.clearGameplayEntities();
@@ -545,7 +549,7 @@ export class GameEngine {
     }
 
     this.mode = 'playing';
-    this.pauseReasons.clear();
+    for (const reason of this.pauseReasons) if (reason !== 'orientation') this.pauseReasons.delete(reason);
     this.defeated = false;
     this.flaskCharges = FLASK_CAPACITY;
     this.hitStop = 0;
@@ -1363,7 +1367,7 @@ export class GameEngine {
     this.lastFrameTime = now;
 
     if (this.finisher) {
-      if (document.visibilityState !== 'hidden') this.finisher.update(Math.min(0.25, elapsed));
+      if (document.visibilityState !== 'hidden' && !this.pauseReasons.has('orientation')) this.finisher.update(Math.min(0.25, elapsed));
       this.renderer.render(this.scene, this.cameraController.camera);
       requestAnimationFrame(this.loop); return;
     }
@@ -3324,8 +3328,13 @@ export class GameEngine {
     });
   }
 
-  private onResize = (): void => {
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  public resizeToViewport(): void {
+    const viewport = getViewportProfile();
+    this.renderer.setPixelRatio(viewport.pixelRatio);
+    this.renderer.setSize(viewport.width, viewport.height, false);
     this.cameraController.updateAspect();
-  };
+    this.input.resetAll();
+  }
+
+  private onResize = (): void => { this.resizeToViewport(); };
 }

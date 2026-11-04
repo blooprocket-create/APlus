@@ -1,0 +1,13 @@
+{
+  "id": "/",
+  "name": "Astral Chronicles — The Long Dawn",
+  "short_name": "Astral",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#0a141a",
+  "theme_color": "#0a141a",
+  "icons": [{ "src": "/astral.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

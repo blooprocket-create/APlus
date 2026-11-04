@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getViewportProfile } from '../platform/Viewport';
 import { disposeObject } from './SceneResources';
 
 interface ActiveVfxMesh {
@@ -419,8 +420,9 @@ export class VfxSystem {
     }
 
     // Update 2D projected floating damage numbers
-    const widthHalf = window.innerWidth / 2;
-    const heightHalf = window.innerHeight / 2;
+    const viewport = getViewportProfile();
+    const widthHalf = viewport.width / 2;
+    const heightHalf = viewport.height / 2;
 
     for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
       const d = this.damageNumbers[i];
