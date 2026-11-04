@@ -5,6 +5,8 @@ export interface PortalTrigger {
   label: string;
   subtitle: string;
   targetZone: ZoneId;
+  targetChapterIndex?: number;
+  requiresChapterId?: string;
   targetSpawnTag:
     | 'from_town'
     | 'from_stomping_south'
@@ -13,7 +15,9 @@ export interface PortalTrigger {
     | 'from_market_north'
     | 'from_ruins_south'
     | 'from_ruins_north'
-    | 'from_sanctum';
+    | 'from_sanctum'
+    | 'from_bellroad';
+  // Campaign roads return to a town landing rather than a combat-route reward trigger.
   position: { x: number; z: number };
   radius: number;
   colorHex: number;
@@ -45,6 +49,8 @@ export interface ProceduralEncounterPack {
 
 export interface ProceduralPathLayout {
   seed: number;
+  version?: 1 | 2;
+  topology?: string;
   totalDistance: number;
   segmentCount: number;
   segmentLength: number;

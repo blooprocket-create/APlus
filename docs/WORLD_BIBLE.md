@@ -53,7 +53,11 @@ The campaign moves from investigating disappearances to understanding complicity
 | V | Crown of Night | The absent king and Orin's archive | Remembering a crime does not excuse continuing it. |
 | VI | World Heart | The First Promise and the Borrowed Sun | A future must be allowed to differ from what preserved it. |
 
-Each act currently contains two playable chapters. Each chapter includes memory investigation, an inscription puzzle, a named guardian encounter, and an aftermath conversation or decision. Three optional echoes per chapter preserve smaller human stories away from the main objective.
+Each act currently contains two playable chapters. Each chapter opens with an in-world activity: recovery, escort, beacon defense, ordered relay alignment, or marked-captain hunts. Memory investigation, an inscription puzzle, a named guardian encounter, and an aftermath conversation or decision follow. Three optional echoes preserve smaller human stories away from the main objective. This adds activity variation; it does not supply bespoke dungeon systems for every chapter.
+
+Aetherhaven and Market Crossing are playable sanctuaries connected to the campaign by physical roads. New heroes start in Aetherhaven; the original procedural wilderness routes remain connected through the town gates. Completing a chapter opens the road beyond its inhabited camp. Paired chapters connect directly; regional changes pass through Market Crossing. The atlas is optional fast travel.
+
+New regional graphs are seeded per hero and chapter. Their topology varies between woodland loops, island causeways, desert basins, mountain passes, city districts, and archive rings. Reloads and visits to town preserve the seed, activity progress, surviving enemies, and loot. Existing checkpoints retain the older map layout so saved positions and encounter identities remain compatible.
 
 ## Decisions recorded by the game
 

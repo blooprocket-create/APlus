@@ -161,6 +161,7 @@ export interface CharacterSaveData {
   journeyState?: {
     zone: ZoneId;
     seed: number | null;
+    layoutVersion?: 1 | 2;
     defeatedEnemyIds: string[];
     enemies: Array<{ id: string; hp: number; x: number; z: number }>;
     pendingLoot: Array<{ x: number; z: number; gold: number; item: InventoryItem | null }>;

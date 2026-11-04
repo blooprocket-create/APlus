@@ -6,7 +6,9 @@ import { FinisherFrame } from './FinisherTimeline';
 import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
 import { ChronicleInteraction, ChronicleSite } from '../types/campaign';
 import { advanceChronicle, beginChapter, chronicleObjectiveView, currentChapter, currentObjective, ensureCampaign, isChronicleRegion } from './CampaignEngine';
-import { buildChronicleLayout } from './ChronicleWorld';
+import { buildChronicleLayout, chapterSeed } from './ChronicleWorld';
+import { campaignRoads, roadDirectionTarget } from './WorldRoutes';
+import { createFieldPlan, FieldPlan, FieldSpawn, fieldSpawns, fieldStatus, fieldTarget, newFieldProgress, updateFieldActivity } from './FieldActivities';
 import { AudioSystem } from '../audio/AudioSystem';
 import { AttackPattern, FLASK_CAPACITY, getAttackPattern, getGuardianPattern, isInsideAttack, isSafeZone, resolveFlask } from './CombatRules';
 import { MapSnapshot } from '../ui/Minimap';
@@ -148,6 +150,7 @@ export interface HudTelemetry {
   expedition: { defeated: number; total: number; seconds: number };
   damageFlash: boolean;
   nearbyChronicle: { title: string; resolved: boolean } | null;
+  fieldActivity: { status: string; instruction: string } | null;
   hp: number;
   maxHp: number;
   xp: number;
@@ -272,6 +275,8 @@ export class GameEngine {
   private finisher: BossFinisher | null = null;
   private chronicleSites: ChronicleSite[] = [];
   private nearbyChronicleSite: ChronicleSite | null = null;
+  private fieldPlan: FieldPlan | null = null;
+  private travelInProgress = false;
 
   public get isFinishing(): boolean { return this.finisher !== null; }
   public skipBossFinisher(): void { this.finisher?.finish(); }
@@ -324,9 +329,66 @@ export class GameEngine {
     const chapter = currentChapter(this.activeCharacter);
     const checkpoint = ensureCampaign(this.activeCharacter).checkpoints[chapter.id];
     if (checkpoint) this.activeCharacter.position = { ...checkpoint.position };
-    this.enterZone(chapter.region, undefined, chapter.seed, checkpoint ? { ...checkpoint.journey, flaskCharges: this.flaskCharges } : undefined);
+    const state = ensureCampaign(this.activeCharacter);
+    const seed = checkpoint?.journey.seed ?? (state.worldSeeds![chapter.id] ??= chapterSeed(this.activeCharacter.id, chapter));
+    this.enterZone(chapter.region, undefined, seed, checkpoint ? { ...checkpoint.journey, flaskCharges: this.flaskCharges } : undefined);
     this.emitHudTelemetry();
     return true;
+  }
+
+  private async traverseWorldRoad(portal: PortalTrigger): Promise<void> {
+    if (this.travelInProgress || !this.activeCharacter) return;
+    this.travelInProgress = true; this.setPaused('travel', true);
+    try {
+      if (portal.targetChapterIndex !== undefined) await this.travelToChapter(portal.targetChapterIndex);
+      else if (await this.saveActiveCharacterNow()) this.enterZone(portal.targetZone, portal.targetSpawnTag);
+    } finally { this.travelInProgress = false; this.setPaused('travel', false); }
+  }
+
+  private fieldThreats() {
+    return this.enemies.map(enemy => ({ id: enemy.id, x: enemy.bundle.root.position.x, z: enemy.bundle.root.position.z }));
+  }
+
+  private spawnFieldEnemies(spawns: FieldSpawn[]): void {
+    for (const spawn of spawns) {
+      this.spawnEnemyAtPosition(spawn.kind, spawn.x, spawn.z, 1 + ensureCampaign(this.activeCharacter!).chapterIndex * .09);
+      const enemy = this.enemies[this.enemies.length - 1]; enemy.id = spawn.id;
+      if (spawn.id.includes('_captain_')) { enemy.name = 'Ministry Warden'; enemy.hp = enemy.maxHp = Math.round(enemy.maxHp * 1.8); }
+      this.expedition.total += 1;
+    }
+  }
+
+  private initializeFieldActivity(): void {
+    if (!this.activeCharacter || !this.currentPathLayout) return;
+    const objective = currentObjective(this.activeCharacter);
+    if (!objective?.field || objective.kind !== 'field') return;
+    const state = ensureCampaign(this.activeCharacter);
+    const progress = state.fieldProgress![objective.id] ??= newFieldProgress();
+    this.fieldPlan = createFieldPlan(objective.id, objective.field, this.currentPathLayout);
+    this.environment.showFieldActivity(this.fieldPlan, progress);
+    this.spawnFieldEnemies(fieldSpawns(this.fieldPlan, progress));
+  }
+
+  private updateFieldObjective(dt: number): void {
+    if (!this.activeCharacter || !this.fieldPlan || !isChronicleRegion(this.currentZone)) return;
+    const objective = currentObjective(this.activeCharacter);
+    if (objective?.id !== this.fieldPlan.id || objective.kind !== 'field') return;
+    const state = ensureCampaign(this.activeCharacter);
+    const progress = state.fieldProgress![objective.id];
+    const result = updateFieldActivity(this.fieldPlan, progress, this.playerPos, this.fieldThreats(), dt);
+    this.spawnFieldEnemies(result.spawns);
+    this.environment.updateFieldActivity(progress, !result.complete);
+    if (result.notice) this.callbacks.onBannerNotification(result.notice.toUpperCase(), fieldStatus(this.fieldPlan, progress));
+    if (result.complete) {
+      const advanced = advanceChronicle(this.activeCharacter, objective.id);
+      if (advanced.advanced) {
+        state.journal.push(`${objective.speaker}: ${objective.text.join(' ')}`);
+        this.checkAndApplyLevelUps(); this.spawnChronicleGuardian();
+        this.callbacks.onBannerNotification('THE ROAD REMEMBERS', `Recovered account added to your journal. ${currentObjective(this.activeCharacter)?.title ?? 'Follow the road onward.'}`);
+      }
+      this.fieldPlan = null;
+    }
+    if (result.changed || result.complete) void this.saveActiveCharacterNow();
   }
 
   private spawnChronicleGuardian(): void {
@@ -349,7 +411,7 @@ export class GameEngine {
     const chapter = currentChapter(this.activeCharacter);
     if (state.discoveries.includes(site.id)) return false;
     const objective = site.kind === 'echo' ? { id: site.id, kind: 'memory' as const, title: site.title, hint: '', speaker: 'An echo of Elarion', text: [site.text ?? ''] } : chapter.objectives[site.objectiveIndex];
-    if (site.kind !== 'echo' && (site.objectiveIndex !== state.objectiveIndex || site.kind === 'battle')) return false;
+    if (site.kind !== 'echo' && (site.objectiveIndex !== state.objectiveIndex || site.kind === 'battle' || site.kind === 'field')) return false;
     this.callbacks.onChronicleInteraction?.({ chapterTitle: chapter.title, objective, siteId: site.id, optional: site.kind === 'echo' });
     return true;
   }
@@ -359,6 +421,7 @@ export class GameEngine {
     const site = this.chronicleSites.find(candidate => candidate.id === siteId);
     if (!site || Math.hypot(site.position.x - this.playerPos.x, site.position.z - this.playerPos.z) > 4.5) return { advanced: false, message: 'Return to the memory stone.' };
     const state = ensureCampaign(this.activeCharacter);
+    if (site.kind === 'field') return { advanced: false, message: 'Complete this objective in the world. Follow the gold compass.' };
     if (site.kind === 'echo') {
       if (state.discoveries.includes(site.id)) return { advanced: false, message: 'This echo is already in your journal.' };
       state.discoveries.push(site.id); state.journal.push(`${site.title}: ${site.text}`);
@@ -664,10 +727,14 @@ export class GameEngine {
     this.nearbyNpc = null;
     this.chronicleSites = [];
     this.nearbyChronicleSite = null;
+    this.fieldPlan = null;
 
     if (isChronicleRegion(zoneId)) {
       const chapter = currentChapter(this.activeCharacter);
-      const built = buildChronicleLayout(chapter);
+      const state = ensureCampaign(this.activeCharacter);
+      const seed = explicitSeed ?? (state.worldSeeds![chapter.id] ??= chapterSeed(this.activeCharacter.id, chapter));
+      state.worldSeeds![chapter.id] = seed;
+      const built = buildChronicleLayout(chapter, seed, resume?.layoutVersion ?? (resume ? 1 : 2));
       this.currentPathLayout = built.layout; this.chronicleSites = built.sites;
       this.environment.buildChronicle(this.scene, chapter, built.layout, built.sites);
       this.activePortals = []; this.activeNpcs = [];
@@ -675,7 +742,8 @@ export class GameEngine {
       this.playerYaw = Math.PI; this.currentPathProgress = 0;
       this.spawnProceduralStompingGroundsEncounters(built.layout, 0.8 + ensureCampaign(this.activeCharacter).chapterIndex * 0.08);
       this.spawnChronicleGuardian();
-      this.callbacks.onBannerNotification(chapter.title.toUpperCase(), chapter.subtitle);
+      this.initializeFieldActivity();
+      this.callbacks.onBannerNotification(chapter.title.toUpperCase(), built.layout.topology ?? chapter.subtitle);
     } else if (zoneId === 'starting_town') {
       this.currentPathLayout = null;
       this.currentPathProgress = 0;
@@ -694,7 +762,7 @@ export class GameEngine {
       this.activeCharacter.currentHp = this.effectiveStats.maxHp;
       this.callbacks.onBannerNotification(
         'STARTING TOWN // AETHERHAVEN',
-        'Safe Zone • Head North through the Rift Portal to enter Stomping Grounds'
+        'East: The Long Dawn • North: procedural wilderness • West: Market Crossing'
       );
     } else if (zoneId === 'stomping_grounds') {
       const layout = generateStompingGroundsPath(explicitSeed);
@@ -829,10 +897,14 @@ export class GameEngine {
       this.activeCharacter.currentHp = this.effectiveStats.maxHp;
       this.callbacks.onBannerNotification(
         'MARKET CROSSING // STARLIGHT BAZAAR',
-        'Safe Zone Hub • South Gate: Stomping Grounds | North Gate: Sunken Astral Ruins'
+        'East: continue The Long Dawn • North / south: wilderness routes • West: Aetherhaven'
       );
     }
 
+    if (isChronicleRegion(zoneId) || isSafeZone(zoneId)) {
+      const roads = campaignRoads(ensureCampaign(this.activeCharacter), zoneId, this.currentPathLayout);
+      for (const road of roads) { this.activePortals.push(road); this.environment.addTravelGate(road); }
+    }
     this.expedition.total = resume ? resume.enemies.length + resume.defeatedEnemyIds.length : this.enemies.length;
     if (resume && savedPosition) {
       this.defeatedEnemyIds = new Set(resume.defeatedEnemyIds);
@@ -879,17 +951,19 @@ export class GameEngine {
   }
 
   private isPortalLocked(portal: PortalTrigger): boolean {
+    if (portal.requiresChapterId && !this.activeCharacter?.campaign?.completedChapterIds.includes(portal.requiresChapterId)) return true;
     return this.enemies.length > 0 && ((this.currentZone === 'stomping_grounds' && portal.targetZone === 'market_crossing') || (this.currentZone === 'sunken_ruins' && portal.targetZone === 'abyssal_sanctum'));
   }
 
   public tryTraverseNearbyPortal(): boolean {
-    if (!this.nearbyPortal || this.mode !== 'playing' || this.isPaused) return false;
+    if (!this.nearbyPortal || this.mode !== 'playing' || this.isPaused || this.travelInProgress) return false;
     if (this.isPortalLocked(this.nearbyPortal)) {
-      this.callbacks.onBannerNotification('THE RIFT IS SEALED', 'Defeat the remaining fiends to open the way forward.');
+      this.callbacks.onBannerNotification('THE ROAD IS SEALED', this.nearbyPortal.requiresChapterId ? 'Finish the chapter’s story at camp to open this road.' : 'Defeat the remaining fiends to open the way forward.');
       return false;
     }
     const target = this.nearbyPortal;
-    this.enterZone(target.targetZone, target.targetSpawnTag);
+    if (target.id?.startsWith('bellroad_')) void this.traverseWorldRoad(target);
+    else this.enterZone(target.targetZone, target.targetSpawnTag);
     return true;
   }
 
@@ -1069,10 +1143,14 @@ export class GameEngine {
     const quest = normalizeQuestState(this.activeCharacter.questState);
     let targetPos: { x: number; z: number } | null = null;
 
-    if (isChronicleRegion(this.currentZone)) {
+    const townRoad = isSafeZone(this.currentZone) ? this.activePortals.find(portal => portal.id === 'bellroad_outbound') : null;
+    if (townRoad) targetPos = townRoad.position;
+    else if (isChronicleRegion(this.currentZone)) {
       const objective = currentObjective(this.activeCharacter);
       const site = this.chronicleSites.find(candidate => candidate.id === objective?.id);
-      if (site) targetPos = site.position;
+      if (objective?.kind === 'field' && this.fieldPlan) targetPos = fieldTarget(this.fieldPlan, ensureCampaign(this.activeCharacter).fieldProgress![objective.id], this.playerPos, this.fieldThreats());
+      else if (site) targetPos = site.position;
+      else targetPos = this.activePortals.find(portal => portal.id === 'bellroad_forward')?.position ?? null;
     } else if (this.currentZone === 'starting_town') {
       if (quest.stage === 'not_started' || quest.stage === 'return_starting_npc') {
         const vael = this.activeNpcs.find((n) => n.id === 'npc_commander_vael');
@@ -1170,6 +1248,7 @@ export class GameEngine {
     }
 
     if (targetPos) {
+      if (this.currentPathLayout?.version === 2) targetPos = roadDirectionTarget(this.currentPathLayout, this.playerPos, targetPos);
       const dx = targetPos.x - this.playerPos.x;
       const dz = targetPos.z - this.playerPos.z;
       if (Math.hypot(dx, dz) > 1.2) {
@@ -1218,6 +1297,7 @@ export class GameEngine {
     this.activeCharacter.journeyState = {
       zone: this.currentZone,
       seed: this.currentPathLayout?.seed ?? null,
+      layoutVersion: this.currentPathLayout?.version,
       defeatedEnemyIds: [...this.defeatedEnemyIds],
       enemies: this.enemies.map(enemy => ({ id: enemy.id, hp: enemy.hp, x: enemy.bundle.root.position.x, z: enemy.bundle.root.position.z })),
       pendingLoot: this.lootOrbs.map(orb => ({ x: orb.position.x, z: orb.position.z, gold: orb.gold, item: orb.item })),
@@ -1530,6 +1610,7 @@ export class GameEngine {
     if (this.finisher) return;
     this.updateEnemies(dt);
     this.updateLootOrbs(dt);
+    this.updateFieldObjective(dt);
     this.updatePortalAndNpcProximity();
     this.updateCompassArrow();
 
@@ -1665,10 +1746,7 @@ export class GameEngine {
       }
 
       // The belllands are explorable landscapes; the tutorial retains its corridor bounds.
-      if (isChronicleRegion(this.currentZone)) {
-        comp.position.x = THREE.MathUtils.clamp(comp.position.x, -60, 60);
-        comp.position.z = THREE.MathUtils.clamp(comp.position.z, -282, 12);
-      } else if (this.currentPathLayout) {
+      if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(
           comp.position.x,
           comp.position.z,
@@ -1832,11 +1910,7 @@ export class GameEngine {
   }
 
   private clampPlayerToZone(): void {
-    if (isChronicleRegion(this.currentZone) && this.currentPathLayout) {
-      this.playerPos.x = THREE.MathUtils.clamp(this.playerPos.x, -60, 60);
-      this.playerPos.z = THREE.MathUtils.clamp(this.playerPos.z, -282, 12);
-      this.currentPathProgress = clampToProceduralPath(this.playerPos.x, this.playerPos.z, this.currentPathLayout).progress;
-    } else if (this.currentPathLayout) {
+    if (this.currentPathLayout) {
       const clamped = clampToProceduralPath(
         this.playerPos.x,
         this.playerPos.z,
@@ -1863,7 +1937,7 @@ export class GameEngine {
       const state = ensureCampaign(this.activeCharacter);
       let distance = 3.5;
       for (const site of this.chronicleSites) {
-        if (site.kind === 'battle' || state.discoveries.includes(site.id) || (site.kind !== 'echo' && site.objectiveIndex !== state.objectiveIndex)) continue;
+        if (site.kind === 'battle' || site.kind === 'field' || state.discoveries.includes(site.id) || (site.kind !== 'echo' && site.objectiveIndex !== state.objectiveIndex)) continue;
         const d = Math.hypot(site.position.x - this.playerPos.x, site.position.z - this.playerPos.z);
         if (d < distance) { distance = d; this.nearbyChronicleSite = site; }
       }
@@ -1900,7 +1974,7 @@ export class GameEngine {
 
     // Auto-enter portal when stepping directly into the portal core after arrival grace period
     if (closestPortal && bestPortalDist <= 1.35 && this.portalGraceTimer <= 0 && !this.isPaused && !this.isPortalLocked(closestPortal)) {
-      this.enterZone(closestPortal.targetZone, closestPortal.targetSpawnTag);
+      this.tryTraverseNearbyPortal();
     }
   }
 
@@ -3246,6 +3320,10 @@ export class GameEngine {
     );
 
     const questView = chronicleObjectiveView(char, this.currentZone) ?? legacyQuestView;
+    // The Bellroad tracker must not hide the touch action for the original town quest givers.
+    if (isSafeZone(this.currentZone)) questView.actionButtonLabel = legacyQuestView.actionButtonLabel;
+    const field = this.fieldPlan && currentObjective(char)?.kind === 'field' ? this.fieldPlan : null;
+    if (field) questView.progressText = fieldStatus(field, ensureCampaign(char).fieldProgress![field.id]);
     if (isChronicleRegion(this.currentZone)) {
       const chapter = currentChapter(char);
       zoneTitle = REGION_NAMES[chapter.region].toUpperCase();
@@ -3269,7 +3347,7 @@ export class GameEngine {
         player: { x: this.playerPos.x, z: this.playerPos.z, yaw: this.playerYaw },
         enemies: this.enemies.filter(e => e.bundle.root.position.distanceTo(this.playerPos) < 28).map(e => ({ x: e.bundle.root.position.x, z: e.bundle.root.position.z, boss: e.kind === 'boss_knight' })),
         portals: this.activePortals.map(p => p.position),
-        npcs: [...this.activeNpcs.map(n => n.position), ...this.chronicleSites.filter(site => !ensureCampaign(char).discoveries.includes(site.id) && (site.kind === 'echo' || site.objectiveIndex === ensureCampaign(char).objectiveIndex)).map(site => site.position)],
+        npcs: [...this.activeNpcs.map(n => n.position), ...this.chronicleSites.filter(site => site.kind !== 'field' && !ensureCampaign(char).discoveries.includes(site.id) && (site.kind === 'echo' || site.objectiveIndex === ensureCampaign(char).objectiveIndex)).map(site => site.position), ...(field ? [fieldTarget(field, ensureCampaign(char).fieldProgress![field.id], this.playerPos, this.fieldThreats())] : [])],
         path: this.currentPathLayout?.waypoints ?? [],
         connections: this.currentPathLayout?.connections,
       },
@@ -3277,6 +3355,7 @@ export class GameEngine {
       flaskCharges: this.flaskCharges,
       expedition: { defeated: this.expedition.defeated, total: this.expedition.total, seconds: this.expedition.seconds },
       damageFlash: this.animState.hitFlashTimer > 0,
+      fieldActivity: field ? { status: questView.progressText, instruction: field.definition.instruction } : null,
       nearbyChronicle: this.nearbyChronicleSite ? { title: this.nearbyChronicleSite.title, resolved: false } : null,
       hp: char.currentHp,
       maxHp: this.effectiveStats.maxHp,

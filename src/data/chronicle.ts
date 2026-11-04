@@ -1,4 +1,4 @@
-import { ChronicleChapter, ChronicleObjective, ChronicleRegion } from '../types/campaign';
+import { ChronicleChapter, ChronicleObjective, ChronicleRegion, FieldActivityDefinition } from '../types/campaign';
 
 export const REGION_NAMES: Record<ChronicleRegion, string> = {
   whispering_woods: 'The Remembering Wood', ember_coast: 'The Ember Coast', glass_desert: 'The Glass Expanse',
@@ -172,6 +172,29 @@ export const CHRONICLE_CHAPTERS: ChronicleChapter[] = [
     codex: { title: 'The Unwritten Road', text: 'The chronicles end at the first morning no engine has rehearsed. They do not say the world was healed in a day. They say the people who inherited it were finally allowed to try.' },
   },
 ];
+
+// Each chapter opens with an action in the landscape, rather than another dialogue pedestal.
+const FIELD_ACTIVITIES: FieldActivityDefinition[] = [
+  { kind: 'recover', title: 'Bring the three stolen names home', instruction: 'Explore the side trails and walk through the three name embers. Follow the compass to the nearest missing name.', labels: ['A child’s name', 'A soldier’s name', 'A mother’s name'] },
+  { kind: 'escort', title: 'Guide the Hollow Procession to the chapel', instruction: 'Stay beside the lantern bearer. Clear nearby fiends when the procession stops; it waits if you move too far away.', labels: ['The Hollow Procession'] },
+  { kind: 'defend', title: 'Keep the harbor beacon burning', instruction: 'Stand near the beacon and defeat three assault waves. The flame recovers between waves while you hold the ground.', labels: ['Harbor beacon'] },
+  { kind: 'recover', title: 'Search the wrecks for Neris’s lantern', instruction: 'Search the three wreck paths for lantern fragments. Walk through each fragment to recover it.', labels: ['The bow wreck', 'The lifeboat', 'The last passenger'] },
+  { kind: 'relays', title: 'Turn the city’s three wandering lenses', instruction: 'Hold each lens for two seconds in order: Dawn → Dusk → Night. Nearby enemies interrupt the alignment.', labels: ['Dawn · I', 'Dusk · II', 'Night · III'] },
+  { kind: 'escort', title: 'Walk the road the map cannot choose', instruction: 'Guide Elyth through the glass roads. Stay close and clear the patrols that block her way.', labels: ['Elyth, the Uncharted'] },
+  { kind: 'hunt', title: 'Break the three winter watchfires', instruction: 'Hunt the three marked wardens on the mountain branches. Each defeated warden frees a witness.', labels: ['Western watchfire', 'High watchfire', 'The frozen bridge'] },
+  { kind: 'recover', title: 'Recover the letters beneath the ice', instruction: 'Find the three lost mail satchels along the frozen side paths. Walk through them to recover their letters.', labels: ['Letters to the coast', 'Letters to the wood', 'A letter never sent'] },
+  { kind: 'hunt', title: 'Dismantle the Ministry’s street patrols', instruction: 'Defeat the three marked Ministry captains in the city districts to open the witness’s route.', labels: ['The gate captain', 'The census captain', 'The bell captain'] },
+  { kind: 'defend', title: 'Hold the witness’s sanctuary', instruction: 'Keep the sanctuary through three Ministry assaults. Stay within its circle while it recovers between attacks.', labels: ['The witness’s sanctuary'] },
+  { kind: 'relays', title: 'Wake the archive’s sleeping chambers', instruction: 'Hold the chambers in order: Remembrance → Release → Tomorrow. Clear nearby fiends before each two-second resonance.', labels: ['Remembrance · I', 'Release · II', 'Tomorrow · III'] },
+  { kind: 'escort', title: 'Lead the last echo into the morning', instruction: 'Walk beside the last echo through the heart’s broken roads. Clear each ambush; no one is left behind.', labels: ['The last echo'] },
+];
+CHRONICLE_CHAPTERS.forEach((chapter, index) => {
+  const opening = chapter.objectives[0];
+  opening.kind = 'field';
+  opening.field = FIELD_ACTIVITIES[index];
+  opening.title = FIELD_ACTIVITIES[index].title;
+  opening.hint = FIELD_ACTIVITIES[index].instruction;
+});
 
 export const CHAPTER_ECHOES: Record<string, Array<{ title: string; text: string }>> = {
   names_in_the_bark: [

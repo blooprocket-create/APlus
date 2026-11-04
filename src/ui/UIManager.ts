@@ -238,7 +238,7 @@ export class UIManager {
             <div class="hero-stats"><div><small>VITALITY</small><strong>${eff.maxHp}</strong></div><div><small>ATTACK</small><strong>${eff.attack}</strong></div><div><small>CRITICAL</small><strong>${Math.round(eff.critRate * 100)}<span>%</span></strong></div></div>
             <div class="hero-abilities">${(['basic', 'dash', 'skill1', 'skill2', 'ultimate'] as ActionId[]).map((key, i) => `<div class="ability-preview" title="${this.escapeHtml(cDef.skills[key].name + ': ' + cDef.skills[key].description)}">${icon(['spear', 'dash', 'flame', 'shield', 'burst'][i], 23)}<small>${['J', 'SHIFT', 'Q', 'E', 'R'][i]}</small></div>`).join('')}</div>
             ${selectedChar ? `<div class="journey-resume"><span class="status-dot"></span><div><small>CONTINUE YOUR JOURNEY</small><strong>${ZONE_LABELS[zone]} <span>· Level ${selectedChar.level}</span></strong></div>${icon('map', 22)}</div>
-              <button id="btn-enter-world" class="btn-anime btn-primary journey-button">${selectedChar.campaign?.started ? 'Continue journey' : 'Begin The Long Dawn'} ${icon('arrow', 22)}</button>
+              <button id="btn-enter-world" class="btn-anime btn-primary journey-button">${selectedChar.journeyState ? 'Continue journey' : 'Enter Aetherhaven'} ${icon('arrow', 22)}</button>
               <div class="hero-panel-foot"><span>POWER ${computePowerRating(selectedChar)} · ${selectedChar.enemiesDefeated} FIENDS SLAIN</span><button id="btn-delete-char" class="text-button" aria-label="Delete selected hero">Delete hero</button></div>` : `
               <label class="eyebrow name-label" for="input-char-name">NAME YOUR HERO</label><input id="input-char-name" class="input-field" maxlength="18" value="${this.escapeHtml(this.creationNameDraft)}" placeholder="Enter a name">
               ${this.errorMessage ? `<p class="form-error" role="alert">${this.escapeHtml(this.errorMessage)}</p>` : ''}
@@ -298,9 +298,6 @@ export class UIManager {
             classId: this.creationClassId,
           });
           this.startHudAndGameplay(created);
-          this.engine.setPaused('travel', true);
-          await this.engine.travelToChapter(0);
-          this.engine.setPaused('travel', false);
         } catch (err) {
           this.errorMessage = err instanceof Error ? err.message : String(err);
           this.renderLobbyDOM();
@@ -310,13 +307,8 @@ export class UIManager {
 
     const enterBtn = this.root.querySelector<HTMLButtonElement>('#btn-enter-world');
     if (enterBtn && selectedChar) {
-      enterBtn.addEventListener('click', async () => {
+      enterBtn.addEventListener('click', () => {
         this.startHudAndGameplay(selectedChar);
-        if (!selectedChar.campaign?.started) {
-          this.engine.setPaused('travel', true);
-          await this.engine.travelToChapter(0);
-          this.engine.setPaused('travel', false);
-        }
       });
     }
 
@@ -1276,7 +1268,7 @@ export class UIManager {
   private openHelp(): void {
     const touch = getViewportProfile().touchUI;
     const controls = touch ? `<div class="touch-controls-guide"><p><strong>Move:</strong> drag the left thumbstick. Keep that thumb down while attacking.</p><p><strong>Fight:</strong> hold Attack to chain strikes. Tap Evade or an ability with another finger. Eclipse unlocks at 100% energy.</p><p><strong>Explore:</strong> tap the center prompt beside a person, memory, or portal. The map, bag, and pause icons sit in the upper right. The flask restores health when you are hurt.</p></div>` : `<div class="controls-guide"><span>Move</span><kbd>W A S D / Arrows</kbd><span>Attack · hold to chain</span><kbd>Left mouse / J / Space</kbd><span>Evade · brief invulnerability</span><kbd>Shift / K</kbd><span>Abilities / Ultimate</span><kbd>Q · E / R</kbd><span>Heal · 40% vitality</span><kbd>H</kbd><span>Talk / Enter portal</span><kbd>F / Enter</kbd><span>World atlas / journal</span><kbd>M</kbd><span>Gear / Pause</span><kbd>I / Esc</kbd></div>`;
-    this.openOverlay('Every legend starts here.', `<p>Follow the gold compass to memory stones, sealed shrines, and guardians. The Long Dawn spans twelve chapters in six belllands. ${touch ? 'Tap the map icon for' : 'Press M for'} the world atlas, journal, and recovered histories.</p>${controls}<p class="help-tip">Leave red circles before they fill. Some guardian rings have a safe center. Dash through a strike to gain 12 Eclipse energy. Your three flask charges refill in sanctuaries. On touchscreens, use the thumbstick and ability buttons.</p>`, [
+    this.openOverlay('Every legend starts here.', `<p>Start in Aetherhaven. The east Bellroad leads into the campaign; the north wilderness road leads to procedural expeditions. Follow the gold compass through field tasks, shrines, and guardians. At chapter’s end, walk through the road beyond camp to keep traveling. The Long Dawn spans twelve chapters in six belllands. ${touch ? 'Tap the map icon for' : 'Press M for'} the world atlas, journal, and recovered histories.</p>${controls}<p class="help-tip">Leave red circles before they fill. Some guardian rings have a safe center. Dash through a strike to gain 12 Eclipse energy. Your three flask charges refill in sanctuaries. On touchscreens, use the thumbstick and ability buttons.</p>`, [
       { label: this.hudRefs ? 'Ready to venture forth' : 'Choose your hero', action: () => this.closeOverlay() },
     ], 'FIELD GUIDE');
   }
@@ -1291,9 +1283,7 @@ export class UIManager {
   public showExpeditionReport(report: ExpeditionReport): void {
     const minutes = Math.floor(report.seconds / 60);
     const seconds = Math.floor(report.seconds % 60).toString().padStart(2, '0');
-    this.openOverlay('The path is yours.', `<p>${ZONE_LABELS[report.zone]} is clear. All spoils have been collected.</p><div class="report-stats"><div><strong>${report.kills}</strong><small>FIENDS SLAIN</small></div><div><strong>${minutes}:${seconds}</strong><small>TIME</small></div><div><strong>${report.gold}</strong><small>GOLD EARNED</small></div></div><div class="report-distinction">${report.damageTaken === 0 ? '✧ UNTOUCHED · A flawless expedition' : `${report.damageTaken} damage endured · The triad stands together`}</div><p class="help-tip">Follow the compass to the far portal to continue your journey.</p>`, [
-      { label: 'Onward, together', action: () => this.closeOverlay() },
-    ], 'EXPEDITION COMPLETE');
+    this.showBanner('THE ROAD IS OPEN', `${report.kills} fiends defeated · ${minutes}:${seconds} · ${report.gold} gold banked. Follow the far road to continue.`);
   }
 
   public showLootToast(name: string, rarity: string): void {
@@ -1343,7 +1333,7 @@ export class UIManager {
     let content = '';
     const nav = `<nav class="atlas-tabs">${(['world', 'journal', 'codex'] as const).map(tab => `<button data-atlas-tab="${tab}" class="${tab === this.atlasTab ? 'active' : ''}">${tab === 'world' ? 'The six belllands' : tab === 'journal' ? 'Your journal' : 'World codex'}</button>`).join('')}</nav>`;
     if (this.atlasTab === 'world') {
-      content = `<p class="atlas-intro">The kingdom bought its morning with people. Follow the stolen names through six belllands and decide what the next dawn will carry.</p><div class="atlas-grid">${CHRONICLE_CHAPTERS.map((chapter, i) => {
+      content = `<p class="atlas-intro">Walk the Bellroad from Aetherhaven through six belllands. Towns provide rest between regions; roads beyond each camp continue the story. This atlas offers optional fast travel.</p><div class="atlas-grid">${CHRONICLE_CHAPTERS.map((chapter, i) => {
         const unlocked = chapterUnlocked(state, i); const complete = state.completedChapterIds.includes(chapter.id);
         return `<article class="atlas-chapter ${unlocked ? 'unlocked' : 'locked'} ${complete ? 'completed' : ''}" style="--region-glow:#${chapter.palette.glow.toString(16).padStart(6, '0')}"><span class="atlas-chapter-number">${String(i + 1).padStart(2, '0')}</span><span class="eyebrow">${REGION_NAMES[chapter.region]}</span><h3>${chapter.title}</h3><p>${chapter.subtitle}</p><div class="atlas-guardian">${chapter.guardian.name}</div><button class="btn-anime ${unlocked && !complete ? 'btn-primary' : ''}" data-travel-chapter="${i}" ${unlocked ? '' : 'disabled'}>${complete ? 'Revisit the bellland' : !unlocked ? 'Complete the previous chapter' : state.started && state.chapterIndex === i ? 'Continue this chapter' : 'Begin chapter'}</button></article>`;
       }).join('')}</div>`;
@@ -1450,7 +1440,7 @@ export class UIManager {
 
     if (t.nearbyPortal) {
       this.hudRefs.portalBtn.classList.remove('hidden');
-      this.hudRefs.portalBtn.textContent = t.portalLocked ? 'RIFT SEALED · DEFEAT ALL FIENDS' : `${t.nearbyPortal.label.toUpperCase()} [F / TAP]`;
+      this.hudRefs.portalBtn.textContent = t.portalLocked ? 'ROAD SEALED · FINISH THE ACTIVE OBJECTIVE' : `${t.nearbyPortal.label.toUpperCase()} [F / TAP]`;
     } else {
       this.hudRefs.portalBtn.classList.add('hidden');
     }
@@ -1466,6 +1456,7 @@ export class UIManager {
     this.hudRefs.questObjTitle.textContent = qv.objectiveTitle;
     this.hudRefs.questObjHint.textContent = qv.objectiveHint;
     this.hudRefs.questObjProgress.textContent = qv.progressText;
+    this.root.querySelector('.quest-tracker-card')?.classList.toggle('field-objective', Boolean(t.fieldActivity));
     if (qv.companionBanter) {
       this.hudRefs.questBanterDiv.textContent = `${qv.companionBanter.speakerName}: "${qv.companionBanter.text}"`;
     }

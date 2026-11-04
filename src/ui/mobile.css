@@ -112,6 +112,7 @@ html, body { overscroll-behavior: none; touch-action: manipulation; }
   .touch-ui .quest-tracker-card { position: absolute; left: calc(14px + var(--safe-left)); top: calc(105px + var(--safe-top)); width: 215px; max-width: 215px; margin: 0; padding: 6px 9px; background: #0b1a20b5; }
   .touch-ui .quest-tracker-header, .touch-ui .quest-obj-hint, .touch-ui .quest-obj-progress, .touch-ui .companion-party-card, .touch-ui .expedition-meter { display: none; }
   .touch-ui .quest-obj-title { font-size: 11px; font-weight: 500; line-height: 1.4; margin: 0; }
+  .touch-ui .field-objective .quest-obj-progress { display: block; font-size: 9px; line-height: 1.45; margin-top: 5px; color: #dfc994; }
   .touch-ui .wave-card { top: calc(15px + var(--safe-top)); left: 50%; transform: translateX(-50%); width: clamp(150px, 25vw, 280px); text-align: center; }
   .touch-ui .zone-route-steps { display: none; }
   .touch-ui .wave-title { font-size: 12px; letter-spacing: .04em; }

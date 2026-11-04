@@ -3,6 +3,9 @@ import { getViewportProfile } from '../platform/Viewport';
 import { ChronicleChapter, ChronicleSite } from '../types/campaign';
 import { buildChronicleEnvironment } from './ChronicleEnvironment';
 import { disposeObject } from './SceneResources';
+import { worldLabel } from './WorldLabel';
+import { FieldPlan } from '../game/FieldActivities';
+import { FieldProgress } from '../types/campaign';
 import { ZoneId } from '../types/game';
 import { NpcActor, PortalTrigger, ProceduralPathLayout } from '../types/world';
 import { attachAnimeOutline, createAnimeToonMaterial } from './AnimeMaterials';
@@ -21,6 +24,9 @@ export class EnvironmentBuilder {
   private starParticles: THREE.Points | null = null;
   private time = 0;
   private lightsInitialized = false;
+  private fieldGroup: THREE.Group | null = null;
+  private fieldMarkers: THREE.Object3D[] = [];
+  private escortActor: THREE.Object3D | null = null;
 
   private clearZone(scene: THREE.Scene): void {
     if (!this.zoneGroup) return;
@@ -29,6 +35,48 @@ export class EnvironmentBuilder {
     this.floatingCrystals = [];
     this.portalVortexMeshes = [];
     this.starParticles = null;
+    this.fieldGroup = null; this.fieldMarkers = []; this.escortActor = null;
+  }
+
+  public addTravelGate(portal: PortalTrigger): void {
+    if (!this.zoneGroup) return;
+    if (portal.id === 'bellroad_outbound' || portal.id === 'bellroad_town_link') {
+      const road = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(portal.position.x), .035, 3.8), createAnimeToonMaterial({ color: 0x59675a }));
+      road.position.set(portal.position.x / 2, .025, portal.position.z); road.receiveShadow = true; this.zoneGroup.add(road);
+    }
+    this.addPortalGatewayMesh(this.zoneGroup, portal);
+  }
+
+  public showFieldActivity(plan: FieldPlan, progress: FieldProgress): void {
+    if (!this.zoneGroup) return;
+    this.fieldGroup = new THREE.Group(); this.zoneGroup.add(this.fieldGroup);
+    const escort = plan.definition.kind === 'escort';
+    const points = escort ? [progress.actor ?? plan.route[0]] : plan.points;
+    points.forEach((point, i) => {
+      const marker = new THREE.Group(); marker.position.set(point.x, 0, point.z);
+      const material = createAnimeToonMaterial({ color: escort ? 0xc4c4b0 : 0xd7bb86, emissive: 0x938345, emissiveIntensity: .35 });
+      if (escort) {
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(.24, .45, 1.2, 8), material); body.position.y = .7;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(.25, 10, 10), material); head.position.y = 1.6;
+        marker.add(body, head); this.escortActor = marker;
+      } else {
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(.7, 1, .55, 8), material); base.position.y = .3;
+        const core = new THREE.Mesh(new THREE.OctahedronGeometry(.42), new THREE.MeshBasicMaterial({ color: 0xffd78c })); core.position.y = 1.3;
+        marker.add(base, core);
+      }
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(plan.definition.kind === 'defend' ? 7 : 1.8, .045, 5, 48), new THREE.MeshBasicMaterial({ color: 0xe5c678 }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = .06; marker.add(ring);
+      marker.add(worldLabel(plan.definition.labels[i] ?? plan.definition.title));
+      this.fieldGroup!.add(marker); this.fieldMarkers.push(marker);
+    });
+    this.updateFieldActivity(progress, true);
+  }
+
+  public updateFieldActivity(progress: FieldProgress, active: boolean): void {
+    if (!this.fieldGroup) return;
+    this.fieldGroup.visible = active;
+    this.fieldMarkers.forEach((marker, i) => { marker.visible = !progress.collected.includes(i); });
+    if (this.escortActor && progress.actor) this.escortActor.position.set(progress.actor.x, 0, progress.actor.z);
   }
 
   public buildChronicle(scene: THREE.Scene, chapter: ChronicleChapter, layout: ProceduralPathLayout, sites: ChronicleSite[]): BuiltZoneResult {
@@ -235,8 +283,8 @@ export class EnvironmentBuilder {
     for (const pos of [
       { x: -6.5, z: 9.5 },
       { x: 6.5, z: 9.5 },
-      { x: -12.5, z: -1.0 },
-      { x: 12.5, z: -1.0 },
+      { x: -13.5, z: -8.5 },
+      { x: 13.5, z: -8.5 },
       { x: -5.5, z: -12.0 },
       { x: 5.5, z: -12.0 },
     ]) {
@@ -797,6 +845,7 @@ export class EnvironmentBuilder {
   private addPortalGatewayMesh(group: THREE.Group, portal: PortalTrigger): void {
     const portalGroup = new THREE.Group();
     portalGroup.position.set(portal.position.x, 0, portal.position.z);
+    portalGroup.add(worldLabel(portal.label));
 
     // Base rune pad
     const padGeo = new THREE.RingGeometry(0.4, portal.radius, 32);

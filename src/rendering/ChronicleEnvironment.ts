@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ChronicleChapter, ChronicleSite } from '../types/campaign';
 import { ProceduralPathLayout } from '../types/world';
 import { createAnimeToonMaterial } from './AnimeMaterials';
+import { worldLabel } from './WorldLabel';
 
 export function buildChronicleEnvironment(scene: THREE.Scene, chapter: ChronicleChapter, layout: ProceduralPathLayout, sites: ChronicleSite[]): THREE.Group {
   const group = new THREE.Group();
@@ -12,8 +13,12 @@ export function buildChronicleEnvironment(scene: THREE.Scene, chapter: Chronicle
   const earth = createAnimeToonMaterial({ color: chapter.palette.ground });
   const leaves = createAnimeToonMaterial({ color: chapter.palette.foliage });
   const glow = new THREE.MeshBasicMaterial({ color: chapter.palette.glow });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 400), earth);
-  ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.6, -130); ground.receiveShadow = true; group.add(ground);
+  const xs = layout.waypoints.map(point => point.x); const zs = layout.waypoints.map(point => point.z);
+  const width = Math.max(...xs) - Math.min(...xs) + 55; const depth = Math.max(...zs) - Math.min(...zs) + 55;
+  if (chapter.region !== 'ember_coast') {
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), earth);
+    ground.rotation.x = -Math.PI / 2; ground.position.set((Math.min(...xs) + Math.max(...xs)) / 2, -.6, (Math.min(...zs) + Math.max(...zs)) / 2); ground.receiveShadow = true; group.add(ground);
+  }
   const roadMaterial = createAnimeToonMaterial({ color: chapter.palette.stone, emissive: chapter.palette.ground, emissiveIntensity: 0.12 });
   const edges = layout.connections ?? [];
   const paving: THREE.Matrix4[] = [];
@@ -39,6 +44,15 @@ export function buildChronicleEnvironment(scene: THREE.Scene, chapter: Chronicle
   const crownGeometry = chapter.region === 'frostmarch' ? new THREE.ConeGeometry(1.8, 4, 7) : new THREE.DodecahedronGeometry(1.8, 1);
   const rockGeometry = new THREE.DodecahedronGeometry(1.1, 0);
   layout.waypoints.forEach((point, i) => {
+    if (chapter.region === 'ember_coast') {
+      const island = new THREE.Mesh(new THREE.CylinderGeometry(point.radius + 3, point.radius + 4, 1.2, 18), earth);
+      island.position.set(point.x, -.6, point.z); island.receiveShadow = true; group.add(island);
+      if (i % 2 === 0) {
+        const hull = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.6, 6), stone); hull.position.set(point.x + point.radius + 1, .4, point.z); hull.rotation.z = .4;
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(.08, .1, 6, 6), leaves); mast.position.copy(hull.position).add(new THREE.Vector3(0, 2, 0)); mast.rotation.z = .25;
+        group.add(hull, mast);
+      }
+    }
     const clearing = new THREE.Mesh(new THREE.CylinderGeometry(point.radius, point.radius + 0.2, 0.4, 32), roadMaterial);
     clearing.position.set(point.x, -0.2, point.z); clearing.receiveShadow = true; group.add(clearing);
     for (const side of [-1, 1]) {
@@ -64,6 +78,16 @@ export function buildChronicleEnvironment(scene: THREE.Scene, chapter: Chronicle
         rock.position.set(x + side * j * 2.5, -0.1, z - 4 + j * 2.5); rock.scale.set(0.5 + j * 0.2, 0.3, 0.7); group.add(rock);
       }
     }
+    if (chapter.region === 'crown_of_night' && i < 11) {
+      for (const side of [-1, 1]) {
+        const building = new THREE.Mesh(new THREE.BoxGeometry(7, 6 + i % 3 * 2, 8), leaves);
+        building.position.set(point.x + side * 12, 2.5, point.z - 2); building.castShadow = true; group.add(building);
+        for (let window = 0; window < 3; window++) {
+          const light = new THREE.Mesh(new THREE.BoxGeometry(.8, 1.2, .04), glow);
+          light.position.set(building.position.x - 2 + window * 2, 3.5, building.position.z + 4.03); group.add(light);
+        }
+      }
+    }
     if (i < 13) {
       const torch = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, 1.4, 6), stone);
       torch.position.set(point.x - 3.5, 0.7, point.z); group.add(torch);
@@ -81,7 +105,7 @@ export function buildChronicleEnvironment(scene: THREE.Scene, chapter: Chronicle
   }
   const arenaRing = new THREE.Mesh(new THREE.TorusGeometry(9, 0.035, 6, 96), glow);
   arenaRing.rotation.x = -Math.PI / 2; arenaRing.position.set(arena.x, 0.04, arena.z); group.add(arenaRing);
-  sites.filter(site => site.kind !== 'battle').forEach(site => {
+  sites.filter(site => site.kind !== 'battle' && site.kind !== 'field').forEach(site => {
     const marker = new THREE.Group(); marker.name = `site_${site.id}`; marker.position.set(site.position.x, 0, site.position.z);
     if (site.kind === 'conversation' || site.kind === 'choice') {
       const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 1.1, 10), leaves); robe.position.y = 0.65;
@@ -107,9 +131,19 @@ export function buildChronicleEnvironment(scene: THREE.Scene, chapter: Chronicle
     support.position.set(bellSite.x - 16 + side * 3.2, 3, bellSite.z); support.castShadow = true; group.add(support);
   }
   const lintel = new THREE.Mesh(new THREE.BoxGeometry(8, 0.9, 2), stone); lintel.position.set(bellSite.x - 16, 6.7, bellSite.z); group.add(lintel);
+  // An inhabited roadside camp gives the aftermath a place, rather than a lone dialogue crystal.
+  const camp = layout.endPortalPos;
+  for (const [index, side] of [-1, 1].entries()) {
+    const x = camp.x + side * 10; const z = camp.z + index * 4;
+    const house = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), stone); house.position.set(x, 1.2, z);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(3.5, 2.3, 4), leaves); roof.position.set(x, 3.7, z); roof.rotation.y = Math.PI / 4;
+    const window = new THREE.Mesh(new THREE.PlaneGeometry(.8, 1), glow); window.position.set(x, 1.7, z + 2.02);
+    house.castShadow = true; roof.castShadow = true; group.add(house, roof, window);
+  }
+  const campSign = worldLabel('Bellroad camp · The road continues beyond'); campSign.position.set(camp.x, 4, camp.z + 5); group.add(campSign);
   if (chapter.region === 'ember_coast') {
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(400, 500), new THREE.MeshStandardMaterial({ color: 0x244c5c, metalness: 0.45, roughness: 0.35, transparent: true, opacity: 0.8 }));
-    sea.rotation.x = -Math.PI / 2; sea.position.set(0, -0.65, -130); group.add(sea);
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(width + 100, depth + 100), new THREE.MeshStandardMaterial({ color: 0x244c5c, metalness: 0.45, roughness: 0.35 }));
+    sea.rotation.x = -Math.PI / 2; sea.position.set((Math.min(...xs) + Math.max(...xs)) / 2, -.65, (Math.min(...zs) + Math.max(...zs)) / 2); group.add(sea);
   }
   scene.add(group);
   return group;

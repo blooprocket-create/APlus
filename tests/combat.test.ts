@@ -5,6 +5,10 @@ import { EnemyEntity, GameEngine, GameEngineCallbacks, HudTelemetry } from '../s
 import { PersistenceManager } from '../src/persistence/PersistenceManager';
 import { InMemoryStorageAdapter } from '../src/persistence/StorageAdapter';
 import { CharacterSaveData } from '../src/types/game';
+import { CHRONICLE_CHAPTERS } from '../src/data/chronicle';
+import { advanceChronicle } from '../src/game/CampaignEngine';
+import { FieldPlan } from '../src/game/FieldActivities';
+import { NpcActor, PortalTrigger } from '../src/types/world';
 
 // Keep the real world, input, combat, loot, and persistence logic. Stub only browser rendering.
 vi.mock('three', async importOriginal => {
@@ -20,6 +24,7 @@ vi.mock('../src/rendering/EnvironmentBuilder', () => ({
     buildPreviewScene() {}
     buildChronicle() { return { portals: [], npcs: [] }; }
     buildZone() { return { portals: [], npcs: [] }; }
+    addTravelGate() {} showFieldActivity() {} updateFieldActivity() {}
     update() {}
   },
 }));
@@ -35,6 +40,12 @@ interface EngineState {
   companions: unknown[];
   playerPos: THREE.Vector3;
   nearbyPortal: { targetZone: string; targetSpawnTag: string } | null;
+  activePortals: PortalTrigger[];
+  activeNpcs: NpcActor[];
+  fieldPlan: FieldPlan;
+  portalGraceTimer: number;
+  updatePortalAndNpcProximity(): void;
+  emitHudTelemetry(): void;
   currentZone: string;
   cooldowns: Record<string, number>;
   lootOrbs: Array<{ gold: number }>;
@@ -295,24 +306,90 @@ describe('gameplay integration', () => {
     expect(state.enemies).toHaveLength(0);
   });
 
-  it('travels into the new campaign and resolves an actual nearby memory', async () => {
+  it('starts in town, recovers names through play, then resolves the next nearby memory', async () => {
+    expect(state.currentZone).toBe('starting_town');
+    expect(state.activePortals.some(portal => portal.id === 'bellroad_outbound')).toBe(true);
     expect(await engine.travelToChapter(1)).toBe(false);
     expect(await engine.travelToChapter(0)).toBe(true);
     expect(state.currentZone).toBe('whispering_woods');
-    const site = state.chronicleSites[0];
+    const fieldSite = state.chronicleSites[0];
+    state.playerPos.set(fieldSite.position.x, 0, fieldSite.position.z);
+    expect(engine.resolveChronicleInteraction(fieldSite.id).advanced).toBe(false);
+    for (const point of state.fieldPlan.points) {
+      state.playerPos.set(point.x, 0, point.z);
+      state.updateGameplay(0.01);
+    }
+    expect(state.activeCharacter.campaign!.objectiveIndex).toBe(1);
+    const site = state.chronicleSites[1];
     state.playerPos.set(site.position.x, 0, site.position.z);
     state.updateGameplay(0.01);
     expect(engine.interactWithNearbyQuestNpc()).toBe(true);
     expect(callbacks.onChronicleInteraction).toHaveBeenCalled();
     expect(engine.resolveChronicleInteraction(site.id).advanced).toBe(true);
-    expect(state.activeCharacter.campaign!.objectiveIndex).toBe(1);
+    expect(state.activeCharacter.campaign!.objectiveIndex).toBe(2);
     expect(engine.resolveChronicleInteraction(site.id).advanced).toBe(false);
     await engine.saveActiveCharacterNow();
     const saved = engine.getActiveCharacter()!;
     engine.setPreviewCharacter('warrior');
     engine.startGameplayWithCharacter(saved);
     expect(state.currentZone).toBe('whispering_woods');
-    expect(state.activeCharacter.campaign!.objectiveIndex).toBe(1);
+    expect(state.activeCharacter.campaign!.objectiveIndex).toBe(2);
+  });
+
+  it('keeps the original town quest available through its touch action', () => {
+    state.activeNpcs = [{ id: 'npc_commander_vael', name: 'Vael', role: 'Commander', dialogue: 'The north road is open.', position: { x: 0, z: 0 }, colorHex: 0xffffff }];
+    state.playerPos.set(0, 0, 0); state.updatePortalAndNpcProximity(); state.emitHudTelemetry();
+    expect(latestHud.questView.objectiveTitle).toContain('east Bellroad');
+    expect(latestHud.questView.actionButtonLabel).toBeTruthy();
+    expect(engine.interactWithNearbyQuestNpc()).toBe(true);
+    expect(state.activeCharacter.questState!.stage).not.toBe('not_started');
+  });
+
+  it('walks from town into the campaign and from a completed chapter into the next without an atlas', async () => {
+    const walkThrough = async (id: string, check: () => void) => {
+      const portal = state.activePortals.find(candidate => candidate.id === id)!;
+      expect(portal).toBeTruthy();
+      state.playerPos.set(portal.position.x, 0, portal.position.z);
+      state.portalGraceTimer = 0;
+      state.updatePortalAndNpcProximity();
+      await vi.waitFor(check);
+      await vi.waitFor(() => expect(engine.isPaused).toBe(false));
+    };
+    await walkThrough('bellroad_outbound', () => expect(state.currentZone).toBe('whispering_woods'));
+    expect(state.activeCharacter.campaign!.chapterIndex).toBe(0);
+    // Every chapter continues through a physical road, including each regional town stop.
+    for (let index = 0; index < CHRONICLE_CHAPTERS.length; index++) {
+      const chapter = CHRONICLE_CHAPTERS[index];
+      const forward = state.activePortals.find(portal => portal.id === 'bellroad_forward')!;
+      state.nearbyPortal = forward;
+      expect(engine.tryTraverseNearbyPortal()).toBe(false);
+      for (const objective of chapter.objectives) advanceChronicle(state.activeCharacter, objective.id, objective.answer ?? (objective.options ? 0 : undefined));
+      const next = CHRONICLE_CHAPTERS[index + 1];
+      if (!next) await walkThrough('bellroad_forward', () => expect(state.currentZone).toBe('starting_town'));
+      else if (next.region === chapter.region) await walkThrough('bellroad_forward', () => expect(state.activeCharacter.campaign!.chapterIndex).toBe(index + 1));
+      else {
+        await walkThrough('bellroad_forward', () => expect(state.currentZone).toBe('market_crossing'));
+        await walkThrough('bellroad_outbound', () => expect(state.activeCharacter.campaign!.chapterIndex).toBe(index + 1));
+        expect(state.currentZone).toBe(next.region);
+      }
+    }
+    expect(state.activeCharacter.campaign!.completedChapterIds).toHaveLength(12);
+  });
+
+  it('preserves a procedural chapter and partial recovery when walking to town and back', async () => {
+    await engine.travelToChapter(0);
+    const plan = state.fieldPlan;
+    state.playerPos.set(plan.points[0].x, 0, plan.points[0].z); state.updateGameplay(.01);
+    const seed = state.activeCharacter.campaign!.worldSeeds![CHRONICLE_CHAPTERS[0].id];
+    const returned = state.activePortals.find(portal => portal.id === 'bellroad_return')!;
+    state.nearbyPortal = returned;
+    expect(engine.tryTraverseNearbyPortal()).toBe(true);
+    await vi.waitFor(() => expect(state.currentZone).toBe('starting_town'));
+    await vi.waitFor(() => expect(engine.isPaused).toBe(false));
+    expect(await engine.travelToChapter(0)).toBe(true);
+    expect(state.activeCharacter.campaign!.worldSeeds![CHRONICLE_CHAPTERS[0].id]).toBe(seed);
+    expect(state.fieldPlan.points).toEqual(plan.points);
+    expect(state.activeCharacter.campaign!.fieldProgress![plan.id].collected).toEqual([0]);
   });
 
   it('reports a failed save without breaking later saves', async () => {

@@ -135,6 +135,9 @@ export function clampToProceduralPath(
   layout: ProceduralPathLayout,
   margin = 0.45
 ): { x: number; z: number; progress: number; closestSegmentIndex: number } {
+  // Clearings are walkable discs even where a different, narrower road passes nearby.
+  const clearing = layout.waypoints.find(point => Math.hypot(x - point.x, z - point.z) <= point.radius - margin);
+  if (clearing) return { x, z, progress: Math.max(0, Math.min(1, clearing.distanceFromStart / Math.max(1, layout.totalDistance))), closestSegmentIndex: Math.max(0, clearing.index - 1) };
   let bestDistSq = Infinity;
   let bestClosestX = layout.waypoints[0].x;
   let bestClosestZ = layout.waypoints[0].z;
