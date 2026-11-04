@@ -11,6 +11,34 @@ export class IsometricCameraController {
   private readonly baseOffset = new THREE.Vector3(0, 14.5, 13.5);
   private readonly previewPosition = new THREE.Vector3(0, 2.15, 4.95);
   private readonly previewLookAt = new THREE.Vector3(0, 1.1, 0);
+  private cutsceneShot: {
+    cameraOffset: THREE.Vector3;
+    lookAtOffset: THREE.Vector3;
+  } | null = null;
+
+  public setCutsceneShot(
+    shot: {
+      cameraOffset: { x: number; y: number; z: number };
+      lookAtOffset: { x: number; y: number; z: number };
+    } | null
+  ): void {
+    if (!shot) {
+      this.cutsceneShot = null;
+    } else {
+      this.cutsceneShot = {
+        cameraOffset: new THREE.Vector3(
+          shot.cameraOffset.x,
+          shot.cameraOffset.y,
+          shot.cameraOffset.z
+        ),
+        lookAtOffset: new THREE.Vector3(
+          shot.lookAtOffset.x,
+          shot.lookAtOffset.y,
+          shot.lookAtOffset.z
+        ),
+      };
+    }
+  }
 
   constructor() {
     this.camera = new THREE.PerspectiveCamera(
@@ -81,6 +109,15 @@ export class IsometricCameraController {
     targetPos: THREE.Vector3,
     moveDir: THREE.Vector2
   ): void {
+    if (this.cutsceneShot) {
+      const desiredFocus = targetPos.clone().add(this.cutsceneShot.lookAtOffset);
+      const desiredPos = targetPos.clone().add(this.cutsceneShot.cameraOffset);
+      this.currentFocus.lerp(desiredFocus, Math.min(1, dt * 6.5));
+      this.camera.position.lerp(desiredPos, Math.min(1, dt * 6.5));
+      this.camera.lookAt(this.currentFocus);
+      return;
+    }
+
     const lookAheadX = moveDir.x * 1.45;
     const lookAheadZ = moveDir.y * 1.45;
 

@@ -9,16 +9,36 @@ import {
   CANONICAL_HERO_NAMES,
   getCompanionClassesForPlayer,
 } from '../game/QuestEngine';
+import {
+  COMPANION_STANCE_INFO,
+  ensureCompanionConfigs,
+  ensureSkillRunes,
+  ManagementSystem,
+  SKILL_RUNE_CATALOG,
+} from '../game/ManagementSystem';
 import { ActionId } from '../input/InputManager';
 import { PersistenceManager } from '../persistence/PersistenceManager';
 import {
   AccountProfile,
+  BasicRuneId,
   CharacterClassId,
   CharacterSlotIndex,
   CharacterSaveData,
+  CompanionTacticalStance,
+  CutsceneId,
   MAX_CHARACTERS_PER_ACCOUNT,
+  Skill1RuneId,
+  Skill2RuneId,
+  UltimateRuneId,
   ZoneId,
 } from '../types/game';
+import {
+  buildCutsceneScript,
+  CUTSCENE_CATALOG_META,
+  CutsceneDirector,
+} from './CutsceneDirector';
+
+export type CommandDeckTab = 'inventory' | 'companions' | 'abilities' | 'cutscenes';
 
 const DEFAULT_NAMES: Record<CharacterClassId, string> = {
   warrior: 'Brynhildr',
@@ -49,6 +69,14 @@ export class UIManager {
   private creationClassId: CharacterClassId = 'warrior';
   private creationNameDraft = DEFAULT_NAMES.warrior;
   private errorMessage: string | null = null;
+  private cutsceneDirector = new CutsceneDirector();
+
+  // Command Deck Modal State
+  private deckTab: CommandDeckTab = 'inventory';
+  private invFilter: 'all' | 'weapon' | 'charm' = 'all';
+  private invSort: 'power' | 'rarity' | 'attack' = 'power';
+  private inspectedItemId: string | null = null;
+  private deckFeedbackMsg: string | null = null;
 
   // Live HUD DOM elements for fast 60fps updates without full DOM rebuilds
   private hudRefs: {
@@ -555,10 +583,19 @@ export class UIManager {
 
           <div class="hud-top-right">
             <div class="hud-btn-group">
-              <button id="btn-hero-sheet" class="btn-anime btn-cyan" style="padding:7px 11px;font-size:0.74rem;">
-                🎒 Gear &amp; Stats
+              <button id="btn-hero-sheet" class="btn-anime btn-cyan" style="padding:6px 10px;font-size:0.7rem;">
+                🎒 Inventory
               </button>
-              <button id="btn-char-select" class="btn-anime" style="padding:7px 11px;font-size:0.74rem;">
+              <button id="btn-comp-sheet" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
+                🤝 Companions
+              </button>
+              <button id="btn-ability-sheet" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
+                ⚡ Abilities
+              </button>
+              <button id="btn-cutscenes-sheet" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
+                🎬 Story
+              </button>
+              <button id="btn-char-select" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
                 ⇄ Heroes
               </button>
             </div>
@@ -697,12 +734,23 @@ export class UIManager {
 
     // Top-right HUD buttons
     this.root.querySelector('#btn-char-select')?.addEventListener('click', async () => {
+      this.cutsceneDirector.stop();
+      this.engine.setCutsceneCameraShot(null);
       await this.engine.saveActiveCharacterNow();
       await this.showCharacterSelectScreen();
     });
 
     this.root.querySelector('#btn-hero-sheet')?.addEventListener('click', () => {
-      this.openHeroInventoryModal();
+      this.openCommandDeckModal('inventory');
+    });
+    this.root.querySelector('#btn-comp-sheet')?.addEventListener('click', () => {
+      this.openCommandDeckModal('companions');
+    });
+    this.root.querySelector('#btn-ability-sheet')?.addEventListener('click', () => {
+      this.openCommandDeckModal('abilities');
+    });
+    this.root.querySelector('#btn-cutscenes-sheet')?.addEventListener('click', () => {
+      this.openCommandDeckModal('cutscenes');
     });
 
     this.hudRefs.portalBtn.addEventListener('click', () => {
@@ -717,74 +765,512 @@ export class UIManager {
     this.engine.startGameplayWithCharacter(character, accountRoster);
   }
 
-  private openHeroInventoryModal(): void {
+  public playCutscene(cutsceneId: CutsceneId): void {
+    const char = this.engine.getActiveCharacter();
+    if (!char) return;
+
+    const script = buildCutsceneScript(char ? cutsceneId : 'prologue_triad_awakening', char);
+    this.cutsceneDirector.play(
+      this.root,
+      script,
+      (frame) => {
+        this.engine.setCutsceneCameraShot(
+          {
+            cameraOffset: frame.cameraOffset,
+            lookAtOffset: frame.lookAtOffset,
+          },
+          frame.vfxBurst
+        );
+      },
+      () => {
+        this.engine.setCutsceneCameraShot(null);
+      }
+    );
+  }
+
+  public openCommandDeckModal(initialTab?: CommandDeckTab): void {
+    if (initialTab) {
+      this.deckTab = initialTab;
+      this.deckFeedbackMsg = null;
+    }
+
+    const existing = this.root.querySelector('#command-deck-modal');
+    if (existing) existing.remove();
+
     const char = this.engine.getActiveCharacter();
     if (!char) return;
     const stats = computeEffectiveStats(char);
     const pwr = computePowerRating(char);
+    const cDef = CHARACTER_CLASSES[char.classId];
+    const [comp1Class, comp2Class] = getCompanionClassesForPlayer(char.classId);
 
     const modal = document.createElement('div');
+    modal.id = 'command-deck-modal';
     modal.className = 'modal-backdrop';
 
-    const itemsHtml = char.inventory
-      .map((item) => {
-        const isEquipped =
-          char.equipped.weapon?.id === item.id || char.equipped.charm?.id === item.id;
-        return `
-          <div class="inv-item ${isEquipped ? 'equipped' : ''}" data-item-id="${item.id}">
-            <div style="font-weight:800;" class="rarity-${item.rarity}">
-              ${item.icon} ${this.escapeHtml(item.name)}
+    let tabBodyHtml = '';
+
+    if (this.deckTab === 'inventory') {
+      const sortedItems = ManagementSystem.sortAndFilterInventory(
+        char.inventory,
+        this.invFilter,
+        this.invSort
+      );
+      if (!this.inspectedItemId || !char.inventory.some((i) => i.id === this.inspectedItemId)) {
+        this.inspectedItemId = sortedItems[0]?.id ?? null;
+      }
+      const inspected = char.inventory.find((i) => i.id === this.inspectedItemId) ?? null;
+
+      let inspectorHtml = '';
+      if (inspected) {
+        const currentEquippedInSlot =
+          inspected.slot === 'weapon' ? char.equipped.weapon : char.equipped.charm;
+        const delta = ManagementSystem.compareWithEquipped(inspected, currentEquippedInSlot);
+        const upgLv = inspected.upgradeLevel ?? 0;
+        const goldCost = 80 + upgLv * 65;
+        const crystalCost = 8 + upgLv * 5;
+        const fmtDelta = (val: number, suffix = '') =>
+          val > 0
+            ? `<span style="color:#80ed99">(+${val}${suffix})</span>`
+            : val < 0
+              ? `<span style="color:#ff4d6d">(${val}${suffix})</span>`
+              : `<span style="color:#9aa5ce">(0${suffix})</span>`;
+
+        inspectorHtml = `
+          <div class="inspector-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <div style="font-weight:900;font-size:0.88rem;" class="rarity-${inspected.rarity}">
+                ${inspected.icon} ${this.escapeHtml(inspected.name)} ${upgLv > 0 ? `[+${upgLv}]` : ''}
+                ${inspected.locked ? '🔒' : ''}
+              </div>
+              <span class="slot-counter">${inspected.rarity.toUpperCase()} ${inspected.slot.toUpperCase()}</span>
             </div>
-            <div style="color:var(--text-muted);font-size:0.68rem;">
-              ${item.slot.toUpperCase()} • +${item.attackBonus} ATK • +${item.maxHpBonus} HP
+            <div style="font-size:0.74rem;color:#fff;margin-bottom:8px;">
+              ATK: <strong>+${inspected.attackBonus}</strong> ${fmtDelta(delta.attackDelta)} •
+              HP: <strong>+${inspected.maxHpBonus}</strong> ${fmtDelta(delta.hpDelta)} •
+              CRIT: <strong>+${Math.round(inspected.critRateBonus * 100)}%</strong>
             </div>
-            <div style="font-size:0.66rem;color:var(--accent-gold);margin-top:2px;">
-              ${isEquipped ? '★ EQUIPPED' : 'Tap to Equip'}
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <button id="act-equip-hero" class="btn-anime btn-primary" style="padding:6px 10px;font-size:0.7rem;">
+                ★ Equip on ${this.escapeHtml(char.name)}
+              </button>
+              <button id="act-equip-comp1" class="btn-anime btn-cyan" style="padding:6px 10px;font-size:0.7rem;">
+                🤝 Give to ${CANONICAL_HERO_NAMES[comp1Class]}
+              </button>
+              <button id="act-equip-comp2" class="btn-anime btn-cyan" style="padding:6px 10px;font-size:0.7rem;">
+                🤝 Give to ${CANONICAL_HERO_NAMES[comp2Class]}
+              </button>
+              <button id="act-starforge" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;border-color:var(--accent-gold);">
+                🔨 Starforge +${upgLv + 1} (${goldCost}G / ${crystalCost}✦)
+              </button>
+              <button id="act-lock-item" class="btn-anime" style="padding:6px 10px;font-size:0.7rem;">
+                ${inspected.locked ? '🔓 Unlock' : '🔒 Lock'}
+              </button>
+              <button id="act-salvage-item" class="btn-anime btn-danger" style="padding:6px 10px;font-size:0.7rem;">
+                ♻️ Salvage
+              </button>
             </div>
           </div>
         `;
-      })
-      .join('');
+      }
+
+      const compConfigs = ensureCompanionConfigs(char);
+      const itemsGridHtml = sortedItems
+        .map((item) => {
+          const isHeroEq =
+            char.equipped.weapon?.id === item.id || char.equipped.charm?.id === item.id;
+          const isComp1Eq =
+            compConfigs[comp1Class].equipped.weapon?.id === item.id ||
+            compConfigs[comp1Class].equipped.charm?.id === item.id;
+          const isComp2Eq =
+            compConfigs[comp2Class].equipped.weapon?.id === item.id ||
+            compConfigs[comp2Class].equipped.charm?.id === item.id;
+          const isSelected = item.id === this.inspectedItemId;
+          const upg = item.upgradeLevel ? ` +${item.upgradeLevel}` : '';
+          let badge = 'Tap to Inspect';
+          if (isHeroEq) badge = `★ EQUIPPED (${char.name})`;
+          else if (isComp1Eq) badge = `🤝 EQUIPPED (${CANONICAL_HERO_NAMES[comp1Class]})`;
+          else if (isComp2Eq) badge = `🤝 EQUIPPED (${CANONICAL_HERO_NAMES[comp2Class]})`;
+
+          return `
+            <div class="inv-item ${isHeroEq || isComp1Eq || isComp2Eq ? 'equipped' : ''}"
+                 style="${isSelected ? 'outline:2px solid #4cc9f0;' : ''}"
+                 data-item-id="${item.id}">
+              <div style="font-weight:800;" class="rarity-${item.rarity}">
+                ${item.icon} ${this.escapeHtml(item.name)}${upg} ${item.locked ? '🔒' : ''}
+              </div>
+              <div style="color:var(--text-muted);font-size:0.68rem;">
+                ${item.slot.toUpperCase()} • +${item.attackBonus} ATK • +${item.maxHpBonus} HP
+              </div>
+              <div style="font-size:0.65rem;color:var(--accent-gold);margin-top:2px;">
+                ${badge}
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+
+      tabBodyHtml = `
+        <div class="stat-grid">
+          <div class="stat-box"><span>Max HP / DEF</span><span>${stats.maxHp} / ${stats.defense}</span></div>
+          <div class="stat-box"><span>Attack / Crit</span><span>${stats.attack} / ${Math.round(stats.critRate * 100)}%</span></div>
+          <div class="stat-box"><span>Equipped Weapon</span><span>${char.equipped.weapon?.name ?? 'None'}</span></div>
+          <div class="stat-box"><span>Equipped Charm</span><span>${char.equipped.charm?.name ?? 'None'}</span></div>
+        </div>
+        ${inspectorHtml}
+        <div class="filter-bar">
+          <div style="display:flex;gap:4px;">
+            <button class="pill-btn ${this.invFilter === 'all' ? 'active' : ''}" data-filter="all">All (${char.inventory.length})</button>
+            <button class="pill-btn ${this.invFilter === 'weapon' ? 'active' : ''}" data-filter="weapon">Weapons</button>
+            <button class="pill-btn ${this.invFilter === 'charm' ? 'active' : ''}" data-filter="charm">Charms</button>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="pill-btn ${this.invSort === 'power' ? 'active' : ''}" data-sort="power">Sort: Power</button>
+            <button class="pill-btn ${this.invSort === 'rarity' ? 'active' : ''}" data-sort="rarity">Rarity</button>
+            <button id="btn-bulk-salvage" class="pill-btn" style="border-color:#ff4d6d;color:#ffb3c1;">
+              ♻️ Salvage Unwanted
+            </button>
+          </div>
+        </div>
+        <div class="inv-grid">${itemsGridHtml}</div>
+      `;
+    } else if (this.deckTab === 'companions') {
+      const compConfigs = ensureCompanionConfigs(char);
+      const companionCardsHtml = ([comp1Class, comp2Class] as CharacterClassId[])
+        .map((cClass) => {
+          const compDef = CHARACTER_CLASSES[cClass];
+          const cfg = compConfigs[cClass];
+          const cName = CANONICAL_HERO_NAMES[cClass];
+          const bondBonusPct = (cfg.bondLevel - 1) * 12;
+          const goldCost = 100 * cfg.bondLevel;
+          const crystalCost = 12 * cfg.bondLevel;
+
+          const stancesHtml = (['aggressive', 'balanced', 'support'] as CompanionTacticalStance[])
+            .map((st) => {
+              const info = COMPANION_STANCE_INFO[st];
+              return `
+                <div class="choice-card ${cfg.stance === st ? 'active' : ''}"
+                     data-comp-stance="${cClass}:${st}">
+                  <div style="font-weight:800;color:#fff;margin-bottom:2px;">${info.label}</div>
+                  <div style="color:var(--text-muted);font-size:0.63rem;">${info.description}</div>
+                </div>
+              `;
+            })
+            .join('');
+
+          return `
+            <div class="companion-mgmt-card" style="border-left:4px solid ${compDef.elementColor}">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <div>
+                  <span style="font-weight:900;font-size:0.9rem;color:${compDef.elementColor}">
+                    ${compDef.starterWeapon.icon} ${cName} — ${compDef.archetypeLabel}
+                  </span>
+                  <div style="font-size:0.68rem;color:var(--text-muted);">
+                    Bond Rank <strong>Lv.${cfg.bondLevel}/10</strong> (+${bondBonusPct}% Companion Damage) •
+                    Weapon: <strong>${cfg.equipped.weapon?.name ?? compDef.starterWeapon.name}</strong> •
+                    Charm: <strong>${cfg.equipped.charm?.name ?? 'None'}</strong>
+                  </div>
+                </div>
+                <button class="btn-anime btn-cyan" data-train-comp="${cClass}" style="padding:6px 10px;font-size:0.68rem;">
+                  ⬆️ Train Bond (${goldCost}G / ${crystalCost}✦)
+                </button>
+              </div>
+              <div style="font-size:0.68rem;color:var(--accent-gold);font-weight:800;">
+                AI TACTICAL STANCE:
+              </div>
+              <div class="stance-row">${stancesHtml}</div>
+            </div>
+          `;
+        })
+        .join('');
+
+      tabBodyHtml = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <p style="font-size:0.75rem;color:var(--text-muted);">
+            Configure your two active Eclipse Triad companions' AI combat stances, bond ranks, and synchronized bursts.
+          </p>
+          <button id="btn-trigger-synergy" class="btn-anime btn-primary" style="padding:8px 14px;font-size:0.72rem;">
+            ⚡ Trigger Triad Synergy Burst
+          </button>
+        </div>
+        ${companionCardsHtml}
+      `;
+    } else if (this.deckTab === 'abilities') {
+      const runes = ensureSkillRunes(char);
+      const skillEntries: Array<{
+        key: 'basic' | 'skill1' | 'skill2' | 'ultimate';
+        runeMap: Record<string, { id: string; name: string; effectSummary: string }>;
+        selectedRune: string;
+      }> = [
+        { key: 'basic', runeMap: SKILL_RUNE_CATALOG.basic, selectedRune: runes.basic },
+        { key: 'skill1', runeMap: SKILL_RUNE_CATALOG.skill1, selectedRune: runes.skill1 },
+        { key: 'skill2', runeMap: SKILL_RUNE_CATALOG.skill2, selectedRune: runes.skill2 },
+        { key: 'ultimate', runeMap: SKILL_RUNE_CATALOG.ultimate, selectedRune: runes.ultimate },
+      ];
+
+      tabBodyHtml = skillEntries
+        .map(({ key, runeMap, selectedRune }) => {
+          const sk = cDef.skills[key];
+          const lv = char.skillLevels[key];
+          const goldCost = 90 * lv;
+          const crystalCost = 10 * lv;
+
+          const runeCards = Object.values(runeMap)
+            .map(
+              (r) => `
+              <div class="choice-card ${r.id === selectedRune ? 'active' : ''}"
+                   data-skill-rune="${key}:${r.id}">
+                <div style="font-weight:800;color:var(--accent-gold);margin-bottom:2px;">
+                  ✦ ${r.name} ${r.id === selectedRune ? '(ACTIVE)' : ''}
+                </div>
+                <div style="color:#f8f9fa;font-size:0.65rem;">${r.effectSummary}</div>
+              </div>
+            `
+            )
+            .join('');
+
+          return `
+            <div class="ability-mgmt-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <div>
+                  <span style="font-weight:900;font-size:0.86rem;color:#fff;">
+                    ${sk.name} <span style="color:var(--accent-cyan)">[Rank Lv.${lv}]</span>
+                  </span>
+                  <div style="font-size:0.68rem;color:var(--text-muted);">${sk.description}</div>
+                </div>
+                <button class="btn-anime btn-primary" data-upgrade-skill="${key}" style="padding:6px 10px;font-size:0.68rem;">
+                  ⬆️ Rank Up (${goldCost}G / ${crystalCost}✦)
+                </button>
+              </div>
+              <div class="rune-row">${runeCards}</div>
+            </div>
+          `;
+        })
+        .join('');
+    } else {
+      // Cutscenes Theatre Tab
+      const seenSet = new Set(char.seenCutscenes ?? []);
+      tabBodyHtml = `
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:10px;">
+          Watch or replay full widescreen 3D Anime Story Cinematics starring ${this.escapeHtml(char.name)} and the Eclipse Triad companions:
+        </p>
+        <div class="slot-list">
+          ${CUTSCENE_CATALOG_META.map(
+            (ep) => `
+            <div class="char-slot-card" data-play-cutscene="${ep.id}">
+              <div class="slot-left">
+                <div class="slot-badge">🎬</div>
+                <div class="slot-info">
+                  <h4>${ep.episodeLabel} — ${ep.title}</h4>
+                  <p>${ep.zoneLabel} • ${seenSet.has(ep.id) ? '✓ Viewed' : 'Unlocked'}</p>
+                </div>
+              </div>
+              <button class="btn-anime btn-primary" style="padding:6px 12px;font-size:0.72rem;">
+                ▶ PLAY CINEMATIC
+              </button>
+            </div>
+          `
+          ).join('')}
+        </div>
+      `;
+    }
 
     modal.innerHTML = `
       <div class="modal-card">
         <div class="panel-header">
-          <span class="panel-title">${this.escapeHtml(char.name)} // Lv.${char.level} (⚡ ${pwr})</span>
+          <span class="panel-title">
+            ${cDef.starterWeapon.icon} ${this.escapeHtml(char.name)} // Lv.${char.level} (⚡ ${pwr} • 🪙 ${char.gold}G • ✦ ${char.aetherCrystals})
+          </span>
           <button id="btn-close-inv" class="btn-anime" style="padding:4px 9px;">✕</button>
         </div>
-        <div class="stat-grid">
-          <div class="stat-box"><span>Max HP</span><span>${stats.maxHp}</span></div>
-          <div class="stat-box"><span>Attack</span><span>${stats.attack}</span></div>
-          <div class="stat-box"><span>Defense</span><span>${stats.defense}</span></div>
-          <div class="stat-box"><span>Crit Rate</span><span>${Math.round(stats.critRate * 100)}%</span></div>
+
+        <div class="deck-tabs">
+          <div class="deck-tab ${this.deckTab === 'inventory' ? 'active' : ''}" data-deck-tab="inventory">
+            🎒 Inventory (${char.inventory.length}/24)
+          </div>
+          <div class="deck-tab ${this.deckTab === 'companions' ? 'active' : ''}" data-deck-tab="companions">
+            🤝 Companions (2)
+          </div>
+          <div class="deck-tab ${this.deckTab === 'abilities' ? 'active' : ''}" data-deck-tab="abilities">
+            ⚡ Abilities &amp; Runes
+          </div>
+          <div class="deck-tab ${this.deckTab === 'cutscenes' ? 'active' : ''}" data-deck-tab="cutscenes">
+            🎬 Story Cutscenes
+          </div>
         </div>
-        <div class="panel-header" style="margin-top:10px;">
-          <span class="panel-title">Astral Inventory (${char.inventory.length}/24)</span>
-          <button id="btn-manual-save" class="btn-anime btn-cyan" style="padding:4px 10px;font-size:0.7rem;">
-            💾 Save Now
-          </button>
-        </div>
-        <div class="inv-grid">
-          ${itemsHtml}
-        </div>
+
+        ${
+          this.deckFeedbackMsg
+            ? `<div style="background:rgba(76,201,240,0.16);border:1px solid var(--accent-cyan);padding:6px 10px;border-radius:7px;font-size:0.74rem;color:#fff;margin-bottom:8px;font-weight:700;">✦ ${this.escapeHtml(this.deckFeedbackMsg)}</div>`
+            : ''
+        }
+
+        ${tabBodyHtml}
       </div>
     `;
 
     this.root.appendChild(modal);
 
     modal.querySelector('#btn-close-inv')?.addEventListener('click', () => modal.remove());
-    modal.querySelector('#btn-manual-save')?.addEventListener('click', async (e) => {
-      await this.engine.saveActiveCharacterNow();
-      const btn = e.currentTarget as HTMLButtonElement;
-      btn.textContent = '✓ Saved!';
+
+    modal.querySelectorAll<HTMLElement>('[data-deck-tab]').forEach((tabEl) => {
+      tabEl.addEventListener('click', () => {
+        this.deckTab = tabEl.dataset.deckTab as CommandDeckTab;
+        this.deckFeedbackMsg = null;
+        this.openCommandDeckModal();
+      });
     });
 
+    // Inventory Tab bindings
     modal.querySelectorAll<HTMLElement>('[data-item-id]').forEach((el) => {
-      el.addEventListener('click', async () => {
-        const itemId = el.dataset.itemId!;
-        await this.engine.equipInventoryItem(itemId);
+      el.addEventListener('click', () => {
+        this.inspectedItemId = el.dataset.itemId!;
+        this.deckFeedbackMsg = null;
+        this.openCommandDeckModal();
+      });
+    });
+
+    modal.querySelectorAll<HTMLElement>('[data-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.invFilter = btn.dataset.filter as 'all' | 'weapon' | 'charm';
+        this.openCommandDeckModal();
+      });
+    });
+
+    modal.querySelectorAll<HTMLElement>('[data-sort]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.invSort = btn.dataset.sort as 'power' | 'rarity' | 'attack';
+        this.openCommandDeckModal();
+      });
+    });
+
+    modal.querySelector('#act-equip-hero')?.addEventListener('click', async () => {
+      if (!this.inspectedItemId) return;
+      await this.engine.equipInventoryItem(this.inspectedItemId);
+      this.deckFeedbackMsg = 'Equipped item on active Hero!';
+      this.openCommandDeckModal();
+    });
+
+    modal.querySelector('#act-equip-comp1')?.addEventListener('click', async () => {
+      if (!this.inspectedItemId) return;
+      await this.engine.mutateActiveCharacter((c) => {
+        const res = ManagementSystem.equipItemOnCompanion(c, comp1Class, this.inspectedItemId!);
+        this.deckFeedbackMsg = res.message;
+      });
+      this.openCommandDeckModal();
+    });
+
+    modal.querySelector('#act-equip-comp2')?.addEventListener('click', async () => {
+      if (!this.inspectedItemId) return;
+      await this.engine.mutateActiveCharacter((c) => {
+        const res = ManagementSystem.equipItemOnCompanion(c, comp2Class, this.inspectedItemId!);
+        this.deckFeedbackMsg = res.message;
+      });
+      this.openCommandDeckModal();
+    });
+
+    modal.querySelector('#act-starforge')?.addEventListener('click', async () => {
+      if (!this.inspectedItemId) return;
+      await this.engine.mutateActiveCharacter((c) => {
+        const res = ManagementSystem.upgradeItemStarforge(c, this.inspectedItemId!);
+        this.deckFeedbackMsg = res.message;
+      });
+      this.openCommandDeckModal();
+    });
+
+    modal.querySelector('#act-lock-item')?.addEventListener('click', async () => {
+      if (!this.inspectedItemId) return;
+      await this.engine.mutateActiveCharacter((c) => {
+        const locked = ManagementSystem.toggleLockItem(c, this.inspectedItemId!);
+        this.deckFeedbackMsg = locked ? 'Item locked.' : 'Item unlocked.';
+      });
+      this.openCommandDeckModal();
+    });
+
+    modal.querySelector('#act-salvage-item')?.addEventListener('click', async () => {
+      if (!this.inspectedItemId) return;
+      await this.engine.mutateActiveCharacter((c) => {
+        const res = ManagementSystem.salvageItem(c, this.inspectedItemId!);
+        this.deckFeedbackMsg = res.message;
+      });
+      this.openCommandDeckModal();
+    });
+
+    modal.querySelector('#btn-bulk-salvage')?.addEventListener('click', async () => {
+      await this.engine.mutateActiveCharacter((c) => {
+        const res = ManagementSystem.salvageBulkByRarity(c, 'rare');
+        this.deckFeedbackMsg =
+          res.count > 0
+            ? `Bulk salvaged ${res.count} items for +${res.goldGained}G & +${res.crystalsGained}✦!`
+            : 'No unequipped, unlocked Common/Rare items to salvage.';
+      });
+      this.openCommandDeckModal();
+    });
+
+    // Companions Tab bindings
+    modal.querySelectorAll<HTMLElement>('[data-comp-stance]').forEach((card) => {
+      card.addEventListener('click', async () => {
+        const [cClass, stance] = card.dataset.compStance!.split(':') as [
+          CharacterClassId,
+          CompanionTacticalStance,
+        ];
+        await this.engine.mutateActiveCharacter((c) => {
+          ManagementSystem.setCompanionStance(c, cClass, stance);
+          this.deckFeedbackMsg = `Updated ${CANONICAL_HERO_NAMES[cClass]}'s stance to ${COMPANION_STANCE_INFO[stance].label}!`;
+        });
+        this.openCommandDeckModal();
+      });
+    });
+
+    modal.querySelectorAll<HTMLElement>('[data-train-comp]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const cClass = btn.dataset.trainComp as CharacterClassId;
+        await this.engine.mutateActiveCharacter((c) => {
+          const res = ManagementSystem.trainCompanionBond(c, cClass);
+          this.deckFeedbackMsg = res.message;
+        });
+        this.openCommandDeckModal();
+      });
+    });
+
+    modal.querySelector('#btn-trigger-synergy')?.addEventListener('click', () => {
+      this.engine.triggerCompanionSynergyBurst();
+      modal.remove();
+    });
+
+    // Abilities Tab bindings
+    modal.querySelectorAll<HTMLElement>('[data-upgrade-skill]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.upgradeSkill as 'basic' | 'skill1' | 'skill2' | 'ultimate';
+        await this.engine.mutateActiveCharacter((c) => {
+          const res = ManagementSystem.upgradeAbilityRank(c, key);
+          this.deckFeedbackMsg = res.message;
+        });
+        this.openCommandDeckModal();
+      });
+    });
+
+    modal.querySelectorAll<HTMLElement>('[data-skill-rune]').forEach((card) => {
+      card.addEventListener('click', async () => {
+        const [skillKey, runeId] = card.dataset.skillRune!.split(':');
+        await this.engine.mutateActiveCharacter((c) => {
+          const r = ensureSkillRunes(c);
+          if (skillKey === 'basic') r.basic = runeId as BasicRuneId;
+          else if (skillKey === 'skill1') r.skill1 = runeId as Skill1RuneId;
+          else if (skillKey === 'skill2') r.skill2 = runeId as Skill2RuneId;
+          else if (skillKey === 'ultimate') r.ultimate = runeId as UltimateRuneId;
+          this.deckFeedbackMsg = `Activated Mastery Rune: ${runeId.toUpperCase()}!`;
+        });
+        this.openCommandDeckModal();
+      });
+    });
+
+    // Cutscenes Tab bindings
+    modal.querySelectorAll<HTMLElement>('[data-play-cutscene]').forEach((row) => {
+      row.addEventListener('click', () => {
+        const cId = row.dataset.playCutscene as CutsceneId;
         modal.remove();
-        this.openHeroInventoryModal();
+        this.engine.triggerCutscene(cId);
       });
     });
   }

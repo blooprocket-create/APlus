@@ -22,6 +22,12 @@ import {
   getCompanionClassesForPlayer,
   QuestEngine,
 } from '../src/game/QuestEngine';
+import {
+  ensureCompanionConfigs,
+  ensureSkillRunes,
+  ManagementSystem,
+} from '../src/game/ManagementSystem';
+import { buildCutsceneScript } from '../src/ui/CutsceneDirector';
 
 describe('PersistenceManager, Classes, Zones & Procedural Stomping Grounds', () => {
   let persistence: PersistenceManager;
@@ -295,5 +301,65 @@ describe('PersistenceManager, Classes, Zones & Procedural Stomping Grounds', () 
     // Verify companion banter reflects the non-selected companions
     const view = QuestEngine.getObjectiveView(quest, 'abyssal_sanctum', null, 'assassin');
     expect(['warrior', 'mage']).toContain(view.companionBanter?.speakerClass);
+  });
+
+  it('supports Inventory Starforge upgrading, locking, companion gear assignment, ability runes, and anime cutscene scripts', async () => {
+    const acc = await persistence.loginOrCreateAccount('commander_test');
+    const char = await persistence.createCharacter({
+      accountId: acc.id,
+      name: 'Akatsuki',
+      classId: 'assassin',
+    });
+
+    char.gold = 2000;
+    char.aetherCrystals = 200;
+
+    // 1. Starforge upgrade equipped weapon
+    const weaponId = char.equipped.weapon!.id;
+    const baseAtk = char.equipped.weapon!.attackBonus;
+    const upgRes = ManagementSystem.upgradeItemStarforge(char, weaponId);
+    expect(upgRes.success).toBe(true);
+    expect(char.equipped.weapon!.upgradeLevel).toBe(1);
+    expect(char.equipped.weapon!.attackBonus).toBeGreaterThan(baseAtk);
+
+    // 2. Add two extra items: lock one, salvage the other
+    const itemLocked = generateLootItem('assassin', 2, 'common');
+    const itemSalvage = generateLootItem('assassin', 2, 'rare');
+    char.inventory.push(itemLocked, itemSalvage);
+
+    ManagementSystem.toggleLockItem(char, itemLocked.id);
+    const failSalvageLocked = ManagementSystem.salvageItem(char, itemLocked.id);
+    expect(failSalvageLocked.success).toBe(false);
+
+    const bulkRes = ManagementSystem.salvageBulkByRarity(char, 'rare');
+    expect(bulkRes.count).toBe(1); // Only the unlocked rare item is salvaged
+    expect(char.inventory.some((i) => i.id === itemLocked.id)).toBe(true);
+
+    // 3. Companion Management: Stance, Bond Training, and Gear Assignment
+    ManagementSystem.setCompanionStance(char, 'warrior', 'support');
+    const bondRes = ManagementSystem.trainCompanionBond(char, 'warrior');
+    expect(bondRes.success).toBe(true);
+    expect(bondRes.newBondLevel).toBe(2);
+
+    const eqCompRes = ManagementSystem.equipItemOnCompanion(char, 'warrior', itemLocked.id);
+    expect(eqCompRes.success).toBe(true);
+    const compConfigs = ensureCompanionConfigs(char);
+    expect(compConfigs.warrior.stance).toBe('support');
+
+    // 4. Ability Management: Rank Up & Rune Selection
+    const abilRes = ManagementSystem.upgradeAbilityRank(char, 'ultimate');
+    expect(abilRes.success).toBe(true);
+    expect(char.skillLevels.ultimate).toBe(2);
+    const runes = ensureSkillRunes(char);
+    runes.ultimate = 'sovereign_exec';
+    expect(char.skillRunes?.ultimate).toBe('sovereign_exec');
+
+    // 5. Anime Cutscene Script generation includes active hero and both companions
+    const script = buildCutsceneScript('prologue_triad_awakening', char);
+    expect(script.frames.length).toBeGreaterThanOrEqual(4);
+    const speakers = script.frames.map((f) => f.speakerName);
+    expect(speakers).toContain('Akatsuki');
+    expect(speakers).toContain('Brynhildr');
+    expect(speakers).toContain('Celestia');
   });
 });

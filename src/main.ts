@@ -18,6 +18,7 @@ async function main(): Promise<void> {
       ui?.showUltimateCutIn(className, skillName, colorCss),
     onLootObtained: () => {},
     onCharacterSaved: () => {},
+    onTriggerCutscene: (cutsceneId) => ui?.playCutscene(cutsceneId),
   });
 
   ui = new UIManager(uiRoot, persistence, engine);

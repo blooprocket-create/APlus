@@ -20,9 +20,42 @@ export interface CompanionStatusView {
   icon: string;
   elementColor: string;
   level: number;
+  bondLevel: number;
+  stance: CompanionTacticalStance;
   actionText: string;
   isFromAccountSlot: boolean;
 }
+
+export type CompanionTacticalStance = 'aggressive' | 'balanced' | 'support';
+
+export interface CompanionConfig {
+  classId: CharacterClassId;
+  stance: CompanionTacticalStance;
+  bondLevel: number;
+  equipped: {
+    weapon: InventoryItem | null;
+    charm: InventoryItem | null;
+  };
+}
+
+export type BasicRuneId = 'gale_tempo' | 'siphon_edge';
+export type Skill1RuneId = 'overcharge' | 'quickcast';
+export type Skill2RuneId = 'twin_cataclysm' | 'aegis_ward';
+export type UltimateRuneId = 'triad_chain' | 'sovereign_exec';
+
+export interface SkillRuneSelection {
+  basic: BasicRuneId;
+  skill1: Skill1RuneId;
+  skill2: Skill2RuneId;
+  ultimate: UltimateRuneId;
+}
+
+export type CutsceneId =
+  | 'prologue_triad_awakening'
+  | 'act1_market_twist'
+  | 'act2_ruins_unsealed'
+  | 'act3_boss_intro'
+  | 'act3_eclipse_sealed';
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'mythic';
 
@@ -43,6 +76,8 @@ export interface InventoryItem {
   maxHpBonus: number;
   critRateBonus: number;
   icon: string;
+  upgradeLevel?: number;
+  locked?: boolean;
 }
 
 export interface CharacterStats {
@@ -139,6 +174,9 @@ export interface CharacterSaveData {
     skill2: number;
     ultimate: number;
   };
+  skillRunes?: SkillRuneSelection;
+  companionConfigs?: Record<CharacterClassId, CompanionConfig>;
+  seenCutscenes?: CutsceneId[];
   createdAt: string;
   updatedAt: string;
 }

@@ -13,12 +13,18 @@ import {
   CharacterSaveData,
   CharacterStats,
   CompanionStatusView,
+  CutsceneId,
   InventoryItem,
   ZoneId,
 } from '../types/game';
 import { NpcActor, PortalTrigger, ProceduralPathLayout } from '../types/world';
 import { QuestObjectiveView } from '../types/quest';
 import { generateLootItem } from './LootSystem';
+import {
+  COMPANION_STANCE_INFO,
+  ensureCompanionConfigs,
+  ensureSkillRunes,
+} from './ManagementSystem';
 import {
   clampToProceduralPath,
   generateStompingGroundsPath,
@@ -142,6 +148,7 @@ export interface GameEngineCallbacks {
   onBannerNotification: (title: string, subtitle: string) => void;
   onLootObtained: (item: InventoryItem) => void;
   onCharacterSaved: (character: CharacterSaveData) => void;
+  onTriggerCutscene?: (cutsceneId: CutsceneId) => void;
 }
 
 export class GameEngine {
@@ -211,6 +218,7 @@ export class GameEngine {
   private groundHazards: GroundHazardEntity[] = [];
   private lootOrbs: LootOrbEntity[] = [];
   private autoSaveTimer = 0;
+  private supportPulseTimer = 0;
   private lastSavedAt = Date.now();
   private lastFrameTime = performance.now();
 
@@ -342,6 +350,11 @@ export class GameEngine {
     this.mode = 'playing';
     this.activeCharacter = structuredClone(character);
     this.activeCharacter.questState = normalizeQuestState(this.activeCharacter.questState);
+    ensureSkillRunes(this.activeCharacter);
+    ensureCompanionConfigs(this.activeCharacter);
+    if (!this.activeCharacter.seenCutscenes) {
+      this.activeCharacter.seenCutscenes = [];
+    }
     this.effectiveStats = computeEffectiveStats(this.activeCharacter);
     this.activeCharacter.currentHp = Math.min(
       this.effectiveStats.maxHp,
@@ -540,6 +553,9 @@ export class GameEngine {
         questBanner.bannerSubtitle ??
           'Confront the Eclipse Sovereign & speak with High Sage Orin at the North Altar!'
       );
+      if (this.enemies.length > 0) {
+        this.triggerCutsceneIfUnseen('act3_boss_intro');
+      }
     } else {
       this.currentPathLayout = null;
       this.currentPathProgress = 1;
@@ -645,9 +661,116 @@ export class GameEngine {
       this.callbacks.onBannerNotification(result.bannerTitle, result.bannerSubtitle);
     }
 
+    // Trigger Anime Story Cutscene on major narrative milestones
+    if (result.eventType === 'accepted') {
+      this.triggerCutscene('prologue_triad_awakening');
+    } else if (result.eventType === 'market_twist') {
+      this.triggerCutscene('act1_market_twist');
+    } else if (result.eventType === 'ruins_unsealed') {
+      this.triggerCutscene('act2_ruins_unsealed');
+    } else if (result.eventType === 'completed') {
+      this.triggerCutscene('act3_eclipse_sealed');
+    }
+
     void this.saveActiveCharacterNow();
     this.emitHudTelemetry();
     return true;
+  }
+
+  public triggerCutsceneIfUnseen(cutsceneId: CutsceneId): void {
+    if (!this.activeCharacter) return;
+    if (!this.activeCharacter.seenCutscenes) {
+      this.activeCharacter.seenCutscenes = [];
+    }
+    if (!this.activeCharacter.seenCutscenes.includes(cutsceneId)) {
+      this.triggerCutscene(cutsceneId);
+    }
+  }
+
+  public triggerCutscene(cutsceneId: CutsceneId): void {
+    if (this.activeCharacter) {
+      if (!this.activeCharacter.seenCutscenes) {
+        this.activeCharacter.seenCutscenes = [];
+      }
+      if (!this.activeCharacter.seenCutscenes.includes(cutsceneId)) {
+        this.activeCharacter.seenCutscenes.push(cutsceneId);
+      }
+    }
+    this.callbacks.onTriggerCutscene?.(cutsceneId);
+  }
+
+  public setCutsceneCameraShot(
+    shot: {
+      cameraOffset: { x: number; y: number; z: number };
+      lookAtOffset: { x: number; y: number; z: number };
+    } | null,
+    vfxBurst = false
+  ): void {
+    this.cameraController.setCutsceneShot(shot);
+    if (vfxBurst && this.mode === 'playing') {
+      this.vfx.spawnShockwaveRing(this.playerPos, 3.6, 0xffd166, 0xffffff, 0.45);
+    }
+  }
+
+  /**
+   * Mutates the active character via a management action (Starforge, Salvage, Companion Stance, Ability Rune),
+   * recalculates effective stats, and persists immediately.
+   */
+  public async mutateActiveCharacter(
+    mutator: (char: CharacterSaveData) => void
+  ): Promise<CharacterSaveData | null> {
+    if (!this.activeCharacter) return null;
+    mutator(this.activeCharacter);
+    this.effectiveStats = computeEffectiveStats(this.activeCharacter);
+    this.activeCharacter.currentHp = Math.min(
+      this.effectiveStats.maxHp,
+      this.activeCharacter.currentHp
+    );
+    await this.saveActiveCharacterNow();
+    this.emitHudTelemetry();
+    return structuredClone(this.activeCharacter);
+  }
+
+  /**
+   * Commands both AI Companions to immediately unleash synchronized AoE Synergy Bursts.
+   */
+  public triggerCompanionSynergyBurst(): void {
+    if (!this.activeCharacter) return;
+    const configs = ensureCompanionConfigs(this.activeCharacter);
+    for (const comp of this.companions) {
+      const cDef = CHARACTER_CLASSES[comp.classId];
+      const cfg = configs[comp.classId];
+      const bondMult = 1 + (cfg.bondLevel - 1) * 0.12;
+      comp.actionText = '★ TRIAD SYNERGY BURST!';
+      comp.activeAttackTimer = 0.45;
+      comp.animState.attackComboStep = 3;
+      comp.animState.attackSwingProgress = 0;
+
+      this.vfx.spawnShockwaveRing(
+        comp.position,
+        5.2,
+        cDef.primaryColorHex,
+        0xffffff,
+        0.5
+      );
+      this.vfx.spawnSlashArc(
+        comp.position,
+        comp.yaw,
+        4.6,
+        cDef.primaryColorHex,
+        0xffffff,
+        0
+      );
+      this.dealAreaDamage(
+        comp.position,
+        5.2,
+        1.85 * bondMult,
+        8,
+        cDef.elementColor,
+        5.5,
+        comp.classId === 'mage'
+      );
+    }
   }
 
   private buildCompassArrow(): void {
@@ -1078,7 +1201,8 @@ export class GameEngine {
   }
 
   private updateCompanions(dt: number): void {
-    if (!this.activeCharacter) return;
+    if (!this.activeCharacter || !this.effectiveStats) return;
+    const configs = ensureCompanionConfigs(this.activeCharacter);
     const playerForward = new THREE.Vector3(
       Math.sin(this.playerYaw),
       0,
@@ -1086,10 +1210,41 @@ export class GameEngine {
     );
     const playerRight = new THREE.Vector3(playerForward.z, 0, -playerForward.x);
 
+    // Check if any companion is in 'support' stance for periodic Vanguard Aegis party heal
+    const hasSupportCompanion = this.companions.some(
+      (c) => configs[c.classId].stance === 'support'
+    );
+    if (hasSupportCompanion) {
+      this.supportPulseTimer += dt;
+      if (this.supportPulseTimer >= 4.0) {
+        this.supportPulseTimer = 0;
+        if (this.activeCharacter.currentHp < this.effectiveStats.maxHp) {
+          const heal = Math.max(1, Math.round(this.effectiveStats.maxHp * 0.03));
+          this.activeCharacter.currentHp = Math.min(
+            this.effectiveStats.maxHp,
+            this.activeCharacter.currentHp + heal
+          );
+          this.vfx.spawnDamageNumber(
+            this.playerPos,
+            heal,
+            false,
+            '#64dfdf',
+            `+${heal} Aegis`
+          );
+        }
+      }
+    }
+
     for (const comp of this.companions) {
+      const cfg = configs[comp.classId];
+      const stanceInfo = COMPANION_STANCE_INFO[cfg.stance];
+
       comp.level = Math.max(comp.level, this.activeCharacter.level);
       if (comp.attackCooldown > 0) {
-        comp.attackCooldown = Math.max(0, comp.attackCooldown - dt);
+        comp.attackCooldown = Math.max(
+          0,
+          comp.attackCooldown - dt * stanceInfo.attackRateMult
+        );
       }
       if (comp.activeAttackTimer > 0) {
         comp.activeAttackTimer -= dt;
@@ -1105,9 +1260,9 @@ export class GameEngine {
         .addScaledVector(playerForward, -2.1)
         .addScaledVector(playerRight, comp.wingSide * 1.85);
 
-      // Find nearest enemy within 13.5m of the player
+      // Find nearest enemy within the companion's stance leash range
       let targetEnemy: EnemyEntity | null = null;
-      let bestDist = 13.5;
+      let bestDist = stanceInfo.leashRange;
       for (const e of this.enemies) {
         const d = this.playerPos.distanceTo(e.bundle.root.position);
         if (d < bestDist) {
@@ -1205,6 +1360,14 @@ export class GameEngine {
     dirToEnemy: THREE.Vector3
   ): void {
     const cDef = CHARACTER_CLASSES[comp.classId];
+    const cfg = ensureCompanionConfigs(this.activeCharacter!)[comp.classId];
+    const stanceInfo = COMPANION_STANCE_INFO[cfg.stance];
+    const gearAtk =
+      (cfg.equipped.weapon?.attackBonus ?? 0) +
+      (cfg.equipped.charm?.attackBonus ?? 0);
+    const gearScale = 1 + gearAtk * 0.008;
+    const bondMult = (1 + (cfg.bondLevel - 1) * 0.12) * stanceInfo.damageMult * gearScale;
+
     comp.attackCount += 1;
     comp.activeAttackTimer = 0.28;
     comp.animState.attackComboStep = (comp.attackCount % 3) + 1;
@@ -1224,7 +1387,7 @@ export class GameEngine {
         this.dealAreaDamage(
           comp.position,
           3.6,
-          0.75,
+          0.75 * bondMult,
           3,
           cDef.elementColor,
           4.0
@@ -1243,7 +1406,7 @@ export class GameEngine {
           dirToEnemy,
           4.8,
           1.1,
-          0.58,
+          0.58 * bondMult,
           2,
           cDef.elementColor,
           2.5
@@ -1256,7 +1419,7 @@ export class GameEngine {
         this.spawnGroundHazard({
           position: targetEnemy.bundle.root.position.clone(),
           radius: 3.6,
-          damageMultiplier: 0.35,
+          damageMultiplier: 0.35 * bondMult,
           energyGain: 3,
           colorHex: cDef.skills.skill1.colorHex,
           accentHex: cDef.skills.skill1.accentHex,
@@ -1273,7 +1436,7 @@ export class GameEngine {
           yaw: comp.yaw,
           speed: 17.0,
           radius: 0.38,
-          damageMultiplier: 0.52,
+          damageMultiplier: 0.52 * bondMult,
           energyGain: 2,
           colorHex: cDef.skills.basic.colorHex,
           accentHex: cDef.skills.basic.accentHex,
@@ -1295,7 +1458,7 @@ export class GameEngine {
           yaw: comp.yaw,
           speed: 18.5,
           radius: 0.72,
-          damageMultiplier: 0.68,
+          damageMultiplier: 0.68 * bondMult,
           energyGain: 3,
           colorHex: cDef.skills.basic.accentHex,
           accentHex: cDef.skills.basic.colorHex,
@@ -1314,7 +1477,7 @@ export class GameEngine {
             yaw: comp.yaw + spread,
             speed: 23.0,
             radius: 0.32,
-            damageMultiplier: 0.34,
+            damageMultiplier: 0.34 * bondMult,
             energyGain: 1,
             colorHex: cDef.skills.basic.colorHex,
             accentHex: cDef.skills.basic.accentHex,
@@ -1502,13 +1665,20 @@ export class GameEngine {
     const stats = this.effectiveStats!;
     const classDef = CHARACTER_CLASSES[char.classId];
     const basic = classDef.skills.basic;
+    const runes = ensureSkillRunes(char);
     const skillLevelBonus = 1 + (char.skillLevels.basic - 1) * 0.1;
 
     this.faceNearestEnemy(basic.range + 2.0);
     this.comboStep = (this.comboStep % 3) + 1;
     this.comboResetTimer = 1.4;
 
-    const cd = basic.cooldown / stats.attackSpeed;
+    const tempoMult = runes.basic === 'gale_tempo' ? 0.82 : 1.0;
+    const cd = (basic.cooldown / stats.attackSpeed) * tempoMult;
+    if (runes.basic === 'siphon_edge' && this.enemies.length > 0) {
+      const heal = Math.max(1, Math.round(stats.maxHp * 0.015));
+      char.currentHp = Math.min(stats.maxHp, char.currentHp + heal);
+      char.ultimateEnergy = Math.min(100, char.ultimateEnergy + 3);
+    }
     const forward = new THREE.Vector3(Math.sin(this.playerYaw), 0, Math.cos(this.playerYaw));
 
     if (char.classId === 'warrior') {
@@ -1709,20 +1879,45 @@ export class GameEngine {
     const stats = this.effectiveStats!;
     const classDef = CHARACTER_CLASSES[char.classId];
     const skill = classDef.skills[skillKey];
+    const runes = ensureSkillRunes(char);
     const lvlKey = skillKey === 'ultimate' ? 'ultimate' : skillKey;
-    const skillLevelBonus = 1 + (char.skillLevels[lvlKey] - 1) * 0.12;
+    let skillLevelBonus = 1 + (char.skillLevels[lvlKey] - 1) * 0.12;
+
+    if (skillKey === 'skill1' && runes.skill1 === 'overcharge') {
+      skillLevelBonus *= 1.28;
+    } else if (skillKey === 'skill2' && runes.skill2 === 'twin_cataclysm') {
+      skillLevelBonus *= 1.3;
+    } else if (skillKey === 'ultimate' && runes.ultimate === 'sovereign_exec') {
+      skillLevelBonus *= 1.45;
+    }
 
     const nearest = this.faceNearestEnemy(skill.range + 4.0);
     const forward = new THREE.Vector3(Math.sin(this.playerYaw), 0, Math.cos(this.playerYaw));
 
-    this.cooldowns[skillKey] = skill.cooldown;
+    let effectiveCd = skill.cooldown;
+    if (skillKey === 'skill1' && runes.skill1 === 'quickcast') {
+      effectiveCd *= 0.7;
+      char.ultimateEnergy = Math.min(100, char.ultimateEnergy + 6);
+    }
+    this.cooldowns[skillKey] = effectiveCd;
+
+    if (skillKey === 'skill2' && runes.skill2 === 'aegis_ward') {
+      const heal = Math.round(stats.maxHp * 0.1);
+      char.currentHp = Math.min(stats.maxHp, char.currentHp + heal);
+      this.invulnerableTimer = Math.max(this.invulnerableTimer, 0.8);
+      this.vfx.spawnDamageNumber(this.playerPos, heal, false, '#64dfdf', `+${heal} Ward`);
+    }
+
     this.activeAttackDuration = skillKey === 'ultimate' ? 0.5 : 0.35;
     this.activeAttackTimer = this.activeAttackDuration;
     this.animState.attackComboStep = skillKey === 'ultimate' ? 5 : 4;
     this.animState.attackSwingProgress = 0;
 
     if (skillKey === 'ultimate') {
-      char.ultimateEnergy = 0;
+      char.ultimateEnergy = runes.ultimate === 'triad_chain' ? 25 : 0;
+      if (runes.ultimate === 'triad_chain') {
+        this.triggerCompanionSynergyBurst();
+      }
       this.cameraController.triggerUltimateZoom();
       this.cameraController.triggerShake(0.65, 0.45);
       this.callbacks.onUltimateCutIn(classDef.name, skill.name, classDef.elementColor);
@@ -2630,10 +2825,12 @@ export class GameEngine {
           : 'Sanctum Cleared • Speak with High Sage Orin';
     }
 
+    const companionConfigs = ensureCompanionConfigs(char);
     const companionNamesMap: Partial<Record<CharacterClassId, string>> = {};
     const companionViews: CompanionStatusView[] = this.companions.map((c) => {
       companionNamesMap[c.classId] = c.name;
       const cDef = CHARACTER_CLASSES[c.classId];
+      const cfg = companionConfigs[c.classId];
       return {
         classId: c.classId,
         name: c.name,
@@ -2641,6 +2838,8 @@ export class GameEngine {
         icon: cDef.starterWeapon.icon,
         elementColor: cDef.elementColor,
         level: c.level,
+        bondLevel: cfg.bondLevel,
+        stance: cfg.stance,
         actionText: c.actionText,
         isFromAccountSlot: c.isFromAccountSlot,
       };
