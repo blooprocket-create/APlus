@@ -57,7 +57,8 @@ export type CutsceneId =
   | 'act1_market_twist'
   | 'act2_ruins_unsealed'
   | 'act3_boss_intro'
-  | 'act3_eclipse_sealed';
+  | 'act3_eclipse_sealed'
+  | 'slice_moat_plan';
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'mythic';
 

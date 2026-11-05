@@ -204,6 +204,15 @@ export class EnvironmentBuilder {
     }
   }
 
+  public buildSlice(scene: THREE.Scene, group: THREE.Group): void {
+    this.initBaseLighting(scene);
+    this.clearZone(scene);
+    this.zoneGroup = group;
+    scene.add(group);
+    scene.background = new THREE.Color(0x526875);
+    scene.fog = new THREE.Fog(0x526875, 26, 92);
+  }
+
   private buildStartingTown(group: THREE.Group): BuiltZoneResult {
     // Cobblestone Safe-Zone Plaza
     const floorGeo = new THREE.CylinderGeometry(SAFE_ZONE_RADIUS, SAFE_ZONE_RADIUS * 0.94, 1.4, 48);

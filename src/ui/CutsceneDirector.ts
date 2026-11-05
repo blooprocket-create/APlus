@@ -75,6 +75,24 @@ export function buildCutsceneScript(
   const c2Name = companionNames?.[comp2Class] ?? CANONICAL_HERO_NAMES[comp2Class];
 
   switch (id) {
+    case 'slice_moat_plan': {
+      const frame = (role: CharacterClassId, dialogue: string, x: number, y: number, z: number): CutsceneFrame => {
+        const definition = CHARACTER_CLASSES[role];
+        return {
+          speakerName: CANONICAL_HERO_NAMES[role], speakerTitle: definition.archetypeLabel,
+          speakerIcon: definition.starterWeapon.icon, accentColor: definition.elementColor, dialogue,
+          cameraOffset: { x, y, z }, lookAtOffset: { x: 4, y: 0.9, z: -1 },
+        };
+      };
+      return {
+        id, episodeLabel: 'HEARTHMERE OUTSKIRTS', title: 'The ruined crossing', subtitle: 'Three parts to one plan',
+        frames: [
+          frame('warrior', 'I can spear-vault across the moat and break open the container on the far bank. That will expose the bridge key.', -3, 4.1, 6),
+          frame('mage', 'I’ll move the key back to this bank. Wait for it to appear beside the crossing.', -1.5, 4.4, 6.2),
+          frame('assassin', 'I’ll take the key, veil myself, and circle the guard by the blue lights. Once I reach the lever, I’ll lower the bridge. We cross and take the east bank back to camp.', -3.8, 3.3, 4.5),
+        ],
+      };
+    }
     case 'prologue_triad_awakening':
       return {
         id,

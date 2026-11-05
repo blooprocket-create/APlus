@@ -25,6 +25,8 @@ import {
 } from '../game/ManagementSystem';
 import { ActionId } from '../input/InputManager';
 import { PersistenceManager } from '../persistence/PersistenceManager';
+import { InMemoryStorageAdapter } from '../persistence/StorageAdapter';
+import { SLICE_UTILITIES } from '../game/MoatSlice';
 import {
   AccountProfile,
   BasicRuneId,
@@ -243,6 +245,7 @@ export class UIManager {
               <label class="eyebrow name-label" for="input-char-name">NAME YOUR HERO</label><input id="input-char-name" class="input-field" maxlength="18" value="${this.escapeHtml(this.creationNameDraft)}" placeholder="Enter a name">
               ${this.errorMessage ? `<p class="form-error" role="alert">${this.escapeHtml(this.errorMessage)}</p>` : ''}
               <button id="btn-create-char" class="btn-anime btn-primary journey-button">Awaken your hero ${icon('arrow', 22)}</button>`}
+            <div class="slice-launch"><label for="slice-hero">Hearthmere playtest</label><select id="slice-hero" aria-label="Playtest hero">${CHARACTER_CLASS_LIST.map(hero => `<option value="${hero.id}" ${hero.id === cDef.id ? 'selected' : ''}>${CANONICAL_HERO_NAMES[hero.id]}</option>`).join('')}</select><button id="btn-playable-slice" class="btn-anime btn-primary">Play the crossing ${icon('arrow', 16)}</button></div>
             <button id="btn-finisher-preview" class="finisher-preview-button">${icon('burst', 17)} Watch a guardian finisher <span>12 SEC</span></button>
           </section>
           <section class="hero-roster interactive"><div class="roster-caption"><span class="eyebrow">SELECT YOUR HERO</span><span>${occupiedCount} / 3 AWAKENED</span></div><div class="slot-list">${slotCards}</div></section>
@@ -253,6 +256,21 @@ export class UIManager {
     this.bindFullscreenButton();
     this.root.querySelector('#btn-world-atlas')?.addEventListener('click', () => this.openAtlas());
     this.root.querySelector('#btn-finisher-preview')?.addEventListener('click', () => this.engine.previewBossFinisher(cDef.id));
+    this.root.querySelector<HTMLButtonElement>('#btn-playable-slice')?.addEventListener('click', async event => {
+      if (this.engine.isFinishing) return;
+      const button = event.currentTarget as HTMLButtonElement;
+      const classId = this.root.querySelector<HTMLSelectElement>('#slice-hero')!.value as CharacterClassId;
+      button.disabled = true;
+      try {
+        const temporary = new PersistenceManager(new InMemoryStorageAdapter());
+        await temporary.init();
+        const hero = await temporary.createCharacter({ accountId: 'playtest', slotIndex: 0, name: CANONICAL_HERO_NAMES[classId], classId });
+        this.startHudAndGameplay(hero, true);
+      } catch {
+        button.textContent = 'Try the crossing again';
+        button.disabled = false;
+      }
+    });
     this.root.querySelector('#btn-lobby-help')?.addEventListener('click', () => this.openHelp());
     this.root.querySelector('#btn-lobby-audio')?.addEventListener('click', () => { this.engine.audio.toggle(); this.renderLobbyDOM(); });
 
@@ -413,12 +431,12 @@ export class UIManager {
     });
   }
 
-  public startHudAndGameplay(character: CharacterSaveData): void {
+  public startHudAndGameplay(character: CharacterSaveData, playableSlice = false): void {
     const cDef = CHARACTER_CLASSES[character.classId];
     this.lastCompanionMarkup = '';
 
     this.root.innerHTML = `
-      <div class="hud-screen">
+      <div class="hud-screen${playableSlice ? ' slice-hud' : ''}">
         <div id="damage-vignette" aria-hidden="true"></div>
         <div class="boss-hud hidden" id="boss-hud"><div class="eyebrow" id="boss-state">RIFT GUARDIAN</div><strong id="boss-name"></strong><div class="boss-track"><div id="boss-fill"></div></div><span id="boss-health"></span></div>
         <div class="hud-top">
@@ -485,7 +503,7 @@ export class UIManager {
           </div>
 
           <div class="hud-top-right">
-            <div class="minimap-wrap"><span class="map-north">N</span><canvas id="hud-minimap" width="220" height="220" aria-label="Local map: red fiends, gold allies, green portals"></canvas><div class="map-legend"><i></i> FIENDS <i></i> PORTALS</div></div>
+            <div class="minimap-wrap"><span class="map-north">N</span><canvas id="hud-minimap" width="220" height="220" aria-label="${playableSlice ? 'Local map: red fiends and gold guardians' : 'Local map: red fiends, gold allies, green portals'}"></canvas><div class="map-legend"><i></i> FIENDS ${playableSlice ? '' : '<i></i> PORTALS'}</div></div>
             <div class="hud-btn-group">
               <button id="btn-hero-sheet" class="btn-anime btn-cyan" aria-label="Equipment and inventory" style="padding:6px 10px;font-size:0.7rem;">
                 ${icon('bag', 16)} <span class="hud-menu-label">Gear</span> <kbd>I</kbd>
@@ -534,6 +552,12 @@ export class UIManager {
             🌀 ENTER PORTAL [F / TAP]
           </button>
         </div>
+
+        ${playableSlice ? `<div class="slice-controls interactive">
+          <button id="btn-slice-utility" class="btn-anime btn-cyan">${SLICE_UTILITIES[character.classId]} <kbd>U</kbd></button>
+          <button id="btn-slice-lock" class="btn-anime hidden" aria-pressed="false">Lock boss <kbd>L</kbd></button>
+          <button id="btn-slice-lever" class="btn-anime btn-primary hidden">Lower bridge <kbd>F</kbd></button>
+        </div>` : ''}
 
         <div class="hud-bottom">
           <div class="desktop-move-hint"><div class="key-wasd"><kbd>W</kbd><div><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div></div><span>MOVE<br><small>F to interact</small></span></div>
@@ -646,6 +670,9 @@ export class UIManager {
     this.root.querySelector('#btn-pause')?.addEventListener('click', () => this.openPauseMenu());
     this.root.querySelector('#btn-hud-help')?.addEventListener('click', () => this.openHelp());
     this.root.querySelector('#btn-flask')?.addEventListener('click', () => this.engine.useFlask());
+    this.root.querySelector('#btn-slice-utility')?.addEventListener('click', () => this.engine.useSliceUtility());
+    this.root.querySelector('#btn-slice-lock')?.addEventListener('click', () => this.engine.toggleSliceBossLock());
+    this.root.querySelector('#btn-slice-lever')?.addEventListener('click', () => this.engine.interactWithNearbyQuestNpc());
 
     // Top-right HUD buttons
     this.root.querySelector('#btn-char-select')?.addEventListener('click', async () => {
@@ -676,8 +703,8 @@ export class UIManager {
       this.engine.interactWithNearbyQuestNpc();
     });
 
-    const accountRoster = this.slots.filter((s): s is CharacterSaveData => s !== null);
-    this.engine.startGameplayWithCharacter(character, accountRoster);
+    const accountRoster = playableSlice ? [] : this.slots.filter((s): s is CharacterSaveData => s !== null);
+    this.engine.startGameplayWithCharacter(character, accountRoster, playableSlice);
   }
 
   public playCutscene(cutsceneId: CutsceneId): void {
@@ -1244,9 +1271,9 @@ export class UIManager {
     if (!this.hudRefs || this.cutsceneDirector.isPlaying()) return;
     this.openOverlay('Take a breath.', `<p>Your triad will wait. The world is paused.</p><div class="pause-settings"><button id="toggle-audio" class="setting-row">Sound effects <span>${this.engine.audio.muted ? 'OFF' : 'ON'}</span></button><button id="toggle-shake" class="setting-row">Camera shake <span>${this.shakeEnabled ? 'ON' : 'OFF'}</span></button></div>`, [
       { label: 'Return to the journey', action: () => this.closeOverlay() },
-      { label: 'World atlas & journal', action: () => this.openAtlas() },
+      ...(!this.engine.isSlice ? [{ label: 'World atlas & journal', action: () => this.openAtlas() }] : []),
       { label: 'How to play', action: () => this.openHelp() },
-      { label: 'Save & return to heroes', action: async () => {
+      { label: this.engine.isSlice ? 'Return to heroes' : 'Save & return to heroes', action: async () => {
         if (!await this.engine.saveActiveCharacterNow()) {
           const message = this.root.querySelector('#game-menu .menu-content p');
           if (message) message.textContent = 'Saving failed. Check browser storage, then try again. Your session is still active.';
@@ -1266,6 +1293,10 @@ export class UIManager {
   }
 
   private openHelp(): void {
+    if (this.engine.isSlice) {
+      this.openOverlay('Hearthmere crossing', '<p>Follow the lanterns to the road fight.</p><p>Use Lock boss near the guardian. Evade can interrupt your basic attacks. Eclipse commits through its windup. Press Evade again after it releases.</p><p>At the ruins, listen to the plan and follow your hero’s objective. Use the utility button or U. The bridge lever uses F. Return to camp by the east bank and footbridge.</p>', [{ label: 'Return', action: () => this.closeOverlay() }]);
+      return;
+    }
     const touch = getViewportProfile().touchUI;
     const controls = touch ? `<div class="touch-controls-guide"><p><strong>Move:</strong> drag the left thumbstick. Keep that thumb down while attacking.</p><p><strong>Fight:</strong> hold Attack to chain strikes. Tap Evade or an ability with another finger. Eclipse unlocks at 100% energy.</p><p><strong>Explore:</strong> tap the center prompt beside a person, memory, or portal. The map, bag, and pause icons sit in the upper right. The flask restores health when you are hurt.</p></div>` : `<div class="controls-guide"><span>Move</span><kbd>W A S D / Arrows</kbd><span>Attack · hold to chain</span><kbd>Left mouse / J / Space</kbd><span>Evade · brief invulnerability</span><kbd>Shift / K</kbd><span>Abilities / Ultimate</span><kbd>Q · E / R</kbd><span>Heal · 40% vitality</span><kbd>H</kbd><span>Talk / Enter portal</span><kbd>F / Enter</kbd><span>World atlas / journal</span><kbd>M</kbd><span>Gear / Pause</span><kbd>I / Esc</kbd></div>`;
     this.openOverlay('Every legend starts here.', `<p>Start in Aetherhaven. The east Bellroad leads into the campaign; the north wilderness road leads to procedural expeditions. Follow the gold compass through field tasks, shrines, and guardians. At chapter’s end, walk through the road beyond camp to keep traveling. The Long Dawn spans twelve chapters in six belllands. ${touch ? 'Tap the map icon for' : 'Press M for'} the world atlas, journal, and recovered histories.</p>${controls}<p class="help-tip">Leave red circles before they fill. Some guardian rings have a safe center. Dash through a strike to gain 12 Eclipse energy. Your three flask charges refill in sanctuaries. On touchscreens, use the thumbstick and ability buttons.</p>`, [
@@ -1274,6 +1305,11 @@ export class UIManager {
   }
 
   public showDefeat(): void {
+    if (this.engine.isSlice) {
+      this.openOverlay('Regroup at camp', '<p>Rest at camp and take the road again.</p>', [{ label: 'Return to camp', action: () => { this.closeOverlay(); this.engine.reviveAtSanctuary(); } }]);
+      this.root.querySelector('#game-menu')?.setAttribute('data-locked', 'true');
+      return;
+    }
     this.openOverlay('Even stars fall.', '<p>The rift claimed this battle. Your gold, equipment, and experience are safe.</p><p class="help-tip">Keep moving when an enemy marks the ground. Your dash can carry you through a strike, and a mending flask restores 40% of your vitality.</p>', [
       { label: 'Rise at Aetherhaven', action: () => { this.closeOverlay(); this.engine.reviveAtSanctuary(); } },
     ], 'TRIAD DEFEATED');
@@ -1316,10 +1352,10 @@ export class UIManager {
       if (this.root.querySelector('#game-menu')) this.closeOverlay();
       else if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       else this.openPauseMenu();
-    } else if (event.code === 'KeyM' && !this.root.querySelector('#game-menu[data-locked]')) {
+    } else if (!this.engine.isSlice && event.code === 'KeyM' && !this.root.querySelector('#game-menu[data-locked]')) {
       if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       this.openAtlas();
-    } else if (event.code === 'KeyI' && this.hudRefs && !this.root.querySelector('#game-menu')) {
+    } else if (!this.engine.isSlice && event.code === 'KeyI' && this.hudRefs && !this.root.querySelector('#game-menu')) {
       if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       else this.openCommandDeckModal('inventory');
     } else if (event.code === 'Slash' && event.shiftKey) this.openHelp();
@@ -1420,7 +1456,7 @@ export class UIManager {
     this.hudRefs.lvPill.textContent = `LV.${t.level}`;
     this.hudRefs.goldSpan.textContent = `◈ ${t.gold.toLocaleString()}`;
     this.hudRefs.crystalSpan.textContent = `✦ ${t.aetherCrystals}`;
-    this.hudRefs.saveBadge.textContent = `✓ ${t.lastSavedText}`;
+    this.hudRefs.saveBadge.textContent = t.slice ? t.lastSavedText : `✓ ${t.lastSavedText}`;
 
     this.hudRefs.waveTitle.textContent = t.zoneTitle;
     this.hudRefs.waveSub.textContent = t.zoneSubtitle;
@@ -1456,6 +1492,16 @@ export class UIManager {
     this.hudRefs.questObjTitle.textContent = qv.objectiveTitle;
     this.hudRefs.questObjHint.textContent = qv.objectiveHint;
     this.hudRefs.questObjProgress.textContent = qv.progressText;
+    if (t.slice) {
+      const lock = this.root.querySelector<HTMLButtonElement>('#btn-slice-lock')!;
+      lock.classList.toggle('hidden', !t.slice.bossAvailable);
+      lock.setAttribute('aria-pressed', String(t.slice.bossLocked));
+      const lockLabel = t.slice.bossLocked ? 'Unlock boss' : 'Lock boss';
+      if (lock.firstChild?.textContent !== `${lockLabel} `) lock.firstChild!.textContent = `${lockLabel} `;
+      this.root.querySelector('#btn-slice-lever')!.classList.toggle('hidden', !t.slice.canUseLever);
+      this.root.querySelector('#act-dash')!.classList.toggle('slice-committed', t.slice.committed);
+      if (t.slice.committed) this.hudRefs.questObjProgress.textContent = 'Eclipse windup · evade after release';
+    }
     this.root.querySelector('.quest-tracker-card')?.classList.toggle('field-objective', Boolean(t.fieldActivity));
     if (qv.companionBanter) {
       this.hudRefs.questBanterDiv.textContent = `${qv.companionBanter.speakerName}: "${qv.companionBanter.text}"`;

@@ -3,6 +3,7 @@ import { getViewportProfile } from '../platform/Viewport';
 import { dressGuardian } from '../rendering/GuardianRegalia';
 import { BossFinisher } from '../rendering/BossFinisher';
 import { FinisherFrame } from './FinisherTimeline';
+import { MoatSlice, SLICE_CAMP, SliceActors } from './MoatSlice';
 import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
 import { ChronicleInteraction, ChronicleSite } from '../types/campaign';
 import { advanceChronicle, beginChapter, chronicleObjectiveView, currentChapter, currentObjective, ensureCampaign, isChronicleRegion } from './CampaignEngine';
@@ -176,6 +177,7 @@ export interface HudTelemetry {
   comboRank: string;
   cooldowns: Record<ActionId, { remaining: number; total: number }>;
   lastSavedText: string;
+  slice?: { bossAvailable: boolean; bossLocked: boolean; committed: boolean; canUseLever: boolean };
 }
 
 export interface GameEngineCallbacks {
@@ -204,6 +206,10 @@ export class GameEngine {
   private callbacks: GameEngineCallbacks;
 
   private mode: 'preview' | 'playing' = 'preview';
+  private slice: MoatSlice | null = null;
+  private sliceBossLock: EnemyEntity | null = null;
+  private sliceBossDefeated = false;
+  private sliceWindup = 0;
   private previewRig: CharacterRig | null = null;
   private previewCompanionRigs: CharacterRig[] = [];
   private pedestalMesh: THREE.Mesh | null = null;
@@ -279,7 +285,45 @@ export class GameEngine {
   private travelInProgress = false;
 
   public get isFinishing(): boolean { return this.finisher !== null; }
+  public get isSlice(): boolean { return this.slice !== null; }
   public skipBossFinisher(): void { this.finisher?.finish(); }
+
+  private sliceActors(): SliceActors {
+    const playerClass = this.activeCharacter!.classId;
+    return {
+      playerClass,
+      position: role => role === playerClass ? this.playerPos : this.companions.find(c => c.classId === role)!.position,
+      pose: (role, yaw, moving) => {
+        if (role === playerClass) {
+          this.playerYaw = yaw;
+          this.animState.isMoving = moving;
+          this.animState.moveSpeedRatio = moving ? 1 : 0;
+          return;
+        }
+        const companion = this.companions.find(c => c.classId === role)!;
+        if (moving) companion.yaw = yaw;
+        companion.animState.isMoving = moving;
+        companion.animState.moveSpeedRatio = moving ? 1 : 0;
+        companion.actionText = moving ? 'Crossing plan' : 'Ready';
+      },
+    };
+  }
+
+  public useSliceUtility(): void {
+    if (!this.slice || this.isPaused || this.dashTimer > 0 || this.sliceWindup > 0) return;
+    if (this.slice.useUtility(this.sliceActors())) this.audio.play('dash');
+    this.emitHudTelemetry();
+  }
+
+  public toggleSliceBossLock(): void {
+    if (!this.slice || this.isPaused) return;
+    this.sliceBossLock = this.sliceBossLock ? null : this.findSliceBoss();
+    this.emitHudTelemetry();
+  }
+
+  private findSliceBoss(): EnemyEntity | null {
+    return this.enemies.find(enemy => enemy.kind === 'boss_knight' && enemy.bundle.root.position.distanceToSquared(this.playerPos) < 19 * 19) ?? null;
+  }
 
   public previewBossFinisher(classId: CharacterClassId): void {
     if (this.finisher || this.mode !== 'preview') return;
@@ -323,6 +367,7 @@ export class GameEngine {
   }
 
   public async travelToChapter(index: number): Promise<boolean> {
+    if (this.slice) return false;
     if (!this.activeCharacter || this.finisher || this.defeated) return false;
     if (!await this.saveActiveCharacterNow()) return false;
     if (!beginChapter(this.activeCharacter, index)) return false;
@@ -473,7 +518,10 @@ export class GameEngine {
     this.hitComboCount = 0;
     this.hitStop = 0;
     this.cooldowns = { basic: 0, dash: 0, skill1: 0, skill2: 0, ultimate: 0 };
-    this.enterZone('starting_town');
+    if (this.slice) {
+      this.clearZoneCombatEntities();
+      this.resetSliceAtCamp();
+    } else this.enterZone('starting_town');
     this.emitHudTelemetry();
   }
 
@@ -514,6 +562,8 @@ export class GameEngine {
       if (e.target instanceof HTMLElement && (e.target.matches('input, textarea, select') || e.target.isContentEditable)) return;
       if (this.isPaused || e.repeat) return;
       if (e.code === 'KeyH') this.useFlask();
+      if (e.code === 'KeyU') this.useSliceUtility();
+      if (e.code === 'KeyL') this.toggleSliceBossLock();
       if ((e.code === 'KeyF' || e.code === 'Enter') && this.mode === 'playing') {
         if (!this.interactWithNearbyQuestNpc()) {
           this.tryTraverseNearbyPortal();
@@ -552,6 +602,9 @@ export class GameEngine {
    */
   public setPreviewCharacter(classId: CharacterClassId | null): void {
     this.mode = 'preview';
+    this.slice = null;
+    this.sliceBossLock = null;
+    this.sliceWindup = 0;
     for (const reason of this.pauseReasons) if (reason !== 'orientation') this.pauseReasons.delete(reason);
     this.defeated = false;
     this.input.resetAll();
@@ -596,7 +649,8 @@ export class GameEngine {
    */
   public startGameplayWithCharacter(
     character: CharacterSaveData,
-    accountRoster: CharacterSaveData[] = []
+    accountRoster: CharacterSaveData[] = [],
+    playableSlice = false
   ): void {
     this.clearGameplayEntities();
     if (this.previewRig) {
@@ -612,6 +666,10 @@ export class GameEngine {
     }
 
     this.mode = 'playing';
+    this.slice = playableSlice ? new MoatSlice() : null;
+    this.sliceBossDefeated = false;
+    this.sliceBossLock = null;
+    this.sliceWindup = 0;
     for (const reason of this.pauseReasons) if (reason !== 'orientation') this.pauseReasons.delete(reason);
     this.defeated = false;
     this.flaskCharges = FLASK_CAPACITY;
@@ -644,10 +702,60 @@ export class GameEngine {
     this.hitComboCount = 0;
     this.autoSaveTimer = 0;
 
+    if (this.slice) {
+      this.currentZone = 'starting_town';
+      this.currentPathLayout = null;
+      this.currentPathProgress = 0;
+      this.activePortals = [];
+      this.activeNpcs = [];
+      this.chronicleSites = [];
+      this.nearbyNpc = null;
+      this.nearbyPortal = null;
+      this.nearbyChronicleSite = null;
+      this.fieldPlan = null;
+      if (this.compassGroup) this.compassGroup.visible = false;
+      this.environment.buildSlice(this.scene, this.slice.group);
+      this.resetSliceAtCamp();
+      this.callbacks.onBannerNotification('HEARTHMERE OUTSKIRTS', 'Clear the road, open the crossing, and follow the shortcut home.');
+      this.emitHudTelemetry();
+      return;
+    }
+
     const initialZone: ZoneId = this.activeCharacter.currentZone || 'starting_town';
     const journey = this.activeCharacter.journeyState;
     this.enterZone(initialZone, undefined, journey?.seed ?? undefined, journey?.zone === initialZone ? journey : undefined);
     this.emitHudTelemetry();
+  }
+
+  private resetSliceAtCamp(): void {
+    this.slice!.resetToCamp();
+    this.playerPos.copy(SLICE_CAMP);
+    this.playerYaw = Math.PI;
+    this.playerRig!.root.position.copy(this.playerPos);
+    this.playerRig!.root.rotation.y = this.playerYaw;
+    for (const companion of this.companions) {
+      companion.position.set(this.playerPos.x + companion.wingSide * 1.9, 0, this.playerPos.z + 1.6);
+      companion.rig.root.position.copy(companion.position);
+      companion.yaw = this.playerYaw;
+    }
+    this.sliceBossLock = null;
+    this.sliceWindup = 0;
+    this.dashTimer = 0;
+    this.activeAttackTimer = 0;
+    this.animState.attackComboStep = 0;
+    this.flaskCharges = FLASK_CAPACITY;
+    this.input.resetAll();
+    this.cameraController.snapToIsometricFollow(this.playerPos);
+    this.expedition = { total: 0, defeated: 0, seconds: 0, gold: 0, damageTaken: 0 };
+    if (this.slice!.step === 'road') {
+      this.spawnEnemyAtPosition('slime', -10.3, -4.2, 0.72);
+      this.spawnEnemyAtPosition('sentinel', -6, -7.6, 0.7);
+      if (!this.sliceBossDefeated) {
+        this.spawnEnemyAtPosition('boss_knight', -8, -13, 0.6);
+        this.enemies[this.enemies.length - 1].name = 'Causeway Guardian';
+      }
+      this.expedition.total = this.enemies.length;
+    }
   }
 
   private spawnCompanionPair(
@@ -707,6 +815,7 @@ export class GameEngine {
     explicitSeed?: number,
     resume?: CharacterSaveData['journeyState']
   ): void {
+    if (this.slice) return;
     if (!this.activeCharacter || !this.effectiveStats) return;
 
     const savedPosition = resume ? { ...this.activeCharacter.position } : null;
@@ -971,6 +1080,15 @@ export class GameEngine {
    * Interacts with the nearby NPC to accept, advance, or complete the active quest.
    */
   public interactWithNearbyQuestNpc(): boolean {
+    if (this.slice) {
+      if (!this.isPaused && this.slice.canLowerBridge(this.sliceActors())) {
+        this.slice.lowerBridge();
+        this.audio.play('victory');
+        this.emitHudTelemetry();
+        return true;
+      }
+      return false;
+    }
     if (this.interactChronicleSite()) return true;
     if (!this.activeCharacter || !this.nearbyNpc || this.mode !== 'playing' || this.isPaused) {
       return false;
@@ -1292,6 +1410,7 @@ export class GameEngine {
   }
 
   public async saveActiveCharacterNow(): Promise<boolean> {
+    if (this.slice) return true;
     if (!this.activeCharacter || this.mode !== 'playing') return false;
     this.activeCharacter.position = { x: Number(this.playerPos.x.toFixed(2)), y: 0, z: Number(this.playerPos.z.toFixed(2)) };
     this.activeCharacter.journeyState = {
@@ -1505,7 +1624,8 @@ export class GameEngine {
     }
 
     // Safe Zone passive regeneration
-    if (isSafeZone(this.currentZone)) {
+    if (this.slice ? this.slice.atCamp : isSafeZone(this.currentZone)) {
+      if (this.slice) this.flaskCharges = FLASK_CAPACITY;
       if (char.currentHp < stats.maxHp) {
         char.currentHp = Math.min(stats.maxHp, char.currentHp + stats.maxHp * 0.15 * dt);
       }
@@ -1539,10 +1659,15 @@ export class GameEngine {
     }
 
     this.input.update();
+    const slice = this.slice;
     const move = this.input.moveVector;
+    if (this.sliceBossLock && this.findSliceBoss() !== this.sliceBossLock) this.sliceBossLock = null;
+    const playerVaulting = Boolean(slice?.vaulting && char.classId === 'warrior');
 
     // Handle Dash state
-    if (this.dashTimer > 0) {
+    if (playerVaulting) {
+      this.animState.isDashing = false;
+    } else if (this.dashTimer > 0) {
       this.dashTimer -= dt;
       this.playerPos.addScaledVector(this.dashDirection, stats.moveSpeed * 2.45 * dt);
       this.clampPlayerToZone();
@@ -1568,19 +1693,43 @@ export class GameEngine {
     }
 
     // Process Action Inputs (Dash, Ultimate, Skill 2, Skill 1, Basic Attack)
-    if (this.input.consumeAction('dash') && this.cooldowns.dash <= 0) {
+    const dodgePressed = this.input.consumeAction('dash');
+    if (slice && (playerVaulting || this.sliceWindup > 0 || this.dashTimer > 0)) {
+      for (const action of ['ultimate', 'skill2', 'skill1', 'basic'] as const) this.input.consumeAction(action);
+      if (this.sliceWindup > 0) {
+        this.sliceWindup = Math.max(0, this.sliceWindup - dt);
+        if (this.sliceWindup === 0) this.executeSkill('ultimate');
+      }
+    } else if (dodgePressed && this.cooldowns.dash <= 0) {
+      if (slice) {
+        this.activeAttackTimer = 0;
+        this.animState.attackComboStep = 0;
+        this.animState.attackSwingProgress = 0;
+        this.comboStep = 0;
+      }
       this.executeDash(classDef);
     } else if (
       this.input.consumeAction('ultimate') &&
       this.cooldowns.ultimate <= 0 &&
       char.ultimateEnergy >= classDef.skills.ultimate.energyCost
     ) {
-      this.executeSkill('ultimate');
+      if (slice) {
+        this.sliceWindup = 0.38;
+        this.activeAttackDuration = this.sliceWindup;
+        this.activeAttackTimer = this.sliceWindup;
+        this.animState.attackComboStep = 5;
+        this.animState.attackSwingProgress = 0;
+        this.vfx.spawnShockwaveRing(this.playerPos, 1.35, classDef.skills.ultimate.colorHex, 0xffffff, this.sliceWindup);
+      } else this.executeSkill('ultimate');
     } else if (this.input.consumeAction('skill2') && this.cooldowns.skill2 <= 0) {
       this.executeSkill('skill2');
     } else if (this.input.consumeAction('skill1') && this.cooldowns.skill1 <= 0) {
       this.executeSkill('skill1');
     } else if (this.input.consumeAction('basic') && this.cooldowns.basic <= 0) {
+      if (slice?.breakCrate(this.sliceActors())) {
+        this.audio.play('hit');
+        this.vfx.spawnShockwaveRing(this.playerPos, 1.6, 0xffc269, 0xffffff, 0.3);
+      }
       this.executeBasicCombo();
     }
 
@@ -1596,13 +1745,21 @@ export class GameEngine {
       }
     }
 
+    if (slice) slice.update(dt, this.sliceActors());
+
     // Update Player Rig transform & animation
     this.playerRig!.root.position.copy(this.playerPos);
     this.playerRig!.root.rotation.y = this.playerYaw;
     this.playerRig!.updateAnimation(dt, this.animState);
 
     // Update Projectiles, Ground Hazards, Enemies & Loot
-    this.updateCompanions(dt);
+    if (slice?.inPuzzle) {
+      for (const companion of this.companions) {
+        companion.rig.root.position.copy(companion.position);
+        companion.rig.root.rotation.y = companion.yaw;
+        companion.rig.updateAnimation(dt, companion.animState);
+      }
+    } else this.updateCompanions(dt);
     if (this.finisher) return;
     this.updateProjectiles(dt);
     if (this.finisher) return;
@@ -1610,11 +1767,14 @@ export class GameEngine {
     if (this.finisher) return;
     this.updateEnemies(dt);
     this.updateLootOrbs(dt);
-    this.updateFieldObjective(dt);
-    this.updatePortalAndNpcProximity();
-    this.updateCompassArrow();
-
     this.cameraController.updateIsometricFollow(dt, this.playerPos, move);
+    if (slice) {
+      if (slice.startIfNear(this.playerPos)) this.triggerCutscene('slice_moat_plan');
+    } else {
+      this.updateFieldObjective(dt);
+      this.updatePortalAndNpcProximity();
+      this.updateCompassArrow();
+    }
     this.hudTimer += dt;
     if (this.hudTimer >= 0.08) { this.hudTimer = 0; this.emitHudTelemetry(); }
   }
@@ -1655,6 +1815,8 @@ export class GameEngine {
     }
 
     for (const comp of this.companions) {
+      const previousX = comp.position.x;
+      const previousZ = comp.position.z;
       const cfg = configs[comp.classId];
       const stanceInfo = COMPANION_STANCE_INFO[cfg.stance];
 
@@ -1682,11 +1844,13 @@ export class GameEngine {
       // Find nearest enemy within the companion's stance leash range
       let targetEnemy: EnemyEntity | null = null;
       let bestDist = stanceInfo.leashRange;
-      for (const e of this.enemies) {
-        const d = this.playerPos.distanceTo(e.bundle.root.position);
-        if (d < bestDist) {
-          bestDist = d;
-          targetEnemy = e;
+      if (!this.slice?.atCamp) {
+        for (const e of this.enemies) {
+          const d = this.playerPos.distanceTo(e.bundle.root.position);
+          if (d < bestDist) {
+            bestDist = d;
+            targetEnemy = e;
+          }
         }
       }
 
@@ -1726,7 +1890,8 @@ export class GameEngine {
         }
       } else {
         // Follow player in formation
-        const toFormation = formationPos.clone().sub(comp.position);
+        const destination = this.slice ? this.slice.companionRoute(comp.position, formationPos, this.playerPos) : formationPos;
+        const toFormation = destination.clone().sub(comp.position);
         toFormation.y = 0;
         const dist = toFormation.length();
         if (dist > 0.45) {
@@ -1755,6 +1920,10 @@ export class GameEngine {
         );
         comp.position.x = clamped.x;
         comp.position.z = clamped.z;
+      } else if (this.slice) {
+        if (!this.slice.walkable(comp.position.x, comp.position.z)) {
+          comp.position.set(previousX, 0, previousZ);
+        }
       } else {
         const maxR = SAFE_ZONE_RADIUS - 1.3;
         const len = Math.hypot(comp.position.x, comp.position.z);
@@ -1910,6 +2079,10 @@ export class GameEngine {
   }
 
   private clampPlayerToZone(): void {
+    if (this.slice) {
+      this.slice.constrainPlayer(this.playerPos);
+      return;
+    }
     if (this.currentPathLayout) {
       const clamped = clampToProceduralPath(
         this.playerPos.x,
@@ -1979,6 +2152,11 @@ export class GameEngine {
   }
 
   private faceNearestEnemy(maxRange: number): EnemyEntity | null {
+    if (this.sliceBossLock) {
+      const position = this.sliceBossLock.bundle.root.position;
+      this.playerYaw = Math.atan2(position.x - this.playerPos.x, position.z - this.playerPos.z);
+      return position.distanceToSquared(this.playerPos) < maxRange * maxRange ? this.sliceBossLock : null;
+    }
     let closest: EnemyEntity | null = null;
     let bestDist = maxRange;
     for (const enemy of this.enemies) {
@@ -2917,7 +3095,7 @@ export class GameEngine {
     }
 
     if (enemy.hp <= 0) {
-      if (enemy.kind === 'boss_knight') this.beginBossFinisher(enemy);
+      if (enemy.kind === 'boss_knight' && !this.slice) this.beginBossFinisher(enemy);
       else this.handleEnemyDefeated(enemy, enemyIndex);
     }
   }
@@ -2968,6 +3146,17 @@ export class GameEngine {
     this.defeatedEnemyIds.add(enemy.id);
     this.expedition.gold += enemy.goldReward;
     this.hitStop = Math.max(this.hitStop, 0.045);
+    if (this.slice) {
+      if (enemy.kind === 'boss_knight') {
+        this.sliceBossDefeated = true;
+        this.sliceBossLock = null;
+      }
+      if (this.enemies.length === 0) {
+        this.slice.routeCleared();
+        this.callbacks.onBannerNotification('THE ROAD IS CLEAR', 'Follow the lanterns to the ruined crossing.');
+      }
+      return;
+    }
 
     char.enemiesDefeated += 1;
     char.xp += enemy.xpReward;
@@ -3324,6 +3513,18 @@ export class GameEngine {
     if (isSafeZone(this.currentZone)) questView.actionButtonLabel = legacyQuestView.actionButtonLabel;
     const field = this.fieldPlan && currentObjective(char)?.kind === 'field' ? this.fieldPlan : null;
     if (field) questView.progressText = fieldStatus(field, ensureCampaign(char).fieldProgress![field.id]);
+    if (this.slice) {
+      const objective = this.slice.objective(char.classId);
+      zoneTitle = this.slice.atCamp ? 'HEARTHMERE OUTSKIRTS · CAMP' : 'HEARTHMERE OUTSKIRTS';
+      zoneSubtitle = 'The old road and ruined crossing';
+      Object.assign(questView, {
+        chapterTitle: 'HEARTHMERE OUTSKIRTS', stage: 'chronicle', stepNumber: objective.step, totalSteps: 3,
+        objectiveTitle: objective.title, objectiveHint: objective.hint,
+        progressText: this.slice.message || (char.classId === 'assassin' && this.slice.stealthTime > 0
+          ? `Veil · ${this.slice.stealthTime.toFixed(1)}s` : ''),
+        isComplete: this.slice.step === 'complete', companionBanter: null,
+      });
+    }
     if (isChronicleRegion(this.currentZone)) {
       const chapter = currentChapter(char);
       zoneTitle = REGION_NAMES[chapter.region].toUpperCase();
@@ -3368,8 +3569,7 @@ export class GameEngine {
       zoneId: this.currentZone,
       zoneTitle,
       zoneSubtitle,
-      isSafeZone:
-        this.currentZone === 'starting_town' || this.currentZone === 'market_crossing',
+      isSafeZone: this.slice ? this.slice.atCamp : isSafeZone(this.currentZone),
       pathProgress: this.currentPathProgress,
       pathSeed: this.currentPathLayout?.seed ?? null,
       nearbyPortal: this.nearbyPortal,
@@ -3403,7 +3603,11 @@ export class GameEngine {
           total: classDef.skills.ultimate.cooldown,
         },
       },
-      lastSavedText: secsAgo <= 1 ? 'Saved just now' : `Saved ${secsAgo}s ago`,
+      lastSavedText: this.slice ? 'Playtest session' : secsAgo <= 1 ? 'Saved just now' : `Saved ${secsAgo}s ago`,
+      slice: this.slice ? {
+        bossAvailable: Boolean(boss), bossLocked: Boolean(this.sliceBossLock),
+        committed: this.sliceWindup > 0, canUseLever: this.slice.canLowerBridge(this.sliceActors()),
+      } : undefined,
     });
   }
 

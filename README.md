@@ -2,6 +2,26 @@
 
 A local-first, browser-based action RPG built with TypeScript and Three.js. Lead a spear warrior, chronomancer, or kunai assassin with two AI companions through The Long Dawn, a twelve-chapter chronicle across six belllands. The original five-zone route remains available from Aetherhaven.
 
+The next direction is a continuous open-world ARPG with a fresh storyline, retaining the combat classes and companions. Read [The Starforged Crown story foundation](docs/OPEN_WORLD_STORY.md) for the premise and [the full-length campaign treatment](docs/CAMPAIGN_TREATMENT.md) for the expanded story, dungeons, character arcs, and a provisional 45–55-hour main-story / 70–90-hour first-playthrough target. These are design targets, not measured playtimes. Story design comes before replacement quests; the play instructions below still describe the current build.
+
+Design is currently being developed through a user interview. [The decision record](docs/DESIGN_DIRECTION.md) tracks confirmed requirements, including beautiful cinematics and heavy anime spectacle, separately from proposals awaiting discussion. Implementation will follow the completed design handoff.
+
+**Start with [the consolidated design overview](docs/DESIGN_OVERVIEW.md)** for the current requirements, draft scope, remaining work, and reading order. [Saving and offline play](docs/SAVE_AND_OFFLINE.md) covers guest access, optional cloud/cross-device sync, evolving hero saves, recovery backups, and downloaded-content offline play.
+
+The new [branching campaign draft](docs/BRANCHING_CAMPAIGN.md) develops major decisions and persistent consequences around a confirmed three-route, nine-ending structure: hopeful, bittersweet, and dark per route, plus variations. Particular new scenes and ending conditions are awaiting review.
+
+The [opening sequence draft](docs/OPENING_HOUR.md) develops the confirmed 15–20-minute playable lead-in in Hearthmere, with proposed character introductions and first-hour crisis beats.
+
+The [crafting and economy brief](docs/CRAFTING_DESIGN.md) collects confirmed profession, resource, equipment, and NPC-trade requirements as that part of the interview develops.
+
+The [narrative and cinematic brief](docs/NARRATIVE_PRESENTATION.md) collects the presentation, generated vocal audio, and choice-driven narrative requirements. Branch scope and vocal coverage are still being refined.
+
+The [resistance design](docs/RESISTANCE_DESIGN.md) records the faction conflict chosen under the user's delegation; exact branch missions and endings remain in design.
+
+The [exploration and puzzle brief](docs/EXPLORATION_PUZZLES.md) collects the three class utilities, automatic companion use, exploration freedom, and puzzle direction.
+
+The [combat and progression brief](docs/COMBAT_PROGRESSION.md) collects the action foundation, class skill trees, awakening, difficulty modes, and defeat direction.
+
 ## Run
 
 ```sh
@@ -12,6 +32,8 @@ npm run dev
 Open http://localhost:5173. Production build: `npm run build`. Tests: `npm test`.
 
 ## Play
+
+On the hero screen, choose a class under **Hearthmere playtest** and select **Play the crossing**. Clear the old road, open the ruined bridge with the trio, and take the footbridge back to camp. Each run uses a temporary hero. Use **U** for your class utility, **L** to toggle guardian lock-on, and **F** at the bridge lever. Touch players can tap the corresponding buttons.
 
 Choose **Enter Aetherhaven** on the hero screen. New heroes begin in town. The east **Bellroad** gate leads into The Long Dawn; the north gate retains the original procedural wilderness route. The west road connects Aetherhaven and Market Crossing. Both towns heal the triad and refill flasks.
 

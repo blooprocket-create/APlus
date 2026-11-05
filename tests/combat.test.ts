@@ -24,6 +24,7 @@ vi.mock('../src/rendering/EnvironmentBuilder', () => ({
     buildPreviewScene() {}
     buildChronicle() { return { portals: [], npcs: [] }; }
     buildZone() { return { portals: [], npcs: [] }; }
+    buildSlice() {}
     addTravelGate() {} showFieldActivity() {} updateFieldActivity() {}
     update() {}
   },
@@ -48,6 +49,7 @@ interface EngineState {
   emitHudTelemetry(): void;
   currentZone: string;
   cooldowns: Record<string, number>;
+  activeAttackTimer: number;
   lootOrbs: Array<{ gold: number }>;
   invulnerableTimer: number;
   flaskCharges: number;
@@ -136,6 +138,26 @@ describe('gameplay integration', () => {
     state.activeCharacter.currentHp = 100;
     state.updateGameplay(0.05);
     expect(state.activeCharacter.currentHp).toBeGreaterThan(100);
+  });
+
+  it('discards a dodge during Eclipse windup and lets a fresh dodge cancel recovery', () => {
+    const character = structuredClone(state.activeCharacter);
+    engine.startGameplayWithCharacter(character, [], true);
+    state.activeCharacter.ultimateEnergy = 100;
+    engine.input.triggerAction('ultimate');
+    state.updateGameplay(0.02);
+    expect(callbacks.onUltimateCutIn).not.toHaveBeenCalled();
+
+    engine.input.triggerAction('dash');
+    for (let i = 0; i < 20; i++) state.updateGameplay(0.02);
+    expect(callbacks.onUltimateCutIn).toHaveBeenCalledTimes(1);
+    expect(state.cooldowns.dash).toBe(0);
+    expect(state.activeAttackTimer).toBeGreaterThan(0);
+
+    engine.input.triggerAction('dash');
+    state.updateGameplay(0.02);
+    expect(state.cooldowns.dash).toBeGreaterThan(0);
+    expect(state.activeAttackTimer).toBe(0);
   });
 
   it('locks a telegraph and lets the player walk out before impact', () => {

@@ -249,3 +249,39 @@ html, body { overscroll-behavior: none; touch-action: manipulation; }
   .touch-ui .hud-atlas-button { width: 106px; font-size: 8px; }
   .touch-ui .expedition-meter { display: none; }
 }
+.slice-launch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  margin-top: 12px;
+}
+.slice-launch label { grid-column: 1 / -1; color: #d8c49a; font-size: .72rem; }
+.slice-launch select { min-width: 0; padding: 8px; border: 1px solid #6b8293; border-radius: 5px; background: #18272e; color: #f0f4f2; font: inherit; }
+.slice-launch button { padding: 8px 10px; font-size: .68rem; }
+.slice-hud #btn-world-atlas, .slice-hud #btn-hero-sheet, .slice-hud #btn-comp-sheet,
+.slice-hud #btn-ability-sheet, .slice-hud #btn-cutscenes-sheet, .slice-hud .expedition-meter { display: none; }
+.slice-controls {
+  position: absolute;
+  bottom: calc(110px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  z-index: 4;
+}
+.slice-controls button { min-height: 44px; padding: 7px 9px; font-size: .7rem; }
+.slice-controls button[aria-pressed="true"] { border-color: #ffbf65; background: #4e341f; }
+.slice-controls .hidden { display: none; }
+.slice-hud .slice-committed { opacity: .58; }
+.touch-ui .slice-launch select { min-height: 44px; }
+.touch-ui .slice-controls { bottom: calc(14px + var(--safe-bottom)); max-width: clamp(105px, calc(100% - 360px - var(--safe-left) - var(--safe-right)), 250px); }
+.touch-ui .slice-hud .quest-obj-hint { display: block; color: #d7e6dd; font-size: 10px; line-height: 1.3; }
+.touch-ui .slice-hud .quest-obj-progress:not(:empty) { display: block; font-size: 10px; color: #ffd186; }
+.touch-ui .slice-hud #btn-char-select { display: flex; align-items: center; justify-content: center; min-width: 44px; }
+
+@media (orientation: portrait) {
+  .touch-ui .slice-controls { bottom: calc(184px + var(--safe-bottom)); max-width: calc(100% - 32px); }
+}

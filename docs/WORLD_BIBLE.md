@@ -1,5 +1,7 @@
 # The Long Dawn — world and campaign bible
 
+> Legacy campaign reference. The replacement direction is a fresh open-world story with the existing classes and companions; see [The Starforged Crown draft](OPEN_WORLD_STORY.md). The material below documents the currently implemented campaign and is not the narrative foundation for new quests. Runtime replacement has not begun.
+
 ## The central question
 
 When does preserving something become refusing to let it live?
