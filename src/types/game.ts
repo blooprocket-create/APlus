@@ -58,7 +58,8 @@ export type CutsceneId =
   | 'act2_ruins_unsealed'
   | 'act3_boss_intro'
   | 'act3_eclipse_sealed'
-  | 'slice_moat_plan';
+  | 'slice_moat_plan'
+  | 'hearthmere_shipment';
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'mythic';
 

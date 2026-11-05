@@ -1,3 +1,5 @@
+import { HERO_SYLLABLE_SECONDS, type HeroSyllable } from '../game/HeroSpeech';
+
 export type SoundCue = 'attack' | 'hit' | 'critical' | 'dash' | 'heal' | 'hurt' | 'defeat' | 'victory' | 'level';
 
 /** Small synthesized effects; no downloads, audio assets, or autoplay required. */
@@ -41,6 +43,43 @@ export class AudioSystem {
     this.cinematicEpoch += 1;
     for (const source of this.cinematicSources) { try { source.stop(); } catch { /* Already ended. */ } }
     this.cinematicSources = [];
+  }
+
+  public voice(pitch: number, cues?: readonly HeroSyllable[]): void {
+    const context = this.context;
+    if (this.muted || !context || context.state !== 'running') return;
+    const start = context.currentTime;
+    // Short local syllables supply vocal presence alongside the authored subtitles.
+    const contours = [1.12, .94, 1.2, .83];
+    const phrases: readonly HeroSyllable[] = cues ?? contours.map((_, index) => ({
+      at: index * HERO_SYLLABLE_SECONDS,
+      mouth: index % 2 === 0 ? 'SpeakRound' : 'SpeakWide',
+    }));
+    const formants = { SpeakOpen: 880, SpeakWide: 1170, SpeakRound: 730 };
+    for (const [index, syllable] of phrases.entries()) {
+      const at = start + syllable.at;
+      const contour = contours[index % contours.length];
+      const oscillator = context.createOscillator();
+      const formant = context.createBiquadFilter();
+      const gain = context.createGain();
+      oscillator.type = 'sawtooth';
+      oscillator.frequency.setValueAtTime(pitch * contour, at);
+      oscillator.frequency.exponentialRampToValueAtTime(pitch * contour * 0.89, at + 0.115);
+      formant.type = 'bandpass';
+      formant.frequency.value = formants[syllable.mouth];
+      formant.Q.value = 0.8;
+      gain.gain.setValueAtTime(0.001, at);
+      gain.gain.exponentialRampToValueAtTime(0.115, at + 0.024);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.12);
+      oscillator.connect(formant).connect(gain).connect(context.destination);
+      oscillator.start(at);
+      oscillator.stop(at + 0.13);
+      this.cinematicSources.push(oscillator);
+      oscillator.onended = () => {
+        oscillator.disconnect(); formant.disconnect(); gain.disconnect();
+        this.cinematicSources = this.cinematicSources.filter(source => source !== oscillator);
+      };
+    }
   }
 
   private loadScore(): Promise<void> {

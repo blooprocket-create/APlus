@@ -32,8 +32,8 @@ async function main(): Promise<void> {
     onTriggerCutscene: (cutsceneId) => ui?.playCutscene(cutsceneId),
   });
 
-  ui = new UIManager(uiRoot, persistence, engine);
-  await ui.bootstrap();
+  ui = new UIManager(uiRoot, engine);
+  ui.showCharacterSelectScreen();
   display.refresh(true);
 }
 

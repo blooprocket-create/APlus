@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { attachAnimeOutline, createAnimeToonMaterial } from './AnimeMaterials';
+import { attachAnimeOutline, createAnimeToonMaterial, createIllustratedCelMaterial } from './AnimeMaterials';
+import { buildSentinel, buildSlime, type FiendPose } from './HearthmereFiends';
 
 export type EnemyKind = 'slime' | 'sentinel' | 'boss_knight';
 
@@ -10,6 +11,8 @@ export interface EnemyMeshBundle {
   hpBarGroup: THREE.Group;
   mainMaterial: THREE.MeshToonMaterial;
   baseEmissiveHex: number;
+  animate?: (dt: number, pose: FiendPose) => void;
+  emitter?: THREE.Object3D;
 }
 
 export function buildEnemyMesh(kind: EnemyKind): EnemyMeshBundle {
@@ -19,70 +22,18 @@ export function buildEnemyMesh(kind: EnemyKind): EnemyMeshBundle {
   let bodyMesh: THREE.Object3D;
   let hpHeight = 1.6;
   let baseEmissiveHex = 0x110022;
+  let animate: EnemyMeshBundle['animate'];
+  let emitter: EnemyMeshBundle['emitter'];
 
-  if (kind === 'slime') {
-    baseEmissiveHex = 0x240046;
-    mainMaterial = createAnimeToonMaterial({
-      color: 0x9d4edd,
-      emissive: baseEmissiveHex,
-      emissiveIntensity: 0.35,
-    });
-    const slimeGeo = new THREE.SphereGeometry(0.55, 16, 14);
-    slimeGeo.scale(1.12, 0.82, 1.12);
-    const mesh = new THREE.Mesh(slimeGeo, mainMaterial);
-    mesh.position.y = 0.45;
-    mesh.castShadow = true;
-    attachAnimeOutline(mesh, 1.07);
-
-    // Angry anime eyes
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffea00 });
-    const eyeGeo = new THREE.BoxGeometry(0.12, 0.06, 0.05);
-    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(-0.18, 0.08, 0.56);
-    leftEye.rotation.z = -0.25;
-    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(0.18, 0.08, 0.56);
-    rightEye.rotation.z = 0.25;
-    mesh.add(leftEye, rightEye);
-
-    root.add(mesh);
-    bodyMesh = mesh;
-    hpHeight = 1.35;
-  } else if (kind === 'sentinel') {
-    baseEmissiveHex = 0x0077b6;
-    mainMaterial = createAnimeToonMaterial({
-      color: 0x00b4d8,
-      emissive: baseEmissiveHex,
-      emissiveIntensity: 0.45,
-    });
-    const group = new THREE.Group();
-    group.position.y = 1.05;
-
-    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.46, 0), mainMaterial);
-    core.castShadow = true;
-    attachAnimeOutline(core, 1.08);
-    group.add(core);
-
-    const ringMat = createAnimeToonMaterial({
-      color: 0x1d3557,
-      emissive: 0x48cae4,
-      emissiveIntensity: 0.4,
-    });
-    const outerRing = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.06, 8, 24), ringMat);
-    outerRing.rotation.x = Math.PI / 3;
-    attachAnimeOutline(outerRing, 1.06);
-    group.add(outerRing);
-
-    const eye = new THREE.Mesh(
-      new THREE.SphereGeometry(0.14, 10, 10),
-      new THREE.MeshBasicMaterial({ color: 0xff0055 })
-    );
-    eye.position.z = 0.4;
-    group.add(eye);
-
-    root.add(group);
-    bodyMesh = group;
-    hpHeight = 2.05;
+  if (kind === 'slime' || kind === 'sentinel') {
+    baseEmissiveHex = kind === 'slime' ? 0x280e25 : 0x0b2f33;
+    mainMaterial = createIllustratedCelMaterial({ color: 0xffffff, emissive: baseEmissiveHex, emissiveIntensity: .4 });
+    const rig = kind === 'slime' ? buildSlime(mainMaterial) : buildSentinel(mainMaterial);
+    bodyMesh = rig.facing;
+    animate = rig.update;
+    emitter = rig.emitter;
+    hpHeight = kind === 'slime' ? 1.59 : 2.34;
+    root.add(bodyMesh);
   } else {
     // Abyssal Boss Knight
     baseEmissiveHex = 0x6a040f;
@@ -162,5 +113,7 @@ export function buildEnemyMesh(kind: EnemyKind): EnemyMeshBundle {
     hpBarGroup,
     mainMaterial,
     baseEmissiveHex,
+    animate,
+    emitter,
   };
 }

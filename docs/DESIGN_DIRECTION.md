@@ -171,6 +171,7 @@ When the interview is complete, consolidate the decisions into an implementation
 | D151 | "Have the trio explain the whole plan before the player takes over." | In the automatic moat cutscene, the trio explains the complete sequence before returning control to the player. |
 | D152 | "Use a dedicated utility button that stays available during exploration." | The mobile HUD provides a dedicated button for the selected hero's utility throughout exploration. Exact button placement, targeting, and availability feedback remain open. |
 | D153 | "lets keep it the iso camera we had." | Use the prototype's original isometric follow camera and movement for gameplay. The moat scene uses its authored shots, and boss lock-on assists targeting. This supersedes D11 and D143. |
+| D154 | "the game should look like an anime" | Use smooth sculpted silhouettes, shaped eyes and hair, deliberate cel shadows, ink contours, and painted scenery. Review how those details read at gameplay zoom and in close cinematic shots. |
 
 D05 and D06 apply across story, characters, environments, combat, bosses, audio, and cinematics. Treat them as requirements when reviewing the existing story treatment. The current prototype's visuals, camera, and cutscene techniques do not determine the replacement game's quality ceiling or creative direction.
 

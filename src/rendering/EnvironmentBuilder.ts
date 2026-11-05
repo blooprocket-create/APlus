@@ -204,13 +204,13 @@ export class EnvironmentBuilder {
     }
   }
 
-  public buildSlice(scene: THREE.Scene, group: THREE.Group): void {
+  public buildSlice(scene: THREE.Scene, group: THREE.Group, sky = 0x526875): void {
     this.initBaseLighting(scene);
     this.clearZone(scene);
     this.zoneGroup = group;
     scene.add(group);
-    scene.background = new THREE.Color(0x526875);
-    scene.fog = new THREE.Fog(0x526875, 26, 92);
+    scene.background = new THREE.Color(sky);
+    scene.fog = new THREE.Fog(sky, 26, 92);
   }
 
   private buildStartingTown(group: THREE.Group): BuiltZoneResult {

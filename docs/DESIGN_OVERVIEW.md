@@ -2,6 +2,8 @@
 
 November 4, 2026. Start here to review the replacement game's direction. This consolidates the user interview into a readable brief. It is a design package in progress, not a completed implementation handoff or a description of features already built.
 
+For the build sequence and the specifications each milestone needs, start with the [production roadmap](PRODUCTION_ROADMAP.md).
+
 ## What we are making
 
 A cinematic, strongly cel-shaded 3D open-world ARPG for phones and tablets, played from a browser link. Desktop adapts to that primary experience. The original isometric camera follows one selected hero, with assisted targeting and manual movement, attacks, abilities, and dodges.
@@ -164,4 +166,4 @@ The user's latest explicit direction governs. [The decision record](DESIGN_DIREC
 | [Narrative and cinematics](NARRATIVE_PRESENTATION.md) | Emotional direction, branching requirements, visual performance, vocals, music, and scene pacing. |
 | [Saving and offline](SAVE_AND_OFFLINE.md) | Guest/cloud saves, evolving timelines, recovery, offline content, and unresolved synchronization. |
 
-No new gameplay, quests, art, audio, cloud services, or save migrations were implemented during this interview. The later handoff should distinguish design/content authoring still required from engineering work, and must include a playable quality slice and physical-device verification before claiming the intended scale or presentation is achieved.
+Hearthmere is the sole player-facing campaign. It runs through the refuge, with a local resume per hero. The Hearthmere Outskirts prototype serves as an internal reference for the connected road fight and moat puzzle. The lead-in needs pacing development, and art, vocal performances, and device targets still need production validation. The production roadmap sequences the remaining campaign and delivery work.

@@ -4,6 +4,9 @@ import { dressGuardian } from '../rendering/GuardianRegalia';
 import { BossFinisher } from '../rendering/BossFinisher';
 import { FinisherFrame } from './FinisherTimeline';
 import { MoatSlice, SLICE_CAMP, SliceActors } from './MoatSlice';
+import { HearthmereOpening, HEARTHMERE_COVER, HEARTHMERE_REFUGE, HEARTHMERE_WAYSTATION, OPENING_PATH } from './HearthmereOpening';
+import { type HearthmereSave, writeHearthmereSave } from '../persistence/HearthmereSave';
+import { heroSyllables, type HeroExpression, type HeroSyllable } from './HeroSpeech';
 import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
 import { ChronicleInteraction, ChronicleSite } from '../types/campaign';
 import { advanceChronicle, beginChapter, chronicleObjectiveView, currentChapter, currentObjective, ensureCampaign, isChronicleRegion } from './CampaignEngine';
@@ -18,6 +21,7 @@ import { ActionId, InputManager } from '../input/InputManager';
 import { PersistenceManager, xpRequiredForLevel } from '../persistence/PersistenceManager';
 import { attachAnimeOutline, createAnimeToonMaterial } from '../rendering/AnimeMaterials';
 import { CharacterAnimationState, CharacterRig } from '../rendering/CharacterMeshBuilder';
+import { heroAttackAdvance, heroReleaseProgress } from '../rendering/HeroMotion';
 import { buildEnemyMesh, EnemyKind, EnemyMeshBundle } from '../rendering/EnemyMeshBuilder';
 import { EnvironmentBuilder, SAFE_ZONE_RADIUS } from '../rendering/EnvironmentBuilder';
 import { IsometricCameraController } from '../rendering/IsometricCamera';
@@ -64,8 +68,32 @@ export interface CompanionEntity {
   attackCount: number;
   animState: CharacterAnimationState;
   activeAttackTimer: number;
+  pendingAttack?: TimedHeroRelease;
   actionText: string;
 }
+
+interface TimedHeroRelease {
+  releaseAt: number;
+  release: () => void;
+  advance: number;
+  travelled: number;
+}
+
+function stepIntoStrike(attack: TimedHeroRelease, progress: number, position: THREE.Vector3, yaw: number): boolean {
+  if (attack.advance === 0) return false;
+  const travel = attack.advance * THREE.MathUtils.smoothstep(progress, attack.releaseAt * .20, attack.releaseAt);
+  const delta = travel - attack.travelled;
+  attack.travelled = travel;
+  position.x += Math.sin(yaw) * delta;
+  position.z += Math.cos(yaw) * delta;
+  return delta > 0;
+}
+
+interface PendingHeroAttack extends TimedHeroRelease {
+  committed: boolean;
+}
+
+const COMPANION_SWING_DURATION = 0.32;
 
 export interface EnemyEntity {
   id: string;
@@ -94,6 +122,7 @@ export interface ProjectileEntity {
   id: string;
   mesh: THREE.Object3D;
   position: THREE.Vector3;
+  visualOffset?: THREE.Vector3;
   velocity: THREE.Vector3;
   radius: number;
   damageMultiplier: number;
@@ -178,6 +207,7 @@ export interface HudTelemetry {
   cooldowns: Record<ActionId, { remaining: number; total: number }>;
   lastSavedText: string;
   slice?: { bossAvailable: boolean; bossLocked: boolean; committed: boolean; canUseLever: boolean };
+  opening?: { action?: string; line?: { speaker: string; text: string }; committed: boolean };
 }
 
 export interface GameEngineCallbacks {
@@ -207,6 +237,9 @@ export class GameEngine {
 
   private mode: 'preview' | 'playing' = 'preview';
   private slice: MoatSlice | null = null;
+  private opening: HearthmereOpening | null = null;
+  private heroDialogue: { actor: CharacterRig; tone: HeroExpression; cues: readonly HeroSyllable[]; elapsed: number } | null = null;
+  private openingSaveFailed = false;
   private sliceBossLock: EnemyEntity | null = null;
   private sliceBossDefeated = false;
   private sliceWindup = 0;
@@ -244,6 +277,7 @@ export class GameEngine {
   private comboResetTimer = 0;
   private activeAttackTimer = 0;
   private activeAttackDuration = 0.26;
+  private pendingAttack: PendingHeroAttack | null = null;
   private dashTimer = 0;
   private dashDirection = new THREE.Vector3(0, 0, 1);
   private invulnerableTimer = 0;
@@ -286,6 +320,7 @@ export class GameEngine {
 
   public get isFinishing(): boolean { return this.finisher !== null; }
   public get isSlice(): boolean { return this.slice !== null; }
+  public get isOpening(): boolean { return this.opening !== null; }
   public skipBossFinisher(): void { this.finisher?.finish(); }
 
   private sliceActors(): SliceActors {
@@ -367,7 +402,7 @@ export class GameEngine {
   }
 
   public async travelToChapter(index: number): Promise<boolean> {
-    if (this.slice) return false;
+    if (this.slice || this.opening) return false;
     if (!this.activeCharacter || this.finisher || this.defeated) return false;
     if (!await this.saveActiveCharacterNow()) return false;
     if (!beginChapter(this.activeCharacter, index)) return false;
@@ -518,7 +553,9 @@ export class GameEngine {
     this.hitComboCount = 0;
     this.hitStop = 0;
     this.cooldowns = { basic: 0, dash: 0, skill1: 0, skill2: 0, ultimate: 0 };
-    if (this.slice) {
+    if (this.opening) {
+      this.resetOpeningAfterDefeat();
+    } else if (this.slice) {
       this.clearZoneCombatEntities();
       this.resetSliceAtCamp();
     } else this.enterZone('starting_town');
@@ -603,6 +640,7 @@ export class GameEngine {
   public setPreviewCharacter(classId: CharacterClassId | null): void {
     this.mode = 'preview';
     this.slice = null;
+    this.opening = null;
     this.sliceBossLock = null;
     this.sliceWindup = 0;
     for (const reason of this.pauseReasons) if (reason !== 'orientation') this.pauseReasons.delete(reason);
@@ -650,7 +688,8 @@ export class GameEngine {
   public startGameplayWithCharacter(
     character: CharacterSaveData,
     accountRoster: CharacterSaveData[] = [],
-    playableSlice = false
+    playableSlice = false,
+    openingSave?: HearthmereSave
   ): void {
     this.clearGameplayEntities();
     if (this.previewRig) {
@@ -667,6 +706,8 @@ export class GameEngine {
 
     this.mode = 'playing';
     this.slice = playableSlice ? new MoatSlice() : null;
+    this.opening = openingSave ? new HearthmereOpening(character.classId, openingSave.step) : null;
+    this.openingSaveFailed = false;
     this.sliceBossDefeated = false;
     this.sliceBossLock = null;
     this.sliceWindup = 0;
@@ -677,6 +718,7 @@ export class GameEngine {
     this.flaskCooldown = 0;
     this.dashTimer = 0;
     this.activeAttackTimer = 0;
+    this.animState = { isMoving: false, moveSpeedRatio: 0, attackComboStep: 0, attackSwingProgress: 0, isDashing: false, hitFlashTimer: 0 };
     this.comboStep = 0;
     this.input.resetAll();
     this.activeCharacter = structuredClone(character);
@@ -696,13 +738,13 @@ export class GameEngine {
     this.playerRig = new CharacterRig(this.activeCharacter.classId);
     this.scene.add(this.playerRig.root);
     this.buildCompassArrow();
-    this.spawnCompanionPair(this.activeCharacter, accountRoster);
+    if (!this.opening) this.spawnCompanionPair(this.activeCharacter, accountRoster);
 
     this.cooldowns = { basic: 0, dash: 0, skill1: 0, skill2: 0, ultimate: 0 };
     this.hitComboCount = 0;
     this.autoSaveTimer = 0;
 
-    if (this.slice) {
+    if (this.slice || this.opening) {
       this.currentZone = 'starting_town';
       this.currentPathLayout = null;
       this.currentPathProgress = 0;
@@ -714,7 +756,13 @@ export class GameEngine {
       this.nearbyChronicleSite = null;
       this.fieldPlan = null;
       if (this.compassGroup) this.compassGroup.visible = false;
-      this.environment.buildSlice(this.scene, this.slice.group);
+      if (this.opening && openingSave) {
+        this.environment.buildSlice(this.scene, this.opening.group, 0x758984);
+        this.restoreOpening(openingSave);
+        this.emitHudTelemetry();
+        return;
+      }
+      this.environment.buildSlice(this.scene, this.slice!.group);
       this.resetSliceAtCamp();
       this.callbacks.onBannerNotification('HEARTHMERE OUTSKIRTS', 'Clear the road, open the crossing, and follow the shortcut home.');
       this.emitHudTelemetry();
@@ -725,6 +773,82 @@ export class GameEngine {
     const journey = this.activeCharacter.journeyState;
     this.enterZone(initialZone, undefined, journey?.seed ?? undefined, journey?.zone === initialZone ? journey : undefined);
     this.emitHudTelemetry();
+  }
+
+  private restoreOpening(snapshot: HearthmereSave): void {
+    const character = this.activeCharacter!;
+    character.currentHp = THREE.MathUtils.clamp(snapshot.hp, 1, this.effectiveStats!.maxHp);
+    character.ultimateEnergy = THREE.MathUtils.clamp(snapshot.energy, 0, 100);
+    character.playTimeSeconds = Math.max(0, snapshot.seconds);
+    this.flaskCharges = THREE.MathUtils.clamp(Math.floor(snapshot.flasks), 0, FLASK_CAPACITY);
+    this.placeOpeningPlayer(snapshot.position, snapshot.yaw);
+    if (snapshot.movingGroup) this.opening!.restoreMovingGroup(snapshot.movingGroup);
+    this.spawnOpeningEncounter(snapshot.enemies);
+    void this.saveActiveCharacterNow();
+  }
+
+  private placeOpeningPlayer(point: { x: number; z: number }, yaw: number): void {
+    this.opening!.placePlayer(this.playerPos, point);
+    this.playerYaw = yaw;
+    this.playerRig!.root.position.copy(this.playerPos);
+    this.playerRig!.root.rotation.y = yaw;
+    if (this.opening!.hasParty && this.companions.length === 0) this.spawnCompanionPair(this.activeCharacter!, []);
+    for (const companion of this.companions) {
+      const nearby = { x: this.playerPos.x + companion.wingSide * 1.5, z: this.playerPos.z + 1.2 };
+      const destination = this.opening!.walkable(nearby) ? nearby : this.playerPos;
+      companion.position.set(destination.x, 0, destination.z);
+      companion.rig.root.position.copy(companion.position);
+    }
+    this.cameraController.snapToIsometricFollow(this.playerPos);
+  }
+
+  private spawnOpeningEncounter(resume?: HearthmereSave['enemies']): void {
+    this.expedition = { total: 0, defeated: 0, seconds: 0, gold: 0, damageTaken: 0 };
+    for (const seed of this.opening!.seeds) {
+      this.spawnEnemyAtPosition(seed.kind, seed.x, seed.z, seed.scale);
+      if (!resume) continue;
+      const enemy = this.enemies[this.enemies.length - 1];
+      const saved = resume.find(entry => entry.id === enemy.id && entry.hp > 0);
+      if (!saved) {
+        this.enemies.pop();
+        this.removeSceneObject(enemy.bundle.root);
+      } else {
+        enemy.hp = Math.min(saved.hp, enemy.maxHp);
+        if (this.opening!.walkable(saved)) enemy.bundle.root.position.set(saved.x, 0, saved.z);
+      }
+    }
+    this.expedition.total = this.enemies.length;
+  }
+
+  private resetOpeningAfterDefeat(): void {
+    this.clearZoneCombatEntities();
+    this.opening!.resetEncounter();
+    const atRefuge = this.opening!.step === 'complete' || this.opening!.step === 'refuge';
+    this.placeOpeningPlayer(atRefuge ? HEARTHMERE_REFUGE : HEARTHMERE_WAYSTATION, Math.PI / 2);
+    this.flaskCharges = FLASK_CAPACITY;
+    this.dashTimer = 0;
+    this.activeAttackTimer = 0;
+    this.sliceWindup = 0;
+    this.animState.attackComboStep = 0;
+    this.input.resetAll();
+    this.spawnOpeningEncounter();
+    void this.saveActiveCharacterNow();
+  }
+
+  private interactOpening(): boolean {
+    const opening = this.opening!;
+    if (this.isPaused || !opening.interact(this.playerPos, this.enemies.length, this.activeCharacter!.name)) return false;
+    if (opening.step === 'square') {
+      this.placeOpeningPlayer(HEARTHMERE_COVER, Math.PI / 2);
+      this.spawnOpeningEncounter();
+      this.triggerCutscene('hearthmere_shipment');
+    } else if (opening.step === 'yard_gate' || opening.step === 'far_hold') {
+      this.spawnOpeningEncounter();
+    }
+    if (opening.line) this.audio.voice(opening.line.pitch);
+    void this.saveActiveCharacterNow();
+    this.emitHudTelemetry();
+    return true;
   }
 
   private resetSliceAtCamp(): void {
@@ -815,7 +939,7 @@ export class GameEngine {
     explicitSeed?: number,
     resume?: CharacterSaveData['journeyState']
   ): void {
-    if (this.slice) return;
+    if (this.slice || this.opening) return;
     if (!this.activeCharacter || !this.effectiveStats) return;
 
     const savedPosition = resume ? { ...this.activeCharacter.position } : null;
@@ -1080,6 +1204,7 @@ export class GameEngine {
    * Interacts with the nearby NPC to accept, advance, or complete the active quest.
    */
   public interactWithNearbyQuestNpc(): boolean {
+    if (this.opening) return this.interactOpening();
     if (this.slice) {
       if (!this.isPaused && this.slice.canLowerBridge(this.sliceActors())) {
         this.slice.lowerBridge();
@@ -1167,12 +1292,68 @@ export class GameEngine {
       cameraOffset: { x: number; y: number; z: number };
       lookAtOffset: { x: number; y: number; z: number };
     } | null,
-    vfxBurst = false
+    vfxBurst = false,
+    cut = false,
   ): void {
-    this.cameraController.setCutsceneShot(shot);
+    if (!shot) this.heroDialogue = null;
+    this.cameraController.setCutsceneShot(shot, cut ? this.playerPos : undefined);
+    if (this.opening) {
+      for (const enemy of this.enemies) enemy.bundle.hpBarGroup.visible = shot === null;
+    }
     if (vfxBurst && this.mode === 'playing') {
       this.vfx.spawnShockwaveRing(this.playerPos, 3.6, 0xffd166, 0xffffff, 0.45);
     }
+  }
+
+  public stageHeroDialogue(
+    performance: { role: CharacterClassId; tone: HeroExpression; closeup?: boolean } | undefined,
+    line: string,
+  ): { cameraOffset: THREE.Vector3; lookAtOffset: THREE.Vector3 } | undefined {
+    this.heroDialogue = null;
+    if (!performance) return;
+    const actor = this.playerRig?.classId === performance.role ? this.playerRig
+      : this.companions.find(companion => companion.classId === performance.role)?.rig;
+    if (!actor) return;
+    const cues = heroSyllables(line);
+    this.heroDialogue = { actor, cues, tone: performance.tone, elapsed: 0 };
+    const pitch = { warrior: 174, mage: 215, assassin: 162 }[performance.role];
+    this.audio.voice(pitch, cues);
+    if (!performance.closeup) return;
+    const head = actor.root.getObjectByName('Head')!.getWorldPosition(new THREE.Vector3());
+    const camera = new THREE.Vector3(-.42, .18, 1.83)
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), actor.root.rotation.y);
+    return {
+      cameraOffset: head.clone().add(camera).sub(this.playerPos),
+      lookAtOffset: head.add(new THREE.Vector3(0, -.13, 0)).sub(this.playerPos),
+    };
+  }
+
+  public silenceHeroDialogue(): void {
+    if (this.heroDialogue) this.heroDialogue.cues = [];
+  }
+
+  private updateHeroDialogue(dt: number): void {
+    const dialogue = this.heroDialogue;
+    if (!dialogue || !this.playerRig) return;
+    const { actor, tone, cues, elapsed } = dialogue;
+    actor.updateFace(dt, { tone, cues, elapsed, speaking: true, gaze: -.16 });
+    for (const listener of [this.playerRig, ...this.companions.map(companion => companion.rig)]) {
+      if (listener === actor) continue;
+      const delta = actor.root.position.clone().sub(listener.root.position).normalize();
+      const yaw = listener.root.rotation.y;
+      const gaze = delta.x * Math.cos(yaw) - delta.z * Math.sin(yaw);
+      listener.updateFace(dt, { tone: 'alert', elapsed, cues: [], speaking: false, gaze });
+    }
+    dialogue.elapsed += dt;
+  }
+
+  public finishOpeningReveal(): void {
+    this.opening?.stageReveal('response');
+    this.cameraController.snapToIsometricFollow(this.playerPos);
+  }
+
+  public stageOpeningReveal(phase: 'seal' | 'impact' | 'response'): void {
+    this.opening?.stageReveal(phase);
   }
 
   /**
@@ -1205,7 +1386,8 @@ export class GameEngine {
       const cfg = configs[comp.classId];
       const bondMult = 1 + (cfg.bondLevel - 1) * 0.12;
       comp.actionText = '★ TRIAD SYNERGY BURST!';
-      comp.activeAttackTimer = 0.45;
+      comp.pendingAttack = undefined;
+      comp.activeAttackTimer = COMPANION_SWING_DURATION;
       comp.animState.attackComboStep = 3;
       comp.animState.attackSwingProgress = 0;
 
@@ -1412,6 +1594,27 @@ export class GameEngine {
   public async saveActiveCharacterNow(): Promise<boolean> {
     if (this.slice) return true;
     if (!this.activeCharacter || this.mode !== 'playing') return false;
+    if (this.opening) {
+      const character = this.activeCharacter;
+      const success = writeHearthmereSave({
+        version: 1, classId: character.classId, name: character.name, step: this.opening.step,
+        position: this.defeated ? HEARTHMERE_WAYSTATION : { x: this.playerPos.x, z: this.playerPos.z },
+        yaw: this.playerYaw, hp: this.defeated ? this.effectiveStats!.maxHp : character.currentHp,
+        energy: character.ultimateEnergy, flasks: this.defeated ? FLASK_CAPACITY : this.flaskCharges,
+        seconds: character.playTimeSeconds,
+        movingGroup: this.defeated ? undefined : this.opening.movingGroup,
+        enemies: this.defeated ? this.opening.seeds.map(seed => ({
+          id: this.enemyId(seed.kind, seed.x, seed.z), x: seed.x, z: seed.z,
+          hp: seed.kind === 'slime' ? 210 : 380,
+        })) : this.enemies.map(enemy => ({
+          id: enemy.id, hp: enemy.hp, x: enemy.bundle.root.position.x, z: enemy.bundle.root.position.z,
+        })),
+      });
+      if (success) this.lastSavedAt = Date.now();
+      else if (!this.openingSaveFailed) this.callbacks.onBannerNotification('SAVE FAILED', 'Allow browser storage to keep your Hearthmere progress.');
+      this.openingSaveFailed = !success;
+      return success;
+    }
     this.activeCharacter.position = { x: Number(this.playerPos.x.toFixed(2)), y: 0, z: Number(this.playerPos.z.toFixed(2)) };
     this.activeCharacter.journeyState = {
       zone: this.currentZone,
@@ -1461,6 +1664,8 @@ export class GameEngine {
   }
 
   private clearZoneCombatEntities(): void {
+    this.pendingAttack = null;
+    for (const companion of this.companions) companion.pendingAttack = undefined;
     for (const enemy of this.enemies) {
       this.removeTelegraph(enemy);
       this.removeSceneObject(enemy.bundle.root);
@@ -1517,6 +1722,10 @@ export class GameEngine {
     }
   }
 
+  private enemyId(kind: EnemyKind, x: number, z: number): string {
+    return `enemy_${this.currentZone}_${kind}_${x.toFixed(2)}_${z.toFixed(2)}`;
+  }
+
   private spawnEnemyAtPosition(
     kind: EnemyKind,
     x: number,
@@ -1533,7 +1742,7 @@ export class GameEngine {
     const speed = kind === 'boss_knight' ? 3.3 : kind === 'sentinel' ? 3.8 : 4.3;
 
     this.enemies.push({
-      id: `enemy_${this.currentZone}_${kind}_${x.toFixed(2)}_${z.toFixed(2)}`,
+      id: this.enemyId(kind, x, z),
       kind,
       name:
         kind === 'boss_knight'
@@ -1591,7 +1800,15 @@ export class GameEngine {
       this.cameraController.updatePedestalPreview(dt);
     } else if (this.mode === 'playing' && this.activeCharacter && this.playerRig && this.effectiveStats) {
       if (this.isPaused) {
-        if (this.pauseReasons.has('cutscene')) this.cameraController.updateIsometricFollow(dt, this.playerPos, new THREE.Vector2());
+        if (this.pauseReasons.has('cutscene') && !this.pauseReasons.has('cutsceneHold') &&
+          !this.pauseReasons.has('orientation') && document.visibilityState !== 'hidden') {
+          if (this.opening?.updateReveal(dt)) {
+            this.audio.cinematic('strike');
+            this.cameraController.triggerShake(.68, .36);
+          }
+          this.updateHeroDialogue(dt);
+          this.cameraController.updateIsometricFollow(dt, this.playerPos, new THREE.Vector2());
+        }
       } else if (this.hitStop > 0) {
         this.hitStop = Math.max(0, this.hitStop - dt);
       } else {
@@ -1624,12 +1841,12 @@ export class GameEngine {
     }
 
     // Safe Zone passive regeneration
-    if (this.slice ? this.slice.atCamp : isSafeZone(this.currentZone)) {
-      if (this.slice) this.flaskCharges = FLASK_CAPACITY;
+    if (this.opening?.safe ?? this.slice?.atCamp ?? isSafeZone(this.currentZone)) {
+      if (this.slice || this.opening) this.flaskCharges = FLASK_CAPACITY;
       if (char.currentHp < stats.maxHp) {
         char.currentHp = Math.min(stats.maxHp, char.currentHp + stats.maxHp * 0.15 * dt);
       }
-      if (char.ultimateEnergy < 100) {
+      if (!this.opening && char.ultimateEnergy < 100) {
         char.ultimateEnergy = Math.min(100, char.ultimateEnergy + 8 * dt);
       }
     }
@@ -1683,7 +1900,15 @@ export class GameEngine {
         this.playerPos.x += move.x * speed * dt;
         this.playerPos.z += move.y * speed * dt;
         this.clampPlayerToZone();
-        this.playerYaw = Math.atan2(move.x, move.y);
+        if (!this.pendingAttack && this.sliceWindup <= 0) {
+          const heading = Math.atan2(move.x, move.y);
+          const spearRecovery = char.classId === 'warrior' && this.activeAttackTimer > 0
+            && this.animState.attackComboStep >= 1 && this.animState.attackComboStep <= 3;
+          const delta = heading - this.playerYaw;
+          this.playerYaw = spearRecovery
+            ? this.playerYaw + THREE.MathUtils.clamp(Math.atan2(Math.sin(delta), Math.cos(delta)), -12 * dt, 12 * dt)
+            : heading;
+        }
         this.animState.isMoving = true;
         this.animState.moveSpeedRatio = move.length();
       } else {
@@ -1694,42 +1919,40 @@ export class GameEngine {
 
     // Process Action Inputs (Dash, Ultimate, Skill 2, Skill 1, Basic Attack)
     const dodgePressed = this.input.consumeAction('dash');
-    if (slice && (playerVaulting || this.sliceWindup > 0 || this.dashTimer > 0)) {
+    const usesCommittedActions = slice !== null || this.opening !== null;
+    if (this.attackCommitted || (usesCommittedActions && (playerVaulting || this.dashTimer > 0))) {
       for (const action of ['ultimate', 'skill2', 'skill1', 'basic'] as const) this.input.consumeAction(action);
       if (this.sliceWindup > 0) {
         this.sliceWindup = Math.max(0, this.sliceWindup - dt);
         if (this.sliceWindup === 0) this.executeSkill('ultimate');
       }
     } else if (dodgePressed && this.cooldowns.dash <= 0) {
-      if (slice) {
-        this.activeAttackTimer = 0;
-        this.animState.attackComboStep = 0;
-        this.animState.attackSwingProgress = 0;
-        this.comboStep = 0;
-      }
+      this.pendingAttack = null;
+      this.activeAttackTimer = 0;
+      this.animState.attackComboStep = 0;
+      this.animState.attackSwingProgress = 0;
+      this.comboStep = 0;
       this.executeDash(classDef);
+    } else if (this.pendingAttack) {
+      // An unreleased basic strike can be dodged but cannot be replaced by another attack.
+      for (const action of ['ultimate', 'skill2', 'skill1', 'basic'] as const) this.input.consumeAction(action);
     } else if (
       this.input.consumeAction('ultimate') &&
       this.cooldowns.ultimate <= 0 &&
       char.ultimateEnergy >= classDef.skills.ultimate.energyCost
     ) {
-      if (slice) {
-        this.sliceWindup = 0.38;
-        this.activeAttackDuration = this.sliceWindup;
-        this.activeAttackTimer = this.sliceWindup;
-        this.animState.attackComboStep = 5;
-        this.animState.attackSwingProgress = 0;
-        this.vfx.spawnShockwaveRing(this.playerPos, 1.35, classDef.skills.ultimate.colorHex, 0xffffff, this.sliceWindup);
-      } else this.executeSkill('ultimate');
+      this.sliceWindup = 0.25;
+      this.activeAttackDuration = this.sliceWindup;
+      this.activeAttackTimer = this.sliceWindup;
+      this.animState.attackComboStep = 5;
+      this.animState.attackSwingProgress = 0;
+      this.audio.cinematic('charge');
+      this.vfx.spawnShockwaveRing(this.playerPos, 1.35, classDef.skills.ultimate.colorHex, 0xffffff, this.sliceWindup);
     } else if (this.input.consumeAction('skill2') && this.cooldowns.skill2 <= 0) {
       this.executeSkill('skill2');
     } else if (this.input.consumeAction('skill1') && this.cooldowns.skill1 <= 0) {
       this.executeSkill('skill1');
     } else if (this.input.consumeAction('basic') && this.cooldowns.basic <= 0) {
-      if (slice?.breakCrate(this.sliceActors())) {
-        this.audio.play('hit');
-        this.vfx.spawnShockwaveRing(this.playerPos, 1.6, 0xffc269, 0xffffff, 0.3);
-      }
       this.executeBasicCombo();
     }
 
@@ -1745,12 +1968,27 @@ export class GameEngine {
       }
     }
 
+    if (this.pendingAttack && stepIntoStrike(this.pendingAttack, this.animState.attackSwingProgress, this.playerPos, this.playerYaw)) {
+      this.clampPlayerToZone();
+    }
     if (slice) slice.update(dt, this.sliceActors());
 
     // Update Player Rig transform & animation
     this.playerRig!.root.position.copy(this.playerPos);
     this.playerRig!.root.rotation.y = this.playerYaw;
+    this.animState.charging = this.sliceWindup > 0;
     this.playerRig!.updateAnimation(dt, this.animState);
+    if (this.pendingAttack && this.animState.attackSwingProgress >= this.pendingAttack.releaseAt) {
+      const attack = this.pendingAttack;
+      this.pendingAttack = null;
+      const hitCount = this.hitComboCount;
+      attack.release();
+      if (this.finisher) return;
+      this.playerRig!.root.position.copy(this.playerPos);
+      if (this.hitComboCount > hitCount && (attack.committed || this.animState.attackComboStep === 3)) {
+        this.hitStop = Math.max(this.hitStop, this.animState.attackComboStep === 5 ? 0.075 : 0.042);
+      }
+    }
 
     // Update Projectiles, Ground Hazards, Enemies & Loot
     if (slice?.inPuzzle) {
@@ -1766,10 +2004,20 @@ export class GameEngine {
     this.updateGroundHazards(dt);
     if (this.finisher) return;
     this.updateEnemies(dt);
+    if (this.defeated) return;
     this.updateLootOrbs(dt);
     this.cameraController.updateIsometricFollow(dt, this.playerPos, move);
     if (slice) {
       if (slice.startIfNear(this.playerPos)) this.triggerCutscene('slice_moat_plan');
+    } else if (this.opening) {
+      const event = this.opening.update(dt, this.playerPos);
+      if (event.tell) this.audio.cinematic('charge');
+      if (event.strike) {
+        this.audio.cinematic('strike');
+        this.cameraController.triggerShake(0.34, 0.2);
+      }
+      if (event.hit) this.damagePlayer(Math.ceil(stats.maxHp * 0.46));
+      if (event.changed) void this.saveActiveCharacterNow();
     } else {
       this.updateFieldObjective(dt);
       this.updatePortalAndNpcProximity();
@@ -1829,7 +2077,7 @@ export class GameEngine {
       }
       if (comp.activeAttackTimer > 0) {
         comp.activeAttackTimer -= dt;
-        comp.animState.attackSwingProgress = 1 - Math.max(0, comp.activeAttackTimer / 0.28);
+        comp.animState.attackSwingProgress = 1 - Math.max(0, comp.activeAttackTimer / COMPANION_SWING_DURATION);
         if (comp.activeAttackTimer <= 0) {
           comp.animState.attackComboStep = 0;
         }
@@ -1844,7 +2092,7 @@ export class GameEngine {
       // Find nearest enemy within the companion's stance leash range
       let targetEnemy: EnemyEntity | null = null;
       let bestDist = stanceInfo.leashRange;
-      if (!this.slice?.atCamp) {
+      if (!this.slice?.atCamp && !this.opening?.safe) {
         for (const e of this.enemies) {
           const d = this.playerPos.distanceTo(e.bundle.root.position);
           if (d < bestDist) {
@@ -1854,7 +2102,10 @@ export class GameEngine {
         }
       }
 
-      if (targetEnemy) {
+      if (comp.pendingAttack) {
+        comp.animState.isMoving = false;
+        comp.animState.moveSpeedRatio = 0;
+      } else if (targetEnemy) {
         const enemyPos = targetEnemy.bundle.root.position;
         const toEnemy = enemyPos.clone().sub(comp.position);
         toEnemy.y = 0;
@@ -1890,7 +2141,8 @@ export class GameEngine {
         }
       } else {
         // Follow player in formation
-        const destination = this.slice ? this.slice.companionRoute(comp.position, formationPos, this.playerPos) : formationPos;
+        const destination = this.opening ? this.opening.companionDestination(this.playerPos, formationPos, comp.classId)
+          : this.slice ? this.slice.companionRoute(comp.position, formationPos, this.playerPos) : formationPos;
         const toFormation = destination.clone().sub(comp.position);
         toFormation.y = 0;
         const dist = toFormation.length();
@@ -1910,6 +2162,7 @@ export class GameEngine {
         }
       }
 
+      if (comp.pendingAttack) stepIntoStrike(comp.pendingAttack, comp.animState.attackSwingProgress, comp.position, comp.yaw);
       // The belllands are explorable landscapes; the tutorial retains its corridor bounds.
       if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(
@@ -1920,8 +2173,9 @@ export class GameEngine {
         );
         comp.position.x = clamped.x;
         comp.position.z = clamped.z;
-      } else if (this.slice) {
-        if (!this.slice.walkable(comp.position.x, comp.position.z)) {
+      } else if (this.slice || this.opening) {
+        const walkable = this.opening ? this.opening.walkable(comp.position) : this.slice!.walkable(comp.position.x, comp.position.z);
+        if (!walkable) {
           comp.position.set(previousX, 0, previousZ);
         }
       } else {
@@ -1936,6 +2190,12 @@ export class GameEngine {
       comp.rig.root.position.copy(comp.position);
       comp.rig.root.rotation.y = comp.yaw;
       comp.rig.updateAnimation(dt, comp.animState);
+      if (comp.pendingAttack && comp.animState.attackSwingProgress >= comp.pendingAttack.releaseAt) {
+        const attack = comp.pendingAttack;
+        comp.pendingAttack = undefined;
+        attack.release();
+        if (this.finisher) return;
+      }
     }
   }
 
@@ -1943,6 +2203,28 @@ export class GameEngine {
     comp: CompanionEntity,
     targetEnemy: EnemyEntity,
     dirToEnemy: THREE.Vector3
+  ): void {
+    comp.attackCount += 1;
+    const special = comp.attackCount % 4 === 0;
+    const cooldown = { warrior: 1.25, mage: 1.35, assassin: 0.92 };
+    comp.attackCooldown = cooldown[comp.classId];
+    comp.activeAttackTimer = COMPANION_SWING_DURATION;
+    comp.animState.attackComboStep = special ? (comp.classId === 'assassin' ? 3 : 4) : 1;
+    comp.animState.skillSlot = special && comp.classId === 'warrior' ? 'skill2' : 'skill1';
+    comp.animState.attackSwingProgress = 0;
+    comp.pendingAttack = {
+      releaseAt: heroReleaseProgress(comp.classId, comp.animState),
+      advance: heroAttackAdvance(comp.classId, comp.animState),
+      travelled: 0,
+      release: () => this.releaseCompanionAttack(comp, targetEnemy, dirToEnemy, special),
+    };
+  }
+
+  private releaseCompanionAttack(
+    comp: CompanionEntity,
+    targetEnemy: EnemyEntity,
+    dirToEnemy: THREE.Vector3,
+    special: boolean,
   ): void {
     const cDef = CHARACTER_CLASSES[comp.classId];
     const cfg = ensureCompanionConfigs(this.activeCharacter!)[comp.classId];
@@ -1953,14 +2235,8 @@ export class GameEngine {
     const gearScale = 1 + gearAtk * 0.008;
     const bondMult = 0.45 * (1 + (cfg.bondLevel - 1) * 0.12) * stanceInfo.damageMult * gearScale;
 
-    comp.attackCount += 1;
-    comp.activeAttackTimer = 0.28;
-    comp.animState.attackComboStep = (comp.attackCount % 3) + 1;
-    comp.animState.attackSwingProgress = 0;
-
     if (comp.classId === 'warrior') {
-      comp.attackCooldown = 1.25;
-      if (comp.attackCount % 4 === 0) {
+      if (special) {
         comp.actionText = 'Earthshaker Slam!';
         this.vfx.spawnShockwaveRing(
           comp.position,
@@ -1984,7 +2260,8 @@ export class GameEngine {
           comp.yaw,
           4.8,
           cDef.skills.basic.colorHex,
-          cDef.skills.basic.accentHex
+          cDef.skills.basic.accentHex,
+          comp.rig.getSpearTip(),
         );
         this.dealLineDamage(
           comp.position,
@@ -1998,8 +2275,7 @@ export class GameEngine {
         );
       }
     } else if (comp.classId === 'mage') {
-      comp.attackCooldown = 1.35;
-      if (comp.attackCount % 4 === 0) {
+      if (special) {
         comp.actionText = 'Gravity Vortex!';
         this.spawnGroundHazard({
           position: targetEnemy.bundle.root.position.clone(),
@@ -2018,6 +2294,7 @@ export class GameEngine {
         comp.actionText = 'Starlight Bolt!';
         this.spawnProjectile({
           origin: comp.position,
+          emitter: comp.rig.getSpellEmitter(false),
           yaw: comp.yaw,
           speed: 17.0,
           radius: 0.38,
@@ -2035,11 +2312,11 @@ export class GameEngine {
       }
     } else {
       // Ranged Assassin Companion
-      comp.attackCooldown = 0.92;
-      if (comp.attackCount % 4 === 0) {
+      if (special) {
         comp.actionText = 'Shadow Chakram!';
         this.spawnProjectile({
           origin: comp.position,
+          emitter: comp.rig.getBladeEmitter(1),
           yaw: comp.yaw,
           speed: 18.5,
           radius: 0.72,
@@ -2059,6 +2336,7 @@ export class GameEngine {
         for (const spread of [-0.1, 0.1]) {
           this.spawnProjectile({
             origin: comp.position,
+            emitter: comp.rig.getBladeEmitter(spread < 0 ? -1 : 1),
             yaw: comp.yaw + spread,
             speed: 23.0,
             radius: 0.32,
@@ -2079,6 +2357,10 @@ export class GameEngine {
   }
 
   private clampPlayerToZone(): void {
+    if (this.opening) {
+      this.opening.constrainPlayer(this.playerPos);
+      return;
+    }
     if (this.slice) {
       this.slice.constrainPlayer(this.playerPos);
       return;
@@ -2175,6 +2457,7 @@ export class GameEngine {
   }
 
   private executeDash(classDef: (typeof CHARACTER_CLASSES)[CharacterClassId]): void {
+    this.animState.isDashing = true;
     const dashSkill = classDef.skills.dash;
     this.audio.play('dash');
     this.cooldowns.dash = dashSkill.cooldown;
@@ -2218,7 +2501,7 @@ export class GameEngine {
     } else if (classDef.id === 'assassin') {
       // Ranged Assassin Mirage Backstep: leaves clone and throws 3 homing kunai!
       this.dashTimer = 0.2;
-      this.vfx.spawnDashAfterimage(this.playerPos, dashSkill.colorHex);
+      this.vfx.spawnMirageAfterimage(this.playerRig!.root, dashSkill.colorHex);
       this.faceNearestEnemy(12.0);
       for (const spread of [-0.22, 0, 0.22]) {
         this.spawnProjectile({
@@ -2262,6 +2545,30 @@ export class GameEngine {
     }
   }
 
+  private get attackCommitted(): boolean {
+    return this.sliceWindup > 0 || this.pendingAttack?.committed === true;
+  }
+
+  private startHeroAttack(
+    step: number,
+    duration: number,
+    release: () => void,
+    skillSlot?: 'skill1' | 'skill2',
+  ): void {
+    this.activeAttackDuration = duration;
+    this.activeAttackTimer = duration;
+    this.animState.attackComboStep = step;
+    this.animState.attackSwingProgress = 0;
+    this.animState.skillSlot = skillSlot;
+    this.pendingAttack = {
+      releaseAt: heroReleaseProgress(this.activeCharacter!.classId, this.animState),
+      advance: heroAttackAdvance(this.activeCharacter!.classId, this.animState),
+      travelled: 0,
+      committed: step >= 4,
+      release,
+    };
+  }
+
   private executeBasicCombo(): void {
     const char = this.activeCharacter!;
     const stats = this.effectiveStats!;
@@ -2271,12 +2578,30 @@ export class GameEngine {
     const skillLevelBonus = 1 + (char.skillLevels.basic - 1) * 0.1;
 
     this.faceNearestEnemy(basic.range + 2.0);
-    this.audio.play('attack');
     this.comboStep = (this.comboStep % 3) + 1;
+    const comboStep = this.comboStep;
     this.comboResetTimer = 1.4;
 
     const tempoMult = runes.basic === 'gale_tempo' ? 0.82 : 1.0;
     const cd = (basic.cooldown / stats.attackSpeed) * tempoMult;
+    const finisherTempo = { warrior: 1.35, mage: 1.2, assassin: 1.15 };
+    this.cooldowns.basic = comboStep === 3 ? cd * finisherTempo[char.classId] : cd;
+    const duration = char.classId === 'warrior' ? (comboStep === 3 ? 0.42 : 0.28)
+      : char.classId === 'mage' ? 0.30 : (comboStep === 3 ? 0.30 : 0.20);
+    this.startHeroAttack(comboStep, duration, () => this.releaseBasicCombo(comboStep, skillLevelBonus));
+  }
+
+  private releaseBasicCombo(comboStep: number, skillLevelBonus: number): void {
+    const char = this.activeCharacter!;
+    const stats = this.effectiveStats!;
+    const classDef = CHARACTER_CLASSES[char.classId];
+    const basic = classDef.skills.basic;
+    const runes = ensureSkillRunes(char);
+    this.audio.play('attack');
+    if (this.slice?.breakCrate(this.sliceActors())) {
+      this.audio.play('hit');
+      this.vfx.spawnShockwaveRing(this.playerPos, 1.6, 0xffc269, 0xffffff, 0.3);
+    }
     if (runes.basic === 'siphon_edge' && this.enemies.length > 0) {
       const heal = Math.max(1, Math.round(stats.maxHp * 0.015));
       char.currentHp = Math.min(stats.maxHp, char.currentHp + heal);
@@ -2288,23 +2613,16 @@ export class GameEngine {
       // SPEAR WARRIOR CADENCE:
       // Steps 1 & 2: Long-reach linear piercing spear thrusts
       // Step 3: Slower, heavy 360° Dragon-Halberd Cyclone Slam
-      this.cooldowns.basic = this.comboStep === 3 ? cd * 1.35 : cd;
-      this.activeAttackDuration = this.comboStep === 3 ? 0.36 : 0.26;
-      this.activeAttackTimer = this.activeAttackDuration;
-      this.animState.attackComboStep = this.comboStep;
-      this.animState.attackSwingProgress = 0;
-
-      this.playerPos.addScaledVector(forward, this.comboStep === 3 ? 0.65 : 0.45);
-      this.clampPlayerToZone();
-
-      if (this.comboStep === 1 || this.comboStep === 2) {
-        const thrustMult = (this.comboStep === 1 ? 1.05 : 1.25) * skillLevelBonus;
+      if (comboStep === 1 || comboStep === 2) {
+        const thrustMult = (comboStep === 1 ? 1.05 : 1.25) * skillLevelBonus;
+        this.playerRig!.root.position.copy(this.playerPos);
         this.vfx.spawnSpearThrustBeam(
           this.playerPos,
           this.playerYaw,
           basic.range,
           basic.colorHex,
-          basic.accentHex
+          basic.accentHex,
+          this.playerRig!.getSpearTip(),
         );
         this.dealLineDamage(
           this.playerPos,
@@ -2319,20 +2637,25 @@ export class GameEngine {
       } else {
         // Combo 3: 360° Halberd Cyclone Slam
         this.cameraController.triggerShake(0.28, 0.18);
+        const tip = this.playerRig!.getSpearTip()?.sub(this.playerPos);
+        const edgeYaw = tip ? Math.atan2(tip.x, tip.z) - .96 : this.playerYaw;
+        const edgeReach = tip ? Math.hypot(tip.x, tip.z) : basic.aoeRadius;
         this.vfx.spawnSlashArc(
           this.playerPos,
-          this.playerYaw,
-          basic.aoeRadius,
+          edgeYaw,
+          edgeReach,
           basic.colorHex,
           basic.accentHex,
-          0
+          0,
+          tip?.y,
         );
         this.vfx.spawnShockwaveRing(
           this.playerPos,
           basic.aoeRadius,
           basic.colorHex,
           basic.accentHex,
-          0.34
+          0.34,
+          .42,
         );
         this.dealAreaDamage(
           this.playerPos,
@@ -2346,14 +2669,11 @@ export class GameEngine {
     } else if (char.classId === 'mage') {
       // ARCANE MAGE CADENCE:
       // Zero melee lunge! Casts ranged homing Starlight Bolts, Twin Orbs, and exploding Nova Comets
-      this.cooldowns.basic = this.comboStep === 3 ? cd * 1.2 : cd;
-      this.activeAttackDuration = 0.28;
-      this.activeAttackTimer = this.activeAttackDuration;
-      this.animState.attackComboStep = this.comboStep;
-      this.animState.attackSwingProgress = 0;
-
-      if (this.comboStep === 1) {
+      if (comboStep === 1) {
+        const palm = this.playerRig!.getSpellEmitter(false);
+        if (palm) this.vfx.spawnCastingFlash(palm, this.playerYaw, basic.colorHex, basic.accentHex);
         this.spawnProjectile({
+          emitter: palm,
           yaw: this.playerYaw,
           speed: 17.5,
           radius: 0.42,
@@ -2368,9 +2688,12 @@ export class GameEngine {
           homingStrength: 3.4,
           shape: 'orb',
         });
-      } else if (this.comboStep === 2) {
+      } else if (comboStep === 2) {
         for (const angleOffset of [-0.18, 0.18]) {
+          const emitter = this.playerRig!.getSpellEmitter(angleOffset > 0);
+          if (emitter) this.vfx.spawnCastingFlash(emitter, this.playerYaw + angleOffset, basic.colorHex, basic.accentHex);
           this.spawnProjectile({
+            emitter,
             yaw: this.playerYaw + angleOffset,
             speed: 18.0,
             radius: 0.36,
@@ -2390,6 +2713,7 @@ export class GameEngine {
         // Step 3: Large Nova Comet that explodes in a wide AoE splash!
         this.vfx.spawnShockwaveRing(this.playerPos, 1.4, basic.colorHex, basic.accentHex, 0.2);
         this.spawnProjectile({
+          emitter: this.playerRig!.getSpellEmitter(true),
           yaw: this.playerYaw,
           speed: 13.5,
           radius: 0.68,
@@ -2408,16 +2732,11 @@ export class GameEngine {
     } else {
       // RANGED ASSASSIN CADENCE:
       // Ultra-fast staccato kunai volleys + Step 3 Piercing Boomerang Chakram with kiting backflip!
-      this.cooldowns.basic = this.comboStep === 3 ? cd * 1.15 : cd;
-      this.activeAttackDuration = 0.18;
-      this.activeAttackTimer = this.activeAttackDuration;
-      this.animState.attackComboStep = this.comboStep;
-      this.animState.attackSwingProgress = 0;
-
-      if (this.comboStep === 1) {
+      if (comboStep === 1) {
         // Rapid Twin Kunai throw
         for (const side of [-0.07, 0.07]) {
           this.spawnProjectile({
+            emitter: this.playerRig!.getBladeEmitter(side < 0 ? -1 : 1),
             yaw: this.playerYaw + side,
             speed: 24.5,
             radius: 0.34,
@@ -2433,10 +2752,11 @@ export class GameEngine {
             shape: 'kunai',
           });
         }
-      } else if (this.comboStep === 2) {
+      } else if (comboStep === 2) {
         // 3-Kunai Fan Spread
         for (const spread of [-0.24, 0, 0.24]) {
           this.spawnProjectile({
+            emitter: this.playerRig!.getBladeEmitter(spread < 0 ? -1 : 1),
             yaw: this.playerYaw + spread,
             speed: 24.5,
             radius: 0.34,
@@ -2453,12 +2773,14 @@ export class GameEngine {
           });
         }
       } else {
-        // Step 3: Piercing Spinning Shadow Chakram + Kiting Backflip!
-        this.vfx.spawnDashAfterimage(this.playerPos, basic.accentHex);
+        // Release at the takeoff pose and leave a mirage as Akatsuki spins away.
+        this.vfx.spawnMirageAfterimage(this.playerRig!.root, basic.accentHex);
         this.playerPos.addScaledVector(forward, -1.35);
         this.clampPlayerToZone();
+        this.playerRig!.root.position.copy(this.playerPos);
 
         this.spawnProjectile({
+          emitter: this.playerRig!.getBladeEmitter(1),
           yaw: this.playerYaw,
           speed: 19.0,
           radius: 0.85,
@@ -2479,7 +2801,6 @@ export class GameEngine {
 
   private executeSkill(skillKey: 'skill1' | 'skill2' | 'ultimate'): void {
     const char = this.activeCharacter!;
-    const stats = this.effectiveStats!;
     const classDef = CHARACTER_CLASSES[char.classId];
     const skill = classDef.skills[skillKey];
     const runes = ensureSkillRunes(char);
@@ -2504,17 +2825,29 @@ export class GameEngine {
     }
     this.cooldowns[skillKey] = effectiveCd;
 
+    const ultimate = skillKey === 'ultimate';
+    this.startHeroAttack(ultimate ? 5 : 4, ultimate ? 0.50 : 0.38,
+      () => this.releaseSkill(skillKey, skillLevelBonus, nearest, forward), ultimate ? undefined : skillKey);
+  }
+
+  private releaseSkill(
+    skillKey: 'skill1' | 'skill2' | 'ultimate',
+    skillLevelBonus: number,
+    nearest: EnemyEntity | null,
+    forward: THREE.Vector3,
+  ): void {
+    const char = this.activeCharacter!;
+    const stats = this.effectiveStats!;
+    const classDef = CHARACTER_CLASSES[char.classId];
+    const skill = classDef.skills[skillKey];
+    const runes = ensureSkillRunes(char);
+
     if (skillKey === 'skill2' && runes.skill2 === 'aegis_ward') {
       const heal = Math.round(stats.maxHp * 0.1);
       char.currentHp = Math.min(stats.maxHp, char.currentHp + heal);
       this.invulnerableTimer = Math.max(this.invulnerableTimer, 0.8);
       this.vfx.spawnDamageNumber(this.playerPos, heal, false, '#64dfdf', `+${heal} Ward`);
     }
-
-    this.activeAttackDuration = skillKey === 'ultimate' ? 0.5 : 0.35;
-    this.activeAttackTimer = this.activeAttackDuration;
-    this.animState.attackComboStep = skillKey === 'ultimate' ? 5 : 4;
-    this.animState.attackSwingProgress = 0;
 
     if (skillKey === 'ultimate') {
       char.ultimateEnergy = runes.ultimate === 'triad_chain' ? 25 : 0;
@@ -2524,7 +2857,8 @@ export class GameEngine {
       this.cameraController.triggerUltimateZoom();
       this.cameraController.triggerShake(0.65, 0.45);
       this.callbacks.onUltimateCutIn(classDef.name, skill.name, classDef.elementColor);
-      this.vfx.spawnUltimateBurst(this.playerPos, skill.aoeRadius, skill.colorHex, skill.accentHex);
+      this.vfx.spawnEclipseImpact(this.playerPos, this.playerYaw, skill.aoeRadius,
+        skill.colorHex, skill.accentHex, char.classId);
 
       if (char.classId === 'warrior') {
         const heal = Math.round(stats.maxHp * 0.25);
@@ -2570,12 +2904,14 @@ export class GameEngine {
         this.cameraController.triggerShake(0.35, 0.22);
         this.playerPos.addScaledVector(forward, 0.85);
         this.clampPlayerToZone();
+        this.playerRig!.root.position.copy(this.playerPos);
         this.vfx.spawnSpearThrustBeam(
           this.playerPos,
           this.playerYaw,
           skill.range,
           skill.colorHex,
-          skill.accentHex
+          skill.accentHex,
+          this.playerRig!.getSpearTip(),
         );
         this.dealLineDamage(
           this.playerPos,
@@ -2674,11 +3010,17 @@ export class GameEngine {
       // Ranged Assassin Skills:
       if (skillKey === 'skill1') {
         // Fan of Nightblades: 7-Kunai wide piercing cone barrage!
+        const leftBlade = this.playerRig!.getBladeEmitter(-1);
+        const rightBlade = this.playerRig!.getBladeEmitter(1);
+        if (leftBlade && rightBlade) {
+          this.vfx.spawnNightbladeRelease(leftBlade, rightBlade, this.playerYaw, skill.colorHex, skill.accentHex);
+        }
         const count = 7;
         for (let i = 0; i < count; i++) {
           const frac = i / (count - 1) - 0.5; // -0.5 .. +0.5
           const angle = this.playerYaw + frac * 1.15;
           this.spawnProjectile({
+            emitter: frac < 0 ? leftBlade : rightBlade,
             yaw: angle,
             speed: 24.0,
             radius: 0.38,
@@ -2723,6 +3065,7 @@ export class GameEngine {
 
   private spawnProjectile(opts: {
     origin?: THREE.Vector3;
+    emitter?: THREE.Vector3;
     yaw: number;
     speed: number;
     radius: number;
@@ -2742,7 +3085,7 @@ export class GameEngine {
     const startPos = basePos
       .clone()
       .add(new THREE.Vector3(Math.sin(opts.yaw) * 0.65, 0.95, Math.cos(opts.yaw) * 0.65));
-    group.position.copy(startPos);
+    group.position.copy(opts.emitter ?? startPos);
     group.rotation.y = opts.yaw;
 
     const coreMat = new THREE.MeshBasicMaterial({ color: opts.accentHex });
@@ -2754,10 +3097,15 @@ export class GameEngine {
     });
 
     if (opts.shape === 'kunai') {
-      const bladeGeo = new THREE.ConeGeometry(0.14, 0.78, 4);
-      bladeGeo.rotateX(Math.PI / 2);
+      const bladeGeo = new THREE.BufferGeometry();
+      bladeGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+        0, 0, .48, -.123, 0, .03, 0, 0, -.25, .123, 0, .03,
+        0, .067, .08, 0, -.043, .08,
+      ], 3));
+      bladeGeo.setIndex([0,1,4, 1,2,4, 2,3,4, 3,0,4, 1,0,5, 2,1,5, 3,2,5, 0,3,5]);
+      coreMat.side = THREE.DoubleSide;
       const blade = new THREE.Mesh(bladeGeo, coreMat);
-      const trailGeo = new THREE.ConeGeometry(0.22, 1.1, 4);
+      const trailGeo = new THREE.ConeGeometry(.11, 1.1, 4);
       trailGeo.rotateX(-Math.PI / 2);
       trailGeo.translate(0, 0, -0.45);
       const trail = new THREE.Mesh(trailGeo, glowMat);
@@ -2783,7 +3131,8 @@ export class GameEngine {
     this.projectiles.push({
       id: `proj_${Date.now()}_${Math.random()}`,
       mesh: group,
-      position: group.position,
+      position: startPos,
+      visualOffset: opts.emitter?.clone().sub(startPos),
       velocity: new THREE.Vector3(
         Math.sin(opts.yaw) * opts.speed,
         0,
@@ -2840,6 +3189,12 @@ export class GameEngine {
       }
 
       p.position.addScaledVector(p.velocity, dt);
+      p.mesh.position.copy(p.position);
+      if (p.visualOffset) {
+        const settle = 1 - THREE.MathUtils.smoothstep(p.age, 0, .11);
+        p.mesh.position.addScaledVector(p.visualOffset, settle);
+        if (settle === 0) p.visualOffset = undefined;
+      }
       if (p.spinSpeed !== 0) {
         p.mesh.rotation.y += p.spinSpeed * dt;
       }
@@ -3086,7 +3441,8 @@ export class GameEngine {
       }
     }
 
-    this.vfx.spawnDamageNumber(enemy.bundle.root.position, dmg, isCrit, colorCss);
+    const labelAnchor = enemy.bundle.hpBarGroup.getWorldPosition(new THREE.Vector3());
+    this.vfx.spawnDamageNumber(labelAnchor, dmg, isCrit, colorCss, undefined, .24);
     this.hitComboCount += 1;
     this.hitComboDecayTimer = 3.5;
 
@@ -3138,7 +3494,12 @@ export class GameEngine {
     const char = this.activeCharacter!;
     const pos = enemy.bundle.root.position.clone();
 
-    this.vfx.spawnShockwaveRing(pos, 1.8, 0xffbe0b, 0xffffff, 0.3);
+    if (enemy.kind === 'boss_knight') {
+      this.vfx.spawnShockwaveRing(pos, 1.8, 0xffbe0b, 0xffffff, 0.3);
+    } else {
+      if (enemy.bundle.emitter) enemy.bundle.emitter.visible = false;
+      this.vfx.spawnFiendCollapse(enemy.bundle.bodyMesh, pos, enemy.kind === 'sentinel');
+    }
     this.removeTelegraph(enemy);
     this.removeSceneObject(enemy.bundle.root);
     this.enemies.splice(index, 1);
@@ -3146,6 +3507,10 @@ export class GameEngine {
     this.defeatedEnemyIds.add(enemy.id);
     this.expedition.gold += enemy.goldReward;
     this.hitStop = Math.max(this.hitStop, 0.045);
+    if (this.opening) {
+      void this.saveActiveCharacterNow();
+      return;
+    }
     if (this.slice) {
       if (enemy.kind === 'boss_knight') {
         this.sliceBossDefeated = true;
@@ -3307,14 +3672,40 @@ export class GameEngine {
     }
   }
 
+  private damagePlayer(damage: number): boolean {
+    const character = this.activeCharacter!;
+    if (this.invulnerableTimer > 0) {
+      character.ultimateEnergy = Math.min(100, character.ultimateEnergy + 12);
+      this.vfx.spawnDamageNumber(this.playerPos, 0, false, '#a8e6d3', 'EVADE +12');
+      return false;
+    }
+    character.currentHp = Math.max(0, character.currentHp - damage);
+    this.expedition.damageTaken += damage;
+    this.hitComboCount = 0;
+    this.invulnerableTimer = 0.35;
+    this.animState.hitFlashTimer = 0.22;
+    this.audio.play('hurt');
+    this.vfx.spawnDamageNumber(this.playerPos, damage, false, '#f48390', `-${damage}`);
+    this.cameraController.triggerShake(0.25, 0.16);
+    if (character.currentHp > 0) return false;
+    this.defeated = true;
+    this.input.resetAll();
+    this.audio.play('defeat');
+    if (this.opening) void this.saveActiveCharacterNow();
+    this.emitHudTelemetry();
+    this.callbacks.onDefeated?.();
+    return true;
+  }
+
   private updateEnemies(dt: number): void {
     if (this.finisher) return;
-    const char = this.activeCharacter!;
     const stats = this.effectiveStats!;
 
     for (let i = 0; i < this.enemies.length; i++) {
       const enemy = this.enemies[i];
       const pos = enemy.bundle.root.position;
+      const previousX = pos.x;
+      const previousZ = pos.z;
 
       // Apply knockback decay
       if (enemy.knockbackVel.lengthSq() > 0.05) {
@@ -3325,6 +3716,8 @@ export class GameEngine {
       const toPlayer = this.playerPos.clone().sub(pos);
       toPlayer.y = 0;
       const dist = toPlayer.length();
+      let released = false;
+      let pursuing = false;
 
       if (enemy.kind === 'boss_knight' && !enemy.enraged && enemy.hp <= enemy.maxHp * 0.5) {
         enemy.enraged = true;
@@ -3338,39 +3731,26 @@ export class GameEngine {
         const fill = enemy.telegraph?.children[1];
         if (fill) fill.scale.setScalar(Math.max(0.03, progress));
         if (enemy.windup === 0) {
+          released = true;
           this.removeTelegraph(enemy);
-          this.vfx.spawnShockwaveRing(enemy.attackTarget, pattern.radius, 0xff526d, 0xffd3b4, 0.3);
+          if (enemy.bundle.emitter) {
+            this.vfx.spawnSentinelDischarge(enemy.bundle.emitter.getWorldPosition(new THREE.Vector3()),
+              enemy.attackTarget, pattern.radius);
+          } else {
+            this.vfx.spawnShockwaveRing(enemy.attackTarget, pattern.radius, 0xff526d, 0xffd3b4, 0.3);
+          }
           enemy.attackCooldown = pattern.recovery;
           if (isInsideAttack(this.playerPos, enemy.attackTarget, pattern.radius, pattern.innerRadius)) {
-            if (this.invulnerableTimer > 0) {
-              char.ultimateEnergy = Math.min(100, char.ultimateEnergy + 12);
-              this.vfx.spawnDamageNumber(this.playerPos, 0, false, '#a8e6d3', 'EVADE +12');
-            } else {
-              const damage = Math.max(1, Math.round(enemy.attack * pattern.damageScale * (100 / (100 + stats.defense))));
-              char.currentHp = Math.max(0, char.currentHp - damage);
-              this.expedition.damageTaken += damage;
-              this.hitComboCount = 0;
-              this.invulnerableTimer = 0.35;
-              this.animState.hitFlashTimer = 0.22;
-              this.audio.play('hurt');
-              this.vfx.spawnDamageNumber(this.playerPos, damage, false, '#f48390', `-${damage}`);
-              this.cameraController.triggerShake(0.25, 0.16);
-              if (char.currentHp <= 0) {
-                this.defeated = true;
-                this.input.resetAll();
-                this.audio.play('defeat');
-                this.emitHudTelemetry();
-                this.callbacks.onDefeated?.();
-                return;
-              }
-            }
+            const damage = Math.max(1, Math.round(enemy.attack * pattern.damageScale * (100 / (100 + stats.defense))));
+            if (this.damagePlayer(damage)) return;
           }
         }
-      } else if (dist <= 16.5 && dist > 0.01) {
+      } else if (dist <= 16.5 && dist > 0.01 && !this.opening?.safe) {
         const dir = toPlayer.clone().normalize();
         enemy.bundle.bodyMesh.rotation.y = Math.atan2(dir.x, dir.z);
         enemy.attackCooldown = Math.max(0, enemy.attackCooldown - dt);
         if (dist > pattern.reach) {
+          pursuing = true;
           pos.addScaledVector(dir, enemy.speed * (enemy.enraged ? 1.25 : 1) * dt);
         } else if (enemy.attackCooldown <= 0) {
           enemy.attackTarget.copy(enemy.kind === 'boss_knight' && this.currentZone !== 'ember_coast' && this.currentZone !== 'world_heart' ? pos : this.playerPos);
@@ -3415,21 +3795,28 @@ export class GameEngine {
         const clamped = clampToProceduralPath(pos.x, pos.z, this.currentPathLayout, 0.65);
         pos.x = clamped.x;
         pos.z = clamped.z;
+      } else if (this.opening && !this.opening.walkable(pos)) {
+        pos.set(previousX, 0, previousZ);
       }
 
-      // Enemy idle bounce / float animation
-      if (enemy.kind === 'slime') {
-        const squash = 1 + Math.sin(performance.now() * 0.008 + i) * 0.1;
-        enemy.bundle.bodyMesh.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
+      const anticipation = enemy.windup > 0 ? 1 - enemy.windup / pattern.windup : null;
+      if (enemy.bundle.animate) {
+        const travel = pursuing ? Math.hypot(pos.x - previousX, pos.z - previousZ) : 0;
+        enemy.bundle.animate(dt, {
+          windup: anticipation, released,
+          moving: Math.min(1, travel / Math.max(.0001, enemy.speed * dt)),
+          stagger: THREE.MathUtils.clamp(enemy.hitFlashTimer / .22, 0, 1),
+        });
       } else {
         enemy.bundle.bodyMesh.position.y =
-          1.05 + Math.sin(performance.now() * 0.005 + i) * 0.12;
+          1.05 + Math.sin(performance.now() * 0.005 + i) * 0.12 + (anticipation ?? 0) * 0.18;
       }
 
       if (enemy.hitFlashTimer > 0) {
+        const intensity = THREE.MathUtils.clamp(enemy.hitFlashTimer / .14, 0, 1);
         enemy.hitFlashTimer -= dt;
         enemy.bundle.mainMaterial.emissive.setHex(0xffffff);
-        enemy.bundle.mainMaterial.emissiveIntensity = 0.95;
+        enemy.bundle.mainMaterial.emissiveIntensity = intensity * (enemy.windup > 0 && enemy.bundle.emitter ? .28 : .95);
       } else {
         enemy.bundle.mainMaterial.emissive.setHex(enemy.bundle.baseEmissiveHex);
         enemy.bundle.mainMaterial.emissiveIntensity = 0.4;
@@ -3525,6 +3912,18 @@ export class GameEngine {
         isComplete: this.slice.step === 'complete', companionBanter: null,
       });
     }
+    if (this.opening) {
+      const objective = this.opening.objective;
+      zoneTitle = this.opening.step === 'complete' || this.opening.step === 'refuge' ? 'HEARTHMERE · REFUGE CAMP' : 'HEARTHMERE';
+      zoneSubtitle = this.opening.crisis ? 'The Starforged Crown · Flight from Hearthmere' : 'The Starforged Crown · Before the bell';
+      Object.assign(questView, {
+        chapterTitle: 'HEARTHMERE', stage: 'chronicle', stepNumber: objective.beat, totalSteps: 8,
+        objectiveTitle: objective.title, objectiveHint: objective.hint,
+        progressText: this.opening.crossingHint || (this.enemies.length
+          ? `${this.enemies.length} ${this.enemies.length === 1 ? 'threat remains' : 'threats remain'}` : ''),
+        isComplete: this.opening.step === 'complete', companionBanter: null,
+      });
+    }
     if (isChronicleRegion(this.currentZone)) {
       const chapter = currentChapter(char);
       zoneTitle = REGION_NAMES[chapter.region].toUpperCase();
@@ -3548,8 +3947,8 @@ export class GameEngine {
         player: { x: this.playerPos.x, z: this.playerPos.z, yaw: this.playerYaw },
         enemies: this.enemies.filter(e => e.bundle.root.position.distanceTo(this.playerPos) < 28).map(e => ({ x: e.bundle.root.position.x, z: e.bundle.root.position.z, boss: e.kind === 'boss_knight' })),
         portals: this.activePortals.map(p => p.position),
-        npcs: [...this.activeNpcs.map(n => n.position), ...this.chronicleSites.filter(site => site.kind !== 'field' && !ensureCampaign(char).discoveries.includes(site.id) && (site.kind === 'echo' || site.objectiveIndex === ensureCampaign(char).objectiveIndex)).map(site => site.position), ...(field ? [fieldTarget(field, ensureCampaign(char).fieldProgress![field.id], this.playerPos, this.fieldThreats())] : [])],
-        path: this.currentPathLayout?.waypoints ?? [],
+        npcs: this.opening ? [this.opening.objective.target] : [...this.activeNpcs.map(n => n.position), ...this.chronicleSites.filter(site => site.kind !== 'field' && !ensureCampaign(char).discoveries.includes(site.id) && (site.kind === 'echo' || site.objectiveIndex === ensureCampaign(char).objectiveIndex)).map(site => site.position), ...(field ? [fieldTarget(field, ensureCampaign(char).fieldProgress![field.id], this.playerPos, this.fieldThreats())] : [])],
+        path: this.opening ? OPENING_PATH : this.currentPathLayout?.waypoints ?? [],
         connections: this.currentPathLayout?.connections,
       },
       boss: boss ? { name: boss.name, hp: boss.hp, maxHp: boss.maxHp, enraged: boss.enraged } : null,
@@ -3569,7 +3968,7 @@ export class GameEngine {
       zoneId: this.currentZone,
       zoneTitle,
       zoneSubtitle,
-      isSafeZone: this.slice ? this.slice.atCamp : isSafeZone(this.currentZone),
+      isSafeZone: this.opening?.safe ?? this.slice?.atCamp ?? isSafeZone(this.currentZone),
       pathProgress: this.currentPathProgress,
       pathSeed: this.currentPathLayout?.seed ?? null,
       nearbyPortal: this.nearbyPortal,
@@ -3603,10 +4002,15 @@ export class GameEngine {
           total: classDef.skills.ultimate.cooldown,
         },
       },
-      lastSavedText: this.slice ? 'Playtest session' : secsAgo <= 1 ? 'Saved just now' : `Saved ${secsAgo}s ago`,
+      lastSavedText: this.openingSaveFailed ? 'Save failed' : this.slice ? 'Playtest session' : secsAgo <= 1 ? 'Saved just now' : `Saved ${secsAgo}s ago`,
       slice: this.slice ? {
         bossAvailable: Boolean(boss), bossLocked: Boolean(this.sliceBossLock),
-        committed: this.sliceWindup > 0, canUseLever: this.slice.canLowerBridge(this.sliceActors()),
+        committed: this.attackCommitted, canUseLever: this.slice.canLowerBridge(this.sliceActors()),
+      } : undefined,
+      opening: this.opening ? {
+        action: this.opening.actionAt(this.playerPos, this.enemies.length),
+        line: this.opening.line ?? undefined,
+        committed: this.attackCommitted,
       } : undefined,
     });
   }

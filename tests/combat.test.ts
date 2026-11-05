@@ -4,11 +4,14 @@ import { getAttackPattern, isInsideAttack, isSafeZone, resolveFlask } from '../s
 import { EnemyEntity, GameEngine, GameEngineCallbacks, HudTelemetry } from '../src/game/GameEngine';
 import { PersistenceManager } from '../src/persistence/PersistenceManager';
 import { InMemoryStorageAdapter } from '../src/persistence/StorageAdapter';
-import { CharacterSaveData } from '../src/types/game';
+import { CharacterClassId, CharacterSaveData } from '../src/types/game';
 import { CHRONICLE_CHAPTERS } from '../src/data/chronicle';
 import { advanceChronicle } from '../src/game/CampaignEngine';
 import { FieldPlan } from '../src/game/FieldActivities';
 import { NpcActor, PortalTrigger } from '../src/types/world';
+import { HearthmereOpening, HEARTHMERE_COVER, HEARTHMERE_REFUGE, HEARTHMERE_WAYSTATION } from '../src/game/HearthmereOpening';
+import { type HearthmereSave, readHearthmereSave } from '../src/persistence/HearthmereSave';
+import type { VfxSystem } from '../src/rendering/VfxSystem';
 
 // Keep the real world, input, combat, loot, and persistence logic. Stub only browser rendering.
 vi.mock('three', async importOriginal => {
@@ -30,9 +33,9 @@ vi.mock('../src/rendering/EnvironmentBuilder', () => ({
   },
 }));
 vi.mock('../src/rendering/VfxSystem', () => ({ VfxSystem: class {
-  clearAll() {} update() {} spawnDamageNumber() {} spawnDashAfterimage() {}
+  clearAll() {} update() {} spawnDamageNumber() {} spawnDashAfterimage() {} spawnMirageAfterimage() {}
   spawnFallingMeteor() {} spawnShockwaveRing() {} spawnSlashArc() {}
-  spawnSpearThrustBeam() {} spawnUltimateBurst() {}
+  spawnSpearThrustBeam() {} spawnEclipseImpact() {} spawnSentinelDischarge() {} spawnFiendCollapse() {}
 } }));
 
 interface EngineState {
@@ -57,9 +60,11 @@ interface EngineState {
   updateGameplay(dt: number): void;
   updateEnemies(dt: number): void;
   chronicleSites: Array<{ id: string; kind: string; position: { x: number; z: number } }>;
-  spawnEnemyAtPosition(kind: 'boss_knight', x: number, z: number, scale: number): void;
+  spawnEnemyAtPosition(kind: EnemyEntity['kind'], x: number, z: number, scale: number): void;
   applySingleEnemyHit(enemy: EnemyEntity, index: number, multiplier: number, energy: number, color: string, knockback: number): void;
   handleEnemyDefeated(enemy: EnemyEntity, index: number): void;
+  opening: HearthmereOpening;
+  vfx: VfxSystem;
 }
 
 describe('combat rules', () => {
@@ -100,6 +105,11 @@ describe('gameplay integration', () => {
     vi.stubGlobal('document', Object.assign(new EventTarget(), { visibilityState: 'visible' }));
     vi.stubGlobal('HTMLElement', class extends EventTarget {});
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frame = callback; return 1; });
+    const local = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => local.get(key) ?? null,
+      setItem: (key: string, value: string) => local.set(key, value),
+    });
     persistence = new PersistenceManager(new InMemoryStorageAdapter());
     await persistence.init();
     const account = await persistence.loginOrCreateAccount('combat_test', 'Test');
@@ -109,6 +119,7 @@ describe('gameplay integration', () => {
       onBannerNotification: vi.fn(), onUltimateCutIn: vi.fn(), onLootObtained: vi.fn(),
       onFinisherFrame: vi.fn(), onFinisherEnd: vi.fn(), onChronicleInteraction: vi.fn(),
       onCharacterSaved: vi.fn(), onDefeated: vi.fn(), onZoneCleared: vi.fn(),
+      onTriggerCutscene: vi.fn(),
     };
     engine = new GameEngine(new EventTarget() as HTMLCanvasElement, {} as HTMLElement, persistence, callbacks);
     engine.startGameplayWithCharacter(character);
@@ -125,6 +136,123 @@ describe('gameplay integration', () => {
     enemy.attackCooldown = 0;
     return enemy;
   }
+
+  async function startOpening(role: CharacterClassId) {
+    const temporary = new PersistenceManager(new InMemoryStorageAdapter());
+    const character = await temporary.createCharacter({ accountId: 'hearthmere-test', classId: role, name: 'Opening Hero' });
+    const initial: HearthmereSave = {
+      version: 1, classId: role, name: character.name, step: 'arrival',
+      position: HEARTHMERE_WAYSTATION, yaw: Math.PI, hp: character.currentHp,
+      energy: character.ultimateEnergy, flasks: 3, seconds: 0, enemies: [],
+    };
+    engine.startGameplayWithCharacter(character, [], false, initial);
+    return character;
+  }
+
+  function useOpeningObjective() {
+    state.opening.placePlayer(state.playerPos, state.opening.objective.target);
+    expect(engine.interactWithNearbyQuestNpc()).toBe(true);
+  }
+
+  function clearOpeningWave() {
+    while (state.enemies.length) state.handleEnemyDefeated(state.enemies[0], 0);
+  }
+
+  function reachShipment() {
+    for (let i = 0; i < 4; i++) useOpeningObjective();
+    for (const x of [-7, -6, -5, -4, -3]) {
+      state.opening.placePlayer(state.playerPos, { x, z: 4 });
+      state.updateGameplay(0.02);
+    }
+    expect(state.opening.step).toBe('shipment');
+  }
+
+  it.each(['warrior', 'mage', 'assassin'] as const)('takes the %s through the opening with a saved reveal and a playable rescue', async role => {
+    const legacy = await persistence.getCharactersForAccount(state.activeCharacter.accountId);
+    const character = await startOpening(role);
+    expect(state.companions).toHaveLength(0);
+    reachShipment();
+    expect(state.opening.walkable({ x: 16, z: 5 })).toBe(false);
+    useOpeningObjective();
+    expect(callbacks.onTriggerCutscene).toHaveBeenCalledWith('hearthmere_shipment');
+    const saved = readHearthmereSave(role)!;
+    expect(saved.step).toBe('square');
+    expect(saved.position).toEqual(HEARTHMERE_COVER);
+    expect(saved.enemies).toHaveLength(2);
+    engine.startGameplayWithCharacter(character, [], false, saved);
+    expect(callbacks.onTriggerCutscene).toHaveBeenCalledTimes(1);
+    expect(state.companions).toHaveLength(2);
+    state.opening.placePlayer(state.playerPos, state.opening.objective.target);
+    expect(engine.interactWithNearbyQuestNpc()).toBe(false);
+    clearOpeningWave();
+    useOpeningObjective();
+    clearOpeningWave();
+    useOpeningObjective();
+    useOpeningObjective();
+    expect(state.opening.walkable({ x: 16, z: 5 })).toBe(true);
+    expect(state.opening.walkable({ x: 16, z: 1 })).toBe(false);
+    clearOpeningWave();
+    useOpeningObjective();
+    expect(state.opening.movingGroup?.x).toBe(10);
+    for (let i = 0; i < 35; i++) state.updateGameplay(0.1);
+    expect(state.opening.movingGroup!.x).toBeGreaterThanOrEqual(22);
+    state.opening.placePlayer(state.playerPos, HEARTHMERE_REFUGE);
+    for (let i = 0; i < 30; i++) state.updateGameplay(0.1);
+    expect(state.opening.step).toBe('refuge');
+    useOpeningObjective();
+    expect(readHearthmereSave(role)?.step).toBe('complete');
+    expect(latestHud.questView.isComplete).toBe(true);
+    expect(await persistence.getCharactersForAccount(legacy[0].accountId)).toEqual(legacy);
+  });
+
+  it('saves a waystation retry on defeat and preserves the secured gate', async () => {
+    const character = await startOpening('warrior');
+    reachShipment();
+    useOpeningObjective();
+    clearOpeningWave();
+    useOpeningObjective();
+    clearOpeningWave();
+    useOpeningObjective();
+    useOpeningObjective();
+    clearOpeningWave();
+    state.opening.placePlayer(state.playerPos, { x: 16, z: 5 });
+    for (let i = 0; i < 7; i++) state.updateGameplay(0.1);
+    await engine.saveActiveCharacterNow();
+    const duringWindup = readHearthmereSave('warrior')!;
+    engine.startGameplayWithCharacter(character, [], false, duringWindup);
+    expect(state.playerPos.x).toBe(16);
+    for (let i = 0; i < 7; i++) state.updateGameplay(0.1);
+    expect(state.activeCharacter.currentHp).toBe(duringWindup.hp);
+    for (let i = 0; i < 100 && !engine.isPaused; i++) state.updateGameplay(0.1);
+    expect(callbacks.onDefeated).toHaveBeenCalledTimes(1);
+    const retry = readHearthmereSave('warrior')!;
+    expect(retry.position).toEqual(HEARTHMERE_WAYSTATION);
+    expect(retry.step).toBe('far_hold');
+    expect(retry.enemies).toHaveLength(1);
+    engine.startGameplayWithCharacter(character, [], false, retry);
+    expect(state.playerPos.x).toBe(HEARTHMERE_WAYSTATION.x);
+    expect(state.opening.walkable({ x: 16, z: 5 })).toBe(true);
+    expect(state.enemies).toHaveLength(1);
+  });
+
+  it('stages the colossus contact over the bridge and strikes only once per tell', () => {
+    const opening = new HearthmereOpening('warrior', 'far_hold');
+    const fist = opening.group.getObjectByName('Colossus striking fist')!;
+    opening.stageReveal('impact');
+    expect(opening.updateReveal(.69)).toBe(false);
+    const raised = fist.position.y;
+    expect(raised).toBeGreaterThan(8);
+    expect(opening.updateReveal(.25)).toBe(true);
+    const contact = fist.getWorldPosition(new THREE.Vector3());
+    expect(contact.x).toBeCloseTo(16.5, 1);
+    expect(contact.z).toBeCloseTo(4, 1);
+    expect(contact.y).toBeLessThan(1.5);
+    expect(opening.updateReveal(.25)).toBe(false);
+    opening.resetEncounter();
+    expect(opening.update(.95, { x: 16, z: 5 })).toMatchObject({ tell: true, strike: false, hit: false });
+    expect(opening.update(.30, { x: 16, z: 5 })).toMatchObject({ tell: false, strike: true, hit: true });
+    expect(opening.update(.30, { x: 16, z: 5 })).toMatchObject({ tell: false, strike: false, hit: false });
+  });
 
   it('does not regenerate in ruins or the boss arena', () => {
     for (const zone of ['sunken_ruins', 'abyssal_sanctum'] as const) {
@@ -160,6 +288,27 @@ describe('gameplay integration', () => {
     expect(state.activeAttackTimer).toBe(0);
   });
 
+  it('applies the spear thrust once, when the visible strike reaches its release', () => {
+    const enemy = startCombat();
+    const startingPosition = state.playerPos.clone();
+    enemy.hp = 1000;
+    enemy.attackCooldown = 10;
+    engine.input.triggerAction('basic');
+    state.updateGameplay(0.02);
+    state.updateGameplay(0.02);
+    expect(enemy.hp).toBe(1000);
+    expect(state.playerPos.distanceTo(startingPosition)).toBeGreaterThan(.05);
+    expect(state.playerPos.distanceTo(startingPosition)).toBeLessThan(.45);
+
+    state.updateGameplay(0.04);
+    const afterRelease = enemy.hp;
+    expect(afterRelease).toBeLessThan(1000);
+    expect(state.playerPos.distanceTo(startingPosition)).toBeCloseTo(.45);
+    for (let i = 0; i < 10; i++) state.updateGameplay(0.02);
+    expect(enemy.hp).toBe(afterRelease);
+    expect(state.playerPos.distanceTo(startingPosition)).toBeCloseTo(.45);
+  });
+
   it('locks a telegraph and lets the player walk out before impact', () => {
     const enemy = startCombat();
     const hp = state.activeCharacter.currentHp;
@@ -187,6 +336,30 @@ describe('gameplay integration', () => {
     state.updateEnemies(2);
     expect(char.currentHp).toBe(afterHit);
     expect(char.ultimateEnergy).toBe(12);
+  });
+
+  it('releases the sentinel discharge once from its animated core to the locked mark', () => {
+    engine.enterZone('stomping_grounds', 'from_town', 321);
+    const start = state.playerPos.clone();
+    state.enemies = [];
+    state.spawnEnemyAtPosition('sentinel', start.x + 4, start.z, 1);
+    const sentinel = state.enemies[0];
+    sentinel.attackCooldown = 0;
+    const discharge = vi.spyOn(state.vfx, 'spawnSentinelDischarge');
+    const hp = state.activeCharacter.currentHp;
+    state.updateEnemies(.03);
+    const locked = sentinel.attackTarget.clone();
+    state.updateEnemies(.82);
+    expect(discharge).not.toHaveBeenCalled();
+    const chargedCore = sentinel.bundle.emitter!.getWorldPosition(new THREE.Vector3());
+    expect(chargedCore.y).toBeGreaterThan(1);
+    expect(chargedCore.distanceTo(sentinel.bundle.root.position)).toBeLessThan(2);
+    state.playerPos.z += 4;
+    state.updateEnemies(.14);
+    state.updateEnemies(.10);
+    expect(discharge).toHaveBeenCalledTimes(1);
+    expect(discharge).toHaveBeenCalledWith(chargedCore, locked, getAttackPattern('sentinel').radius);
+    expect(state.activeCharacter.currentHp).toBe(hp);
   });
 
   it('keeps an active attack consistent if the boss enrages during its windup', () => {

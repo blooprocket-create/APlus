@@ -76,6 +76,8 @@ body,
   font-weight: 900;
   font-size: 1.25rem;
   font-style: italic;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.08;
   letter-spacing: 0.03em;
   text-shadow:
     0 2px 0 #090a14,
@@ -774,7 +776,7 @@ body,
 
 .ultimate-cutin {
   position: fixed;
-  top: 34%;
+  top: 21%;
   left: 0;
   right: 0;
   padding: 14px 28px;
@@ -784,7 +786,7 @@ body,
   transform: skewY(-3deg);
   z-index: 25;
   pointer-events: none;
-  transition: transform 0.22s ease, opacity 0.22s ease;
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out;
 }
 
 .ultimate-cutin.hidden {

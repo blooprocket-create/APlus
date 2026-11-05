@@ -4,6 +4,8 @@ import {
   getCompanionClassesForPlayer,
 } from '../game/QuestEngine';
 import { CharacterClassId, CharacterSaveData, CutsceneId } from '../types/game';
+import { OPENING_LEADS } from '../game/HearthmereOpening';
+import type { HeroExpression } from '../game/HeroSpeech';
 
 export interface CutsceneFrame {
   speakerName: string;
@@ -14,6 +16,9 @@ export interface CutsceneFrame {
   cameraOffset: { x: number; y: number; z: number };
   lookAtOffset: { x: number; y: number; z: number };
   vfxBurst?: boolean;
+  audio?: { pitch?: number; cue?: 'charge' | 'strike' | 'requiem' };
+  openingPhase?: 'seal' | 'impact' | 'response';
+  hero?: { role: CharacterClassId; tone: HeroExpression; closeup?: boolean };
 }
 
 export interface CutsceneScript {
@@ -75,6 +80,44 @@ export function buildCutsceneScript(
   const c2Name = companionNames?.[comp2Class] ?? CANONICAL_HERO_NAMES[comp2Class];
 
   switch (id) {
+    case 'hearthmere_shipment':
+      return {
+        id, episodeLabel: 'THE STARFORGED CROWN', title: 'The seal breaks', subtitle: 'Hearthmere',
+        frames: [
+          {
+            speakerName: 'Shipment crew', speakerTitle: 'Royal square', speakerIcon: '◆', accentColor: '#d5bd88',
+            dialogue: OPENING_LEADS[player.classId].shipment,
+            cameraOffset: { x: -2.7, y: 2.8, z: 2.8 }, lookAtOffset: { x: 0.3, y: 1, z: -4.7 },
+            audio: { pitch: 172, cue: 'charge' },
+            openingPhase: 'seal',
+          },
+          {
+            speakerName: 'The giant', speakerTitle: 'The eastern road', speakerIcon: '✦', accentColor: '#ef8075',
+            dialogue: 'The crane snaps as a black forelimb comes down across the road.',
+            cameraOffset: { x: 10, y: 2.8, z: 23.9 }, lookAtOffset: { x: 11.6, y: 3.55, z: 3.7 },
+            audio: { cue: 'charge' },
+            openingPhase: 'impact',
+          },
+          {
+            speakerName: 'Mara', speakerTitle: 'At the low wall', speakerIcon: '◇', accentColor: '#ffd18a',
+            dialogue: 'The work yard. Get them behind the wall.',
+            cameraOffset: { x: -1.7, y: 3, z: 4.2 }, lookAtOffset: { x: 4.5, y: 0.75, z: -0.9 },
+            audio: { pitch: 196 },
+            openingPhase: 'response',
+          },
+          {
+            speakerName: CANONICAL_HERO_NAMES[player.classId], speakerTitle: pDef.archetypeLabel,
+            speakerIcon: pDef.starterWeapon.icon, accentColor: pDef.elementColor,
+            dialogue: {
+              warrior: 'I’ll cover you. Get them clear.',
+              mage: 'Stay close. I can find us a way through.',
+              assassin: 'I see a way out. Follow me.',
+            }[player.classId],
+            cameraOffset: { x: .7, y: 1.8, z: 2.3 }, lookAtOffset: { x: 0, y: 1.45, z: 0 },
+            hero: { role: player.classId, tone: player.classId === 'mage' ? 'concern' : 'resolve', closeup: true },
+          },
+        ],
+      };
     case 'slice_moat_plan': {
       const frame = (role: CharacterClassId, dialogue: string, x: number, y: number, z: number): CutsceneFrame => {
         const definition = CHARACTER_CLASSES[role];
@@ -82,6 +125,7 @@ export function buildCutsceneScript(
           speakerName: CANONICAL_HERO_NAMES[role], speakerTitle: definition.archetypeLabel,
           speakerIcon: definition.starterWeapon.icon, accentColor: definition.elementColor, dialogue,
           cameraOffset: { x, y, z }, lookAtOffset: { x: 4, y: 0.9, z: -1 },
+          hero: { role, tone: 'resolve' },
         };
       };
       return {
@@ -313,6 +357,8 @@ export class CutsceneDirector {
   private currentFrameIndex = 0;
   private onFrameChange: ((frame: CutsceneFrame) => void) | null = null;
   private onComplete: (() => void) | null = null;
+  private onHold: ((paused: boolean) => void) | null = null;
+  private paused = false;
 
   public isPlaying(): boolean {
     return this.activeScript !== null;
@@ -322,13 +368,15 @@ export class CutsceneDirector {
     root: HTMLElement,
     script: CutsceneScript,
     onFrameChange: (frame: CutsceneFrame) => void,
-    onComplete: () => void
+    onComplete: () => void,
+    onHold?: (paused: boolean) => void
   ): void {
     this.stop();
     this.activeScript = script;
     this.currentFrameIndex = 0;
     this.onFrameChange = onFrameChange;
     this.onComplete = onComplete;
+    this.onHold = onHold ?? null;
 
     const el = document.createElement('div');
     el.id = 'cutscene-overlay';
@@ -359,9 +407,12 @@ export class CutsceneDirector {
           <div class="cinematic-ep-badge">${this.activeScript.episodeLabel}</div>
           <div class="cinematic-ep-title">${this.activeScript.title}</div>
         </div>
-        <button id="btn-skip-cutscene" class="btn-anime btn-danger" style="padding:7px 14px;font-size:0.74rem;">
-          ⏭ SKIP CUTSCENE [ESC]
-        </button>
+        <div class="cinematic-tools">
+          ${this.onHold ? '<button id="btn-hold-cutscene" class="btn-anime">Pause scene</button>' : ''}
+          <button id="btn-skip-cutscene" class="btn-anime btn-danger" style="padding:7px 14px;font-size:0.74rem;">
+            ⏭ SKIP CUTSCENE [ESC]
+          </button>
+        </div>
       </div>
 
       <div class="cinematic-speedlines"></div>
@@ -392,10 +443,16 @@ export class CutsceneDirector {
     this.container
       .querySelector('#btn-skip-cutscene')
       ?.addEventListener('click', () => this.finish());
+    this.container.querySelector<HTMLButtonElement>('#btn-hold-cutscene')?.addEventListener('click', event => {
+      this.paused = !this.paused;
+      (event.currentTarget as HTMLButtonElement).textContent = this.paused ? 'Resume scene' : 'Pause scene';
+      this.container!.querySelector<HTMLButtonElement>('#btn-next-cutscene')!.disabled = this.paused;
+      this.onHold?.(this.paused);
+    });
   }
 
   public advance(): void {
-    if (!this.activeScript) return;
+    if (!this.activeScript || this.paused) return;
     this.currentFrameIndex += 1;
     if (this.currentFrameIndex >= this.activeScript.frames.length) {
       this.finish();
@@ -410,6 +467,7 @@ export class CutsceneDirector {
       e.preventDefault();
       this.finish();
     } else if (e.code === 'Space' || e.code === 'Enter') {
+      if (e.target instanceof HTMLElement && e.target.closest('button')) return;
       e.preventDefault();
       this.advance();
     }
@@ -430,5 +488,8 @@ export class CutsceneDirector {
     this.activeScript = null;
     this.onFrameChange = null;
     this.onComplete = null;
+    if (this.paused) this.onHold?.(false);
+    this.paused = false;
+    this.onHold = null;
   }
 }

@@ -1,10 +1,8 @@
 # Astral Chronicles
 
-A local-first, browser-based action RPG built with TypeScript and Three.js. Lead a spear warrior, chronomancer, or kunai assassin with two AI companions through The Long Dawn, a twelve-chapter chronicle across six belllands. The original five-zone route remains available from Aetherhaven.
+A local-first browser action RPG built with TypeScript and Three.js. The playable opening of **The Starforged Crown** begins in Hearthmere, where three strangers face a giant attack. Choose a spear warrior, chronomancer, or kunai assassin.
 
-The next direction is a continuous open-world ARPG with a fresh storyline, retaining the combat classes and companions. Read [The Starforged Crown story foundation](docs/OPEN_WORLD_STORY.md) for the premise and [the full-length campaign treatment](docs/CAMPAIGN_TREATMENT.md) for the expanded story, dungeons, character arcs, and a provisional 45–55-hour main-story / 70–90-hour first-playthrough target. These are design targets, not measured playtimes. Story design comes before replacement quests; the play instructions below still describe the current build.
-
-Design is currently being developed through a user interview. [The decision record](docs/DESIGN_DIRECTION.md) tracks confirmed requirements, including beautiful cinematics and heavy anime spectacle, separately from proposals awaiting discussion. Implementation will follow the completed design handoff.
+The [story foundation](docs/OPEN_WORLD_STORY.md) and [campaign treatment](docs/CAMPAIGN_TREATMENT.md) describe the larger connected world and planned campaign. The current build runs from arrival in Hearthmere to the refuge camp.
 
 **Start with [the consolidated design overview](docs/DESIGN_OVERVIEW.md)** for the current requirements, draft scope, remaining work, and reading order. [Saving and offline play](docs/SAVE_AND_OFFLINE.md) covers guest access, optional cloud/cross-device sync, evolving hero saves, recovery backups, and downloaded-content offline play.
 
@@ -33,44 +31,22 @@ Open http://localhost:5173. Production build: `npm run build`. Tests: `npm test`
 
 ## Play
 
-On the hero screen, choose a class under **Hearthmere playtest** and select **Play the crossing**. Clear the old road, open the ruined bridge with the trio, and take the footbridge back to camp. Each run uses a temporary hero. Use **U** for your class utility, **L** to toggle guardian lock-on, and **F** at the bridge lever. Touch players can tap the corresponding buttons.
-
-Choose **Enter Aetherhaven** on the hero screen. New heroes begin in town. The east **Bellroad** gate leads into The Long Dawn; the north gate retains the original procedural wilderness route. The west road connects Aetherhaven and Market Crossing. Both towns heal the triad and refill flasks.
-
-Follow the gold compass along the roads to field objectives, inscriptions, and guardians. At chapter’s end, walk through the road beyond camp: it leads to the next chapter or through Market Crossing before the next region. The entrance road always leads back to a sanctuary. No atlas or completion-report menu is required to keep traveling. **M** opens optional fast travel, the journal, and recovered histories.
-
-The campaign contains twelve named guardians, twelve inscription puzzles, five persistent story decisions, thirty-six optional echoes, and a world account that reflects your choices. Each chapter opens with a playable field task: recovering scattered objects, escorting an ally who waits for danger or distance, defending a beacon against three assaults, aligning relays in order while holding position, or hunting marked captains. Recovered opening accounts are saved in the journal. Story conversations and inscription choices remain part of the campaign.
-
-Regional maps use a seed derived from the hero and chapter, so different heroes get different road geometry and encounter placement. The seed, partial activities, surviving enemies, and loot remain stable through reloads and town visits. Woodland loops, coastal islands, desert basins, mountain switchbacks, city blocks, and archive rings have different connections and scenery. Existing chapter checkpoints retain their original geography; new chapters use the new generator. Read [the world bible](docs/WORLD_BIBLE.md) for the setting, character arcs, and the distinction between implemented content and the remaining production work.
-
-Choose **Watch a guardian finisher** on the hero screen to preview the selected class's execution without changing saves. In combat, any lethal hit on a boss starts the same 12.4-second sequence. It includes camera cuts, class-specific staging, impact effects, a guardian's final words, and a requiem. An original ElevenLabs Music v2 orchestral cue is bundled locally, with timed synthesized charge and impact effects. **Escape** skips it and resolves rewards exactly once.
+Choose a hero and select **Start Hearthmere**. Select **Continue Hearthmere** to resume that hero’s local run. Follow the town through the giant attack and take the civilians to refuge. See the [opening build brief](docs/HEARTHMERE_OPENING_BUILD.md).
 
 | Action | Controls |
 | --- | --- |
 | Move | WASD / arrow keys |
 | Chain basic attacks | Hold left mouse, J, or Space |
 | Evade | Shift / K |
-| Abilities | Q / E (or 1 / 2) |
-| Ultimate | R / 3, at 100 energy |
+| Abilities | Q / E or 1 / 2 |
+| Ultimate | R / 3 at 100 energy |
 | Mending flask | H |
-| Talk / use a portal | F / Enter |
-| Equipment, companions, runes, story | I |
-| World atlas / journal / codex | M |
+| Interact | F / Enter |
 | Pause / resume | Escape |
 
-Mobile web is designed for **landscape**. Move with the left thumbstick, hold Attack with your right thumb to chain attacks, and tap the surrounding abilities or Evade. Movement and attack fingers work independently. Gear, the world atlas, pause, and optional fullscreen are in the upper right; nearby story objects and portals have a central interaction button.
+On phones and tablets, use landscape, move with the left thumbstick, and tap the action buttons or nearby interaction prompt. The pause menu provides sound, camera shake, and **Save & return to heroes**.
 
-Portrait shows a rotation prompt and pauses the game and finisher audio; **Continue in portrait** allows an optional fallback. Fullscreen requests landscape locking where the browser permits it. Browser play remains available when fullscreen or locking is unsupported. The manifest requests landscape for installed launches; no offline mode is included. The game fits the visible browser area, respects safe-area insets, and uses scrollable short-screen menus. Touch render density is capped at 1.5 with a pixel budget and smaller shadow maps.
-
-Red ground markers lock when enemies begin attacking: move clear before they fill. Evading a strike during dash invulnerability awards 12 ultimate energy. Gatekeepers enrage below half health.
-
-Flasks heal 40% of maximum vitality, hold three charges, and refill in sanctuaries. Defeat returns you to Aetherhaven after confirmation and preserves equipment, currency, and experience. Clearing a wilderness expedition banks remaining drops and shows a nonblocking road-open notification.
-
-## Saving and settings
-
-Progress is stored on the current browser/device, with three hero slots per local profile. Saves preserve the route seed, position, surviving enemy health, defeated enemies, uncollected loot, flask charges, and expedition statistics. Existing prototype characters remain supported; their next save gains the new journey snapshot. Newly entering a zone starts a fresh expedition; continuing a saved session restores that expedition.
-
-The pause menu includes sound effects and camera-shake controls. Audio starts after a user gesture. Settings persist on this device. Inventory and story screens pause gameplay, and hiding the browser opens the pause menu.
+Each hero’s progress is saved in the current browser. Defeat returns you to the waystation and preserves the progress you secured. The same campaign opens for all three classes.
 
 ## Verification
 

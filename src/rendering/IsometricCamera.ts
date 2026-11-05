@@ -11,8 +11,8 @@ export class IsometricCameraController {
 
   // Isometric offset angle (45 deg yaw, ~42 deg pitch)
   private readonly baseOffset = new THREE.Vector3(0, 14.5, 13.5);
-  private readonly previewPosition = new THREE.Vector3(2.8, 3.3, 8.7);
-  private readonly previewLookAt = new THREE.Vector3(1.7, 1.0, 0);
+  private readonly previewPosition = new THREE.Vector3(2.1, 2.75, 7.15);
+  private readonly previewLookAt = new THREE.Vector3(0.94, 1.16, 0);
   private cutsceneShot: {
     cameraOffset: THREE.Vector3;
     lookAtOffset: THREE.Vector3;
@@ -22,8 +22,13 @@ export class IsometricCameraController {
     shot: {
       cameraOffset: { x: number; y: number; z: number };
       lookAtOffset: { x: number; y: number; z: number };
-    } | null
+    } | null,
+    cutAt?: THREE.Vector3,
   ): void {
+    if (this.cutsceneShot) {
+      this.shakeTimer = 0;
+      this.shakeIntensity = 0;
+    }
     if (!shot) {
       this.cutsceneShot = null;
     } else {
@@ -39,6 +44,11 @@ export class IsometricCameraController {
           shot.lookAtOffset.z
         ),
       };
+      if (cutAt) {
+        this.camera.position.copy(cutAt).add(this.cutsceneShot.cameraOffset);
+        this.currentFocus.copy(cutAt).add(this.cutsceneShot.lookAtOffset);
+        this.camera.lookAt(this.currentFocus);
+      }
     }
   }
 
@@ -82,6 +92,14 @@ export class IsometricCameraController {
     this.zoomPunch = 0.24;
   }
 
+  private shakePosition(position: THREE.Vector3, dt: number): void {
+    if (this.shakeTimer <= 0) return;
+    this.shakeTimer -= dt;
+    position.x += (Math.random() - 0.5) * 2 * this.shakeIntensity;
+    position.y += (Math.random() - 0.5) * 2 * this.shakeIntensity;
+    if (this.shakeTimer <= 0) this.shakeIntensity = 0;
+  }
+
   public snapToPedestalPreview(): void {
     this.camera.position.copy(this.previewPosition);
     this.currentFocus.copy(this.previewLookAt);
@@ -119,6 +137,7 @@ export class IsometricCameraController {
       const desiredFocus = targetPos.clone().add(this.cutsceneShot.lookAtOffset);
       const desiredPos = targetPos.clone().add(this.cutsceneShot.cameraOffset);
       this.currentFocus.lerp(desiredFocus, Math.min(1, dt * 6.5));
+      this.shakePosition(desiredPos, dt);
       this.camera.position.lerp(desiredPos, Math.min(1, dt * 6.5));
       this.camera.lookAt(this.currentFocus);
       return;
@@ -143,14 +162,7 @@ export class IsometricCameraController {
       this.currentFocus.z + this.baseOffset.z * zoomScale
     );
 
-    if (this.shakeTimer > 0) {
-      this.shakeTimer -= dt;
-      desiredPos.x += (Math.random() - 0.5) * 2 * this.shakeIntensity;
-      desiredPos.y += (Math.random() - 0.5) * 2 * this.shakeIntensity;
-      if (this.shakeTimer <= 0) {
-        this.shakeIntensity = 0;
-      }
-    }
+    this.shakePosition(desiredPos, dt);
 
     this.camera.position.lerp(desiredPos, Math.min(1, dt * 10));
     this.camera.lookAt(this.currentFocus);

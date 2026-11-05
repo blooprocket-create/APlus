@@ -5,8 +5,10 @@ export function disposeObject(object: THREE.Object3D): void {
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
   const textures = new Set<THREE.Texture>();
+  const skeletons = new Set<THREE.Skeleton>();
   object.traverse(child => {
     if (child instanceof THREE.InstancedMesh) child.dispose();
+    if (child instanceof THREE.SkinnedMesh) skeletons.add(child.skeleton);
     if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
       geometries.add(child.geometry);
       const list = Array.isArray(child.material) ? child.material : [child.material];
@@ -20,4 +22,5 @@ export function disposeObject(object: THREE.Object3D): void {
   geometries.forEach(geometry => geometry.dispose());
   materials.forEach(material => material.dispose());
   textures.forEach(texture => texture.dispose());
+  skeletons.forEach(skeleton => skeleton.dispose());
 }

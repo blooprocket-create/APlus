@@ -26,19 +26,17 @@ import {
 import { ActionId } from '../input/InputManager';
 import { PersistenceManager } from '../persistence/PersistenceManager';
 import { InMemoryStorageAdapter } from '../persistence/StorageAdapter';
-import { SLICE_UTILITIES } from '../game/MoatSlice';
+import { readHearthmereSave, type HearthmereSave } from '../persistence/HearthmereSave';
+import { HEARTHMERE_WAYSTATION } from '../game/HearthmereOpening';
 import {
-  AccountProfile,
   BasicRuneId,
   CharacterClassId,
-  CharacterSlotIndex,
   CharacterSaveData,
   CompanionTacticalStance,
   CutsceneId,
   Skill1RuneId,
   Skill2RuneId,
   UltimateRuneId,
-  ZoneId,
 } from '../types/game';
 import {
   buildCutsceneScript,
@@ -48,36 +46,11 @@ import {
 
 export type CommandDeckTab = 'inventory' | 'companions' | 'abilities' | 'cutscenes';
 
-const DEFAULT_NAMES: Record<CharacterClassId, string> = {
-  warrior: 'Brynhildr',
-  mage: 'Celestia',
-  assassin: 'Akatsuki',
-};
-
-const ZONE_LABELS: Record<ZoneId, string> = {
-  starting_town: 'Aetherhaven',
-  stomping_grounds: 'Stomping Grounds',
-  market_crossing: 'Market Crossing',
-  sunken_ruins: 'Sunken Astral Ruins',
-  abyssal_sanctum: 'Abyssal Sanctum',
-  ...REGION_NAMES,
-};
-
 export class UIManager {
   private root: HTMLElement;
-  private persistence: PersistenceManager;
   private engine: GameEngine;
 
-  private activeAccount: AccountProfile | null = null;
-  private slots: [CharacterSaveData | null, CharacterSaveData | null, CharacterSaveData | null] = [
-    null,
-    null,
-    null,
-  ];
-  private selectedSlotIndex: CharacterSlotIndex = 0;
-  private creationClassId: CharacterClassId = 'warrior';
-  private creationNameDraft = DEFAULT_NAMES.warrior;
-  private errorMessage: string | null = null;
+  private selectedHero: CharacterClassId = CHARACTER_CLASS_LIST.find(hero => readHearthmereSave(hero.id))?.id ?? 'warrior';
   private cutsceneDirector = new CutsceneDirector();
 
   // Command Deck Modal State
@@ -139,9 +112,8 @@ export class UIManager {
   private shakeEnabled = true;
   private atlasTab: 'world' | 'journal' | 'codex' = 'world';
 
-  constructor(root: HTMLElement, persistence: PersistenceManager, engine: GameEngine) {
+  constructor(root: HTMLElement, engine: GameEngine) {
     this.root = root;
-    this.persistence = persistence;
     this.engine = engine;
     try { const saved = localStorage.getItem('astral-screen-shake'); this.shakeEnabled = saved === null ? !window.matchMedia('(prefers-reduced-motion: reduce)').matches : saved !== 'false'; } catch { /* optional preference */ }
     this.engine.setScreenShake(this.shakeEnabled);
@@ -151,292 +123,104 @@ export class UIManager {
     });
   }
 
-  public async bootstrap(): Promise<void> {
-    await this.persistence.init();
-    let account = await this.persistence.getActiveAccount();
-    if (!account) {
-      account = await this.persistence.loginOrCreateAccount('astral_pioneer', 'Astral Pioneer');
-      // Seed 1 starter character in Slot 1 in Starting Town
-      await this.persistence.createCharacter({
-        accountId: account.id,
-        slotIndex: 0,
-        name: 'Brynhildr',
-        classId: 'warrior',
-      });
-    }
-    this.activeAccount = account;
-    await this.showCharacterSelectScreen();
-  }
-
-  public async showCharacterSelectScreen(): Promise<void> {
-    if (!this.activeAccount) return;
+  public showCharacterSelectScreen(): void {
     this.hudRefs = null;
-    this.root.querySelector('#game-menu')?.remove();
-    this.engine.setPaused('menu', false);
-    this.engine.setPaused('deck', false);
-    this.slots = await this.persistence.getCharacterSlots(this.activeAccount.id);
-
-    // Pick last selected character's slot if available, otherwise slot 0
-    const lastId = this.activeAccount.lastSelectedCharacterId;
-    const foundIdx = this.slots.findIndex((s) => s && s.id === lastId);
-    if (foundIdx >= 0) {
-      this.selectedSlotIndex = foundIdx as CharacterSlotIndex;
-    }
-
+    this.engine.setPreviewCharacter(this.selectedHero);
     this.renderLobbyDOM();
-    this.syncPedestalPreview();
-  }
-
-  private syncPedestalPreview(): void {
-    const slotChar = this.slots[this.selectedSlotIndex];
-    if (slotChar) {
-      this.engine.setPreviewCharacter(slotChar.classId);
-    } else {
-      this.engine.setPreviewCharacter(this.creationClassId);
-    }
   }
 
   private renderLobbyDOM(): void {
-    if (!this.activeAccount) return;
-    const occupiedCount = this.slots.filter(Boolean).length;
-    const selectedChar = this.slots[this.selectedSlotIndex];
-    const cDef = CHARACTER_CLASSES[selectedChar?.classId ?? this.creationClassId];
-    const eff = selectedChar ? computeEffectiveStats(selectedChar) : cDef.baseStats;
-    const classTabs = CHARACTER_CLASS_LIST.map(cls => `
-      <button class="class-tab ${cls.id === this.creationClassId ? 'active' : ''}" data-class="${cls.id}">
-        ${icon(CLASS_ICONS[cls.id])}<span>${cls.archetypeLabel}</span>
-      </button>`).join('');
-    const slotCards = this.slots.map((char, i) => `
-      <button class="char-slot-card ${this.selectedSlotIndex === i ? 'selected' : ''}" data-slot="${i}" aria-pressed="${this.selectedSlotIndex === i}">
-        <span class="roster-number">0${i + 1}</span>
-        <span class="slot-badge">${icon(char ? CLASS_ICONS[char.classId] : 'plus', 26)}</span>
-        <span class="slot-info"><strong>${char ? this.escapeHtml(char.name) : 'Awaken a hero'}</strong><small>${char ? CHARACTER_CLASSES[char.classId].archetypeLabel : 'Choose your calling'}</small></span>
-        ${char ? `<span class="slot-lv">LV ${char.level}</span>` : ''}
-      </button>`).join('');
-    const zone = selectedChar?.currentZone ?? 'starting_town';
-    const route = (['whispering_woods', 'ember_coast', 'glass_desert', 'frostmarch', 'crown_of_night', 'world_heart'] as ZoneId[]).map((z, i) => `
-      <span class="journey-stop ${z === zone ? 'current' : ''}" title="${ZONE_LABELS[z]}"><i>${i + 1}</i><span>${ZONE_LABELS[z]}</span></span>`).join('');
+    const role = this.selectedHero;
+    const hero = CHARACTER_CLASSES[role];
+    const save = readHearthmereSave(role);
+    const name = save?.name ?? CANONICAL_HERO_NAMES[role];
     this.root.innerHTML = `
       <div class="lobby-screen">
         <header class="lobby-topbar">
           <div class="wordmark">${icon('star', 34)}<div>ASTRAL<span>CHRONICLES</span></div></div>
-          <span class="edition-label">THE LONG DAWN <i></i> SIX ACTS</span>
+          <span class="edition-label">THE STARFORGED CROWN</span>
           <div class="lobby-tools interactive">
-            <button id="btn-world-atlas" class="lobby-atlas-button">${icon('map', 17)} THE LONG DAWN</button>
             <button id="btn-fullscreen" class="quiet-button fullscreen-button" aria-label="Toggle fullscreen">${icon('fullscreen', 19)}</button>
             <button id="btn-lobby-help" class="quiet-button" aria-label="How to play">?</button>
-            <button id="btn-lobby-audio" class="quiet-button" aria-label="Toggle sound">${icon(this.engine.audio.muted ? 'mute' : 'sound', 19)}</button>
-            <button id="btn-switch-account" class="profile-button"><span class="profile-avatar">${this.escapeHtml(this.activeAccount.displayName.slice(0, 1))}</span><span>${this.escapeHtml(this.activeAccount.displayName)}<small>LOCAL PROFILE</small></span></button>
+            <button id="btn-lobby-audio" class="quiet-button" aria-label="Toggle sound" aria-pressed="${!this.engine.audio.muted}">${icon(this.engine.audio.muted ? 'mute' : 'sound', 19)}</button>
           </div>
         </header>
         <main class="lobby-stage">
-          <div class="lobby-intro"><div class="eyebrow"><span></span> THREE FATES. ONE WORLD.</div><h1>The eclipse<br>is <em>rising.</em></h1><p>Gather your triad. Cross the fractured wilds.<br>Bring the light back home.</p></div>
-          <section class="details-panel interactive" style="--hero-color:${cDef.elementColor}">
-            <div class="hero-panel-heading"><span class="eyebrow">${selectedChar ? 'YOUR CHOSEN HERO' : 'A NEW AWAKENING'}</span><span class="hero-element">${icon(CLASS_ICONS[cDef.id], 17)} ${cDef.element.split('-')[0]}</span></div>
-            <div class="hero-class-name">${cDef.archetypeLabel}</div>
-            <h2>${this.escapeHtml(selectedChar?.name ?? this.creationNameDraft)}</h2>
-            <p class="hero-lore">${cDef.playstyle}</p>
-            ${!selectedChar ? `<div class="class-tabs">${classTabs}</div>` : ''}
-            <div class="hero-stats"><div><small>VITALITY</small><strong>${eff.maxHp}</strong></div><div><small>ATTACK</small><strong>${eff.attack}</strong></div><div><small>CRITICAL</small><strong>${Math.round(eff.critRate * 100)}<span>%</span></strong></div></div>
-            <div class="hero-abilities">${(['basic', 'dash', 'skill1', 'skill2', 'ultimate'] as ActionId[]).map((key, i) => `<div class="ability-preview" title="${this.escapeHtml(cDef.skills[key].name + ': ' + cDef.skills[key].description)}">${icon(['spear', 'dash', 'flame', 'shield', 'burst'][i], 23)}<small>${['J', 'SHIFT', 'Q', 'E', 'R'][i]}</small></div>`).join('')}</div>
-            ${selectedChar ? `<div class="journey-resume"><span class="status-dot"></span><div><small>CONTINUE YOUR JOURNEY</small><strong>${ZONE_LABELS[zone]} <span>· Level ${selectedChar.level}</span></strong></div>${icon('map', 22)}</div>
-              <button id="btn-enter-world" class="btn-anime btn-primary journey-button">${selectedChar.journeyState ? 'Continue journey' : 'Enter Aetherhaven'} ${icon('arrow', 22)}</button>
-              <div class="hero-panel-foot"><span>POWER ${computePowerRating(selectedChar)} · ${selectedChar.enemiesDefeated} FIENDS SLAIN</span><button id="btn-delete-char" class="text-button" aria-label="Delete selected hero">Delete hero</button></div>` : `
-              <label class="eyebrow name-label" for="input-char-name">NAME YOUR HERO</label><input id="input-char-name" class="input-field" maxlength="18" value="${this.escapeHtml(this.creationNameDraft)}" placeholder="Enter a name">
-              ${this.errorMessage ? `<p class="form-error" role="alert">${this.escapeHtml(this.errorMessage)}</p>` : ''}
-              <button id="btn-create-char" class="btn-anime btn-primary journey-button">Awaken your hero ${icon('arrow', 22)}</button>`}
-            <div class="slice-launch"><label for="slice-hero">Hearthmere playtest</label><select id="slice-hero" aria-label="Playtest hero">${CHARACTER_CLASS_LIST.map(hero => `<option value="${hero.id}" ${hero.id === cDef.id ? 'selected' : ''}>${CANONICAL_HERO_NAMES[hero.id]}</option>`).join('')}</select><button id="btn-playable-slice" class="btn-anime btn-primary">Play the crossing ${icon('arrow', 16)}</button></div>
-            <button id="btn-finisher-preview" class="finisher-preview-button">${icon('burst', 17)} Watch a guardian finisher <span>12 SEC</span></button>
+          <div class="lobby-intro"><div class="eyebrow"><span></span> ASTRAL CHRONICLES</div><h1>The Starforged<br><em>Crown</em></h1><p>Three strangers arrive in Hearthmere.<br>When the town falls, they must get its people out.</p></div>
+          <section class="details-panel interactive" style="--hero-color:${hero.elementColor}">
+            <div class="hero-panel-heading"><span class="eyebrow">CHOOSE YOUR HERO</span><span class="hero-element">${icon(CLASS_ICONS[role], 17)} ${hero.element.split('-')[0]}</span></div>
+            <div class="hero-class-name">${hero.archetypeLabel}</div>
+            <h2>${this.escapeHtml(name)}</h2>
+            <p class="hero-lore">${hero.playstyle}</p>
+            <form id="hearthmere-entry" class="hearthmere-entry">
+              <label for="hearthmere-hero">Hero</label>
+              <select id="hearthmere-hero">${CHARACTER_CLASS_LIST.map(choice => `<option value="${choice.id}" ${choice.id === role ? 'selected' : ''}>${CANONICAL_HERO_NAMES[choice.id]}</option>`).join('')}</select>
+              ${save ? `<p class="journey-resume">${save.step === 'complete' ? 'Refuge reached' : 'Journey in progress'}</p>` : `
+                <label for="opening-hero-name">Name your hero</label>
+                <input id="opening-hero-name" class="input-field" minlength="2" maxlength="18" required value="${this.escapeHtml(name)}">`}
+              <p id="opening-start-error" class="form-error" role="alert"></p>
+              <button id="btn-hearthmere" class="btn-anime btn-primary journey-button" type="submit">${save ? 'Continue Hearthmere' : 'Start Hearthmere'} ${icon('arrow', 22)}</button>
+            </form>
           </section>
-          <section class="hero-roster interactive"><div class="roster-caption"><span class="eyebrow">SELECT YOUR HERO</span><span>${occupiedCount} / 3 AWAKENED</span></div><div class="slot-list">${slotCards}</div></section>
-          <div class="preview-caption"><span class="preview-rule"></span>THE ECLIPSE TRIAD<span class="preview-rule"></span></div>
         </main>
-        <footer class="lobby-footer"><div class="journey-route">${route}</div><span class="local-save"><span class="status-dot"></span> PROGRESS SAVED ON THIS DEVICE</span></footer>
+        <footer class="lobby-footer"><span class="local-save"><span class="status-dot"></span> PROGRESS SAVED ON THIS DEVICE</span></footer>
       </div>`;
+
     this.bindFullscreenButton();
-    this.root.querySelector('#btn-world-atlas')?.addEventListener('click', () => this.openAtlas());
-    this.root.querySelector('#btn-finisher-preview')?.addEventListener('click', () => this.engine.previewBossFinisher(cDef.id));
-    this.root.querySelector<HTMLButtonElement>('#btn-playable-slice')?.addEventListener('click', async event => {
-      if (this.engine.isFinishing) return;
-      const button = event.currentTarget as HTMLButtonElement;
-      const classId = this.root.querySelector<HTMLSelectElement>('#slice-hero')!.value as CharacterClassId;
-      button.disabled = true;
-      try {
-        const temporary = new PersistenceManager(new InMemoryStorageAdapter());
-        await temporary.init();
-        const hero = await temporary.createCharacter({ accountId: 'playtest', slotIndex: 0, name: CANONICAL_HERO_NAMES[classId], classId });
-        this.startHudAndGameplay(hero, true);
-      } catch {
-        button.textContent = 'Try the crossing again';
-        button.disabled = false;
-      }
-    });
     this.root.querySelector('#btn-lobby-help')?.addEventListener('click', () => this.openHelp());
-    this.root.querySelector('#btn-lobby-audio')?.addEventListener('click', () => { this.engine.audio.toggle(); this.renderLobbyDOM(); });
-
-    // Bind events
-    this.root.querySelectorAll<HTMLElement>('.char-slot-card').forEach((card) => {
-      card.addEventListener('click', () => {
-        const idx = Number(card.dataset.slot) as CharacterSlotIndex;
-        this.selectedSlotIndex = idx;
-        this.errorMessage = null;
-        this.renderLobbyDOM();
-        this.syncPedestalPreview();
-      });
+    const audioButton = this.root.querySelector<HTMLButtonElement>('#btn-lobby-audio')!;
+    audioButton.addEventListener('click', () => {
+      const muted = this.engine.audio.toggle();
+      audioButton.setAttribute('aria-pressed', String(!muted));
+      audioButton.innerHTML = icon(muted ? 'mute' : 'sound', 19);
     });
-
-    this.root.querySelectorAll<HTMLElement>('.class-tab').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const clsId = tab.dataset.class as CharacterClassId;
-        this.creationClassId = clsId;
-        this.creationNameDraft = DEFAULT_NAMES[clsId];
-        this.errorMessage = null;
-        this.renderLobbyDOM();
-        this.syncPedestalPreview();
-      });
+    const selector = this.root.querySelector<HTMLSelectElement>('#hearthmere-hero')!;
+    selector.addEventListener('change', () => {
+      this.selectedHero = selector.value as CharacterClassId;
+      this.engine.setPreviewCharacter(this.selectedHero);
+      this.renderLobbyDOM();
+      this.root.querySelector<HTMLSelectElement>('#hearthmere-hero')?.focus();
     });
-
-    const nameInput = this.root.querySelector<HTMLInputElement>('#input-char-name');
-    if (nameInput) {
-      nameInput.addEventListener('input', () => {
-        this.creationNameDraft = nameInput.value;
-      });
-    }
-
-    const createBtn = this.root.querySelector<HTMLButtonElement>('#btn-create-char');
-    if (createBtn) {
-      createBtn.addEventListener('click', async () => {
-        if (!this.activeAccount) return;
-        try {
-          this.errorMessage = null;
-          const created = await this.persistence.createCharacter({
-            accountId: this.activeAccount.id,
-            slotIndex: this.selectedSlotIndex,
-            name: this.creationNameDraft,
-            classId: this.creationClassId,
-          });
-          this.startHudAndGameplay(created);
-        } catch (err) {
-          this.errorMessage = err instanceof Error ? err.message : String(err);
-          this.renderLobbyDOM();
-        }
-      });
-    }
-
-    const enterBtn = this.root.querySelector<HTMLButtonElement>('#btn-enter-world');
-    if (enterBtn && selectedChar) {
-      enterBtn.addEventListener('click', () => {
-        this.startHudAndGameplay(selectedChar);
-      });
-    }
-
-    const deleteBtn = this.root.querySelector<HTMLButtonElement>('#btn-delete-char');
-    if (deleteBtn && selectedChar) {
-      deleteBtn.addEventListener('click', async () => {
-        if (!this.activeAccount) return;
-        this.openOverlay('Release this hero?', `<p>Delete ${this.escapeHtml(selectedChar.name)} and their saved progress? Your other heroes will remain.</p>`, [
-          { label: 'Keep hero', action: () => this.closeOverlay() },
-          { label: 'Delete hero', action: async () => {
-            if (!this.activeAccount) return;
-            await this.persistence.deleteCharacter(this.activeAccount.id, selectedChar.id);
-            this.closeOverlay();
-            await this.showCharacterSelectScreen();
-          } },
-        ]);
-      });
-    }
-
-    const switchAccBtn = this.root.querySelector<HTMLButtonElement>('#btn-switch-account');
-    if (switchAccBtn) {
-      switchAccBtn.addEventListener('click', () => {
-        void this.openAccountModal();
-      });
-    }
-  }
-
-  private async openAccountModal(): Promise<void> {
-    const accounts = await this.persistence.listAccounts();
-    const modal = document.createElement('div');
-    modal.className = 'modal-backdrop';
-    modal.setAttribute('role', 'dialog');
-    modal.setAttribute('aria-modal', 'true');
-    modal.setAttribute('aria-label', 'Local profiles');
-
-    const existingListHtml = accounts
-      .map(
-        (acc) => `
-        <div class="char-slot-card ${acc.id === this.activeAccount?.id ? 'selected' : ''}" data-acc-id="${acc.id}">
-          <div class="slot-left">
-            <div class="slot-badge">👤</div>
-            <div class="slot-info">
-              <h4>@${this.escapeHtml(acc.username)}</h4>
-              <p>${this.escapeHtml(acc.displayName)}</p>
-            </div>
-          </div>
-          <div class="slot-lv">${acc.id === this.activeAccount?.id ? 'ACTIVE' : 'SWITCH'}</div>
-        </div>
-      `
-      )
-      .join('');
-
-    modal.innerHTML = `
-      <div class="modal-card">
-        <div class="panel-header">
-          <span class="panel-title">Local profiles</span>
-          <button id="btn-close-acc-modal" class="btn-anime" style="padding:4px 9px;">✕</button>
-        </div>
-        <p style="font-size:0.76rem;color:var(--text-muted);margin-bottom:10px;">
-          Profiles keep separate rosters of up to three heroes on this device.
-        </p>
-        <div class="slot-list" style="margin-bottom:14px;">
-          ${existingListHtml}
-        </div>
-        <div style="border-top:1px solid rgba(255,255,255,0.12);padding-top:12px;">
-          <label style="font-size:0.74rem;color:var(--text-muted);display:block;margin-bottom:6px;">
-            PROFILE NAME
-          </label>
-          <input id="input-new-acc" class="input-field" type="text" placeholder="e.g. kirito_02" />
-          <button id="btn-login-new-acc" class="btn-anime btn-primary" style="width:100%;">
-            Open / Create profile
-          </button>
-        </div>
-      </div>
-    `;
-
-    this.root.appendChild(modal);
-
-    modal.querySelector('#btn-close-acc-modal')?.addEventListener('click', () => {
-      modal.remove();
-    });
-
-    modal.querySelectorAll<HTMLElement>('[data-acc-id]').forEach((row) => {
-      row.addEventListener('click', async () => {
-        const id = row.dataset.accId!;
-        this.activeAccount = await this.persistence.switchAccount(id);
-        this.selectedSlotIndex = 0;
-        modal.remove();
-        await this.showCharacterSelectScreen();
-      });
-    });
-
-    modal.querySelector('#btn-login-new-acc')?.addEventListener('click', async () => {
-      const input = modal.querySelector<HTMLInputElement>('#input-new-acc');
-      const val = input?.value.trim() ?? '';
-      if (val.length >= 2) {
-        this.activeAccount = await this.persistence.loginOrCreateAccount(val);
-        this.selectedSlotIndex = 0;
-        modal.remove();
-        await this.showCharacterSelectScreen();
+    this.root.querySelector('#hearthmere-entry')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = this.root.querySelector<HTMLButtonElement>('#btn-hearthmere')!;
+      const error = this.root.querySelector('#opening-start-error')!;
+      if (button.disabled) return;
+      const chosenName = save?.name ?? this.root.querySelector<HTMLInputElement>('#opening-hero-name')!.value.trim();
+      if (chosenName.length < 2 || chosenName.length > 18) {
+        error.textContent = 'Choose a name of 2–18 characters.';
+        return;
+      }
+      button.disabled = true;
+      selector.disabled = true;
+      error.textContent = '';
+      try { await this.launchHearthmere(role, chosenName, save ?? undefined); }
+      catch {
+        button.disabled = false;
+        selector.disabled = false;
+        error.textContent = 'Hearthmere could not start. Try again.';
       }
     });
   }
 
-  public startHudAndGameplay(character: CharacterSaveData, playableSlice = false): void {
+  private async launchHearthmere(role: CharacterClassId, name: string, saved?: HearthmereSave): Promise<void> {
+    const temporary = new PersistenceManager(new InMemoryStorageAdapter());
+    await temporary.init();
+    const hero = await temporary.createCharacter({ accountId: 'hearthmere', slotIndex: 0, name, classId: role });
+    hero.id = `hearthmere_${role}`;
+    const snapshot: HearthmereSave = saved ?? {
+      version: 1, classId: role, name, step: 'arrival', position: HEARTHMERE_WAYSTATION, yaw: Math.PI,
+      hp: hero.currentHp, energy: hero.ultimateEnergy, flasks: 3, seconds: 0, enemies: [],
+    };
+    this.startHudAndGameplay(hero, snapshot);
+  }
+
+  private startHudAndGameplay(character: CharacterSaveData, openingSave: HearthmereSave): void {
     const cDef = CHARACTER_CLASSES[character.classId];
     this.lastCompanionMarkup = '';
 
     this.root.innerHTML = `
-      <div class="hud-screen${playableSlice ? ' slice-hud' : ''}">
+      <div class="hud-screen hearthmere-hud">
         <div id="damage-vignette" aria-hidden="true"></div>
         <div class="boss-hud hidden" id="boss-hud"><div class="eyebrow" id="boss-state">RIFT GUARDIAN</div><strong id="boss-name"></strong><div class="boss-track"><div id="boss-fill"></div></div><span id="boss-health"></span></div>
         <div class="hud-top">
@@ -503,7 +287,7 @@ export class UIManager {
           </div>
 
           <div class="hud-top-right">
-            <div class="minimap-wrap"><span class="map-north">N</span><canvas id="hud-minimap" width="220" height="220" aria-label="${playableSlice ? 'Local map: red fiends and gold guardians' : 'Local map: red fiends, gold allies, green portals'}"></canvas><div class="map-legend"><i></i> FIENDS ${playableSlice ? '' : '<i></i> PORTALS'}</div></div>
+            <div class="minimap-wrap"><span class="map-north">N</span><canvas id="hud-minimap" width="220" height="220" aria-label="Local map and nearby threats"></canvas><div class="map-legend"><i></i> FIENDS</div></div>
             <div class="hud-btn-group">
               <button id="btn-hero-sheet" class="btn-anime btn-cyan" aria-label="Equipment and inventory" style="padding:6px 10px;font-size:0.7rem;">
                 ${icon('bag', 16)} <span class="hud-menu-label">Gear</span> <kbd>I</kbd>
@@ -552,12 +336,6 @@ export class UIManager {
             🌀 ENTER PORTAL [F / TAP]
           </button>
         </div>
-
-        ${playableSlice ? `<div class="slice-controls interactive">
-          <button id="btn-slice-utility" class="btn-anime btn-cyan">${SLICE_UTILITIES[character.classId]} <kbd>U</kbd></button>
-          <button id="btn-slice-lock" class="btn-anime hidden" aria-pressed="false">Lock boss <kbd>L</kbd></button>
-          <button id="btn-slice-lever" class="btn-anime btn-primary hidden">Lower bridge <kbd>F</kbd></button>
-        </div>` : ''}
 
         <div class="hud-bottom">
           <div class="desktop-move-hint"><div class="key-wasd"><kbd>W</kbd><div><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div></div><span>MOVE<br><small>F to interact</small></span></div>
@@ -670,16 +448,13 @@ export class UIManager {
     this.root.querySelector('#btn-pause')?.addEventListener('click', () => this.openPauseMenu());
     this.root.querySelector('#btn-hud-help')?.addEventListener('click', () => this.openHelp());
     this.root.querySelector('#btn-flask')?.addEventListener('click', () => this.engine.useFlask());
-    this.root.querySelector('#btn-slice-utility')?.addEventListener('click', () => this.engine.useSliceUtility());
-    this.root.querySelector('#btn-slice-lock')?.addEventListener('click', () => this.engine.toggleSliceBossLock());
-    this.root.querySelector('#btn-slice-lever')?.addEventListener('click', () => this.engine.interactWithNearbyQuestNpc());
 
     // Top-right HUD buttons
     this.root.querySelector('#btn-char-select')?.addEventListener('click', async () => {
       this.cutsceneDirector.stop();
       this.engine.setCutsceneCameraShot(null);
       if (!await this.engine.saveActiveCharacterNow()) return;
-      await this.showCharacterSelectScreen();
+      this.showCharacterSelectScreen();
     });
 
     this.root.querySelector('#btn-hero-sheet')?.addEventListener('click', () => {
@@ -703,8 +478,7 @@ export class UIManager {
       this.engine.interactWithNearbyQuestNpc();
     });
 
-    const accountRoster = playableSlice ? [] : this.slots.filter((s): s is CharacterSaveData => s !== null);
-    this.engine.startGameplayWithCharacter(character, accountRoster, playableSlice);
+    this.engine.startGameplayWithCharacter(character, [], false, openingSave);
   }
 
   public playCutscene(cutsceneId: CutsceneId): void {
@@ -717,18 +491,37 @@ export class UIManager {
       this.root,
       script,
       (frame) => {
+        this.engine.audio.stopCinematic();
+        const closeup = this.engine.stageHeroDialogue(frame.hero, frame.dialogue);
         this.engine.setCutsceneCameraShot(
-          {
+          closeup ?? {
             cameraOffset: frame.cameraOffset,
             lookAtOffset: frame.lookAtOffset,
           },
-          frame.vfxBurst
+          frame.vfxBurst,
+          Boolean(closeup) || frame.openingPhase === 'impact',
         );
+        if (cutsceneId === 'hearthmere_shipment') {
+          if (frame.openingPhase) this.engine.stageOpeningReveal(frame.openingPhase);
+          if (frame.audio?.pitch) this.engine.audio.voice(frame.audio.pitch);
+          if (frame.audio?.cue) this.engine.audio.cinematic(frame.audio.cue);
+        }
       },
       () => {
         this.engine.setCutsceneCameraShot(null);
+        this.engine.audio.stopCinematic();
+        if (cutsceneId === 'hearthmere_shipment') {
+          this.engine.finishOpeningReveal();
+        }
         this.engine.setPaused('cutscene', false);
-      }
+      },
+      cutsceneId === 'hearthmere_shipment' ? paused => {
+        this.engine.setPaused('cutsceneHold', paused);
+        if (paused) {
+          this.engine.audio.stopCinematic();
+          this.engine.silenceHeroDialogue();
+        }
+      } : undefined
     );
   }
 
@@ -1271,7 +1064,7 @@ export class UIManager {
     if (!this.hudRefs || this.cutsceneDirector.isPlaying()) return;
     this.openOverlay('Take a breath.', `<p>Your triad will wait. The world is paused.</p><div class="pause-settings"><button id="toggle-audio" class="setting-row">Sound effects <span>${this.engine.audio.muted ? 'OFF' : 'ON'}</span></button><button id="toggle-shake" class="setting-row">Camera shake <span>${this.shakeEnabled ? 'ON' : 'OFF'}</span></button></div>`, [
       { label: 'Return to the journey', action: () => this.closeOverlay() },
-      ...(!this.engine.isSlice ? [{ label: 'World atlas & journal', action: () => this.openAtlas() }] : []),
+      ...(!this.engine.isSlice && !this.engine.isOpening ? [{ label: 'World atlas & journal', action: () => this.openAtlas() }] : []),
       { label: 'How to play', action: () => this.openHelp() },
       { label: this.engine.isSlice ? 'Return to heroes' : 'Save & return to heroes', action: async () => {
         if (!await this.engine.saveActiveCharacterNow()) {
@@ -1280,7 +1073,7 @@ export class UIManager {
           return;
         }
         this.closeOverlay();
-        await this.showCharacterSelectScreen();
+        this.showCharacterSelectScreen();
       } },
     ], 'JOURNEY PAUSED');
     this.root.querySelector('#toggle-audio')?.addEventListener('click', () => { this.engine.audio.toggle(); this.openPauseMenu(); });
@@ -1293,6 +1086,10 @@ export class UIManager {
   }
 
   private openHelp(): void {
+    if (!this.hudRefs || this.engine.isOpening) {
+      this.openOverlay('Hearthmere', '<p>Follow the gold marker and the current objective. Press F or tap the nearby interaction button.</p><p>Fight the smaller creatures. Watch the giant’s windup and move through the exposed road after the impact. Stay close so the civilians follow.</p>', [{ label: 'Return', action: () => this.closeOverlay() }]);
+      return;
+    }
     if (this.engine.isSlice) {
       this.openOverlay('Hearthmere crossing', '<p>Follow the lanterns to the road fight.</p><p>Use Lock boss near the guardian. Evade can interrupt your basic attacks. Eclipse commits through its windup. Press Evade again after it releases.</p><p>At the ruins, listen to the plan and follow your hero’s objective. Use the utility button or U. The bridge lever uses F. Return to camp by the east bank and footbridge.</p>', [{ label: 'Return', action: () => this.closeOverlay() }]);
       return;
@@ -1305,6 +1102,11 @@ export class UIManager {
   }
 
   public showDefeat(): void {
+    if (this.engine.isOpening) {
+      this.openOverlay('Regroup at the waystation', '<p>Take the service road back to the rescue. The progress you secured will be waiting.</p>', [{ label: 'Return to the waystation', action: () => { this.closeOverlay(); this.engine.reviveAtSanctuary(); } }]);
+      this.root.querySelector('#game-menu')?.setAttribute('data-locked', 'true');
+      return;
+    }
     if (this.engine.isSlice) {
       this.openOverlay('Regroup at camp', '<p>Rest at camp and take the road again.</p>', [{ label: 'Return to camp', action: () => { this.closeOverlay(); this.engine.reviveAtSanctuary(); } }]);
       this.root.querySelector('#game-menu')?.setAttribute('data-locked', 'true');
@@ -1352,10 +1154,10 @@ export class UIManager {
       if (this.root.querySelector('#game-menu')) this.closeOverlay();
       else if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       else this.openPauseMenu();
-    } else if (!this.engine.isSlice && event.code === 'KeyM' && !this.root.querySelector('#game-menu[data-locked]')) {
+    } else if (!this.engine.isSlice && !this.engine.isOpening && event.code === 'KeyM' && !this.root.querySelector('#game-menu[data-locked]')) {
       if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       this.openAtlas();
-    } else if (!this.engine.isSlice && event.code === 'KeyI' && this.hudRefs && !this.root.querySelector('#game-menu')) {
+    } else if (!this.engine.isSlice && !this.engine.isOpening && event.code === 'KeyI' && this.hudRefs && !this.root.querySelector('#game-menu')) {
       if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       else this.openCommandDeckModal('inventory');
     } else if (event.code === 'Slash' && event.shiftKey) this.openHelp();
@@ -1363,7 +1165,7 @@ export class UIManager {
 
   public openAtlas(): void {
     if (this.engine.isFinishing) return;
-    const character = this.hudRefs ? this.engine.getActiveCharacter() : this.slots[this.selectedSlotIndex];
+    const character = this.hudRefs && !this.engine.isOpening ? this.engine.getActiveCharacter() : null;
     if (!character) { this.openHelp(); return; }
     const state = ensureCampaign(character);
     let content = '';
@@ -1392,9 +1194,6 @@ export class UIManager {
     }));
     this.root.querySelectorAll<HTMLButtonElement>('[data-travel-chapter]').forEach(button => button.addEventListener('click', async () => {
       button.disabled = true;
-      if (!this.hudRefs) {
-        this.closeOverlay(); this.startHudAndGameplay(character); this.engine.setPaused('menu', true);
-      }
       const travelled = await this.engine.travelToChapter(Number(button.dataset.travelChapter));
       if (travelled) this.closeOverlay(); else { button.disabled = false; this.showBanner('THE ROAD IS CLOSED', 'Complete the previous chapter or check your save storage.'); }
     }));
@@ -1439,7 +1238,7 @@ export class UIManager {
   public endFinisher(): void {
     this.root.querySelector('#boss-finisher-overlay')?.remove();
     this.root.classList.remove('cinema-active');
-    this.root.querySelector<HTMLButtonElement>('#btn-finisher-preview')?.focus();
+    this.root.querySelector<HTMLButtonElement>('#btn-hearthmere')?.focus();
   }
 
   public updateHud(t: HudTelemetry): void {
@@ -1456,7 +1255,7 @@ export class UIManager {
     this.hudRefs.lvPill.textContent = `LV.${t.level}`;
     this.hudRefs.goldSpan.textContent = `◈ ${t.gold.toLocaleString()}`;
     this.hudRefs.crystalSpan.textContent = `✦ ${t.aetherCrystals}`;
-    this.hudRefs.saveBadge.textContent = t.slice ? t.lastSavedText : `✓ ${t.lastSavedText}`;
+    this.hudRefs.saveBadge.textContent = t.slice || t.lastSavedText === 'Save failed' ? t.lastSavedText : `✓ ${t.lastSavedText}`;
 
     this.hudRefs.waveTitle.textContent = t.zoneTitle;
     this.hudRefs.waveSub.textContent = t.zoneSubtitle;
@@ -1492,15 +1291,9 @@ export class UIManager {
     this.hudRefs.questObjTitle.textContent = qv.objectiveTitle;
     this.hudRefs.questObjHint.textContent = qv.objectiveHint;
     this.hudRefs.questObjProgress.textContent = qv.progressText;
-    if (t.slice) {
-      const lock = this.root.querySelector<HTMLButtonElement>('#btn-slice-lock')!;
-      lock.classList.toggle('hidden', !t.slice.bossAvailable);
-      lock.setAttribute('aria-pressed', String(t.slice.bossLocked));
-      const lockLabel = t.slice.bossLocked ? 'Unlock boss' : 'Lock boss';
-      if (lock.firstChild?.textContent !== `${lockLabel} `) lock.firstChild!.textContent = `${lockLabel} `;
-      this.root.querySelector('#btn-slice-lever')!.classList.toggle('hidden', !t.slice.canUseLever);
-      this.root.querySelector('#act-dash')!.classList.toggle('slice-committed', t.slice.committed);
-      if (t.slice.committed) this.hudRefs.questObjProgress.textContent = 'Eclipse windup · evade after release';
+    if (t.opening) {
+      this.root.querySelector('#act-dash')!.classList.toggle('ability-committed', t.opening.committed);
+      if (t.opening.committed) this.hudRefs.questObjProgress.textContent = 'Eclipse windup · evade after release';
     }
     this.root.querySelector('.quest-tracker-card')?.classList.toggle('field-objective', Boolean(t.fieldActivity));
     if (qv.companionBanter) {
@@ -1523,7 +1316,13 @@ export class UIManager {
       this.lastCompanionMarkup = companionMarkup;
     }
 
-    if (t.nearbyChronicle) {
+    if (t.opening) {
+      this.hudRefs.npcBox.classList.toggle('hidden', !t.opening.line && !t.opening.action);
+      this.hudRefs.npcTitle.textContent = t.opening.line?.speaker ?? '';
+      this.hudRefs.npcText.textContent = t.opening.line?.text ?? '';
+      this.hudRefs.questActionBtn.classList.toggle('hidden', !t.opening.action);
+      this.hudRefs.questActionBtn.textContent = t.opening.action ? `${t.opening.action} [F]` : '';
+    } else if (t.nearbyChronicle) {
       this.hudRefs.npcBox.classList.remove('hidden');
       this.hudRefs.npcTitle.textContent = t.nearbyChronicle.title;
       this.hudRefs.npcText.textContent = 'A fragment of Elarion is waiting to be heard.';
@@ -1615,7 +1414,7 @@ export class UIManager {
     if (this.cutinTimeout) window.clearTimeout(this.cutinTimeout);
     this.cutinTimeout = window.setTimeout(() => {
       this.hudRefs?.ultCutin.classList.add('hidden');
-    }, 1500);
+    }, 780);
   }
 
   private escapeHtml(str: string): string {
