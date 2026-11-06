@@ -460,7 +460,8 @@ def bake_library(scene, armatures):
                 clips[name]["advance"] = float(action["astral_advance"])
             if role == "warrior" and name in SPEAR_STANCE:
                 clips[name]["plants"] = [
-                    [[round((a[0] - start) / (end - start), 6), round((b[0] - start) / (end - start), 6)]
+                    [{"start": round((a[0] - start) / (end - start), 6),
+                      "end": round((b[0] - start) / (end - start), 6)}
                      for a, b in zip(marks, marks[1:]) if a[1:4] == b[1:4] and a[3] == 0]
                     for marks in (SPEAR_STANCE[name][side] for side in ("L", "R"))
                 ]

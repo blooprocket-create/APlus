@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type PlantWindows = readonly (readonly (readonly [number, number])[])[];
+export type PlantWindows = readonly (readonly { start: number; end: number }[])[];
 
 interface FootPlant {
   thigh: THREE.Object3D;
@@ -78,12 +78,12 @@ export function applyFootPlants(
     inverseHips.copy(hips.matrixWorld).invert();
   }
   for (const [side, plant] of feet.entries()) {
-    const window = windows?.[side]?.find(([start, end]) => progress >= start && progress <= end);
+    const window = windows?.[side]?.find(({ start, end }) => progress >= start && progress <= end);
     if (!window) {
       plant.window = -1;
       continue;
     }
-    const [start, end] = window;
+    const { start, end } = window;
     if (reset || plant.window !== start) {
       plant.foot.getWorldPosition(plant.anchor);
       plant.window = start;

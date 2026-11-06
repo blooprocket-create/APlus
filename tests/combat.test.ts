@@ -43,6 +43,7 @@ interface EngineState {
   enemies: EnemyEntity[];
   companions: unknown[];
   playerPos: THREE.Vector3;
+  playerYaw: number;
   nearbyPortal: { targetZone: string; targetSpawnTag: string } | null;
   activePortals: PortalTrigger[];
   activeNpcs: NpcActor[];
@@ -307,6 +308,22 @@ describe('gameplay integration', () => {
     for (let i = 0; i < 10; i++) state.updateGameplay(0.02);
     expect(enemy.hp).toBe(afterRelease);
     expect(state.playerPos.distanceTo(startingPosition)).toBeCloseTo(.45);
+  });
+
+  it('lets movement steer a spear recovery without snapping the attack pose to the new heading', () => {
+    const enemy = startCombat();
+    enemy.hp = 1000;
+    enemy.attackCooldown = 10;
+    engine.input.triggerAction('basic');
+    for (let i = 0; i < 4; i++) state.updateGameplay(.02);
+    expect(enemy.hp).toBeLessThan(1000);
+    const facing = state.playerYaw;
+    const position = state.playerPos.clone();
+    const move = vi.spyOn(engine.input, 'update').mockImplementation(() => { engine.input.moveVector.set(1, 0); });
+    state.updateGameplay(.025);
+    move.mockRestore();
+    expect(state.playerPos.x).toBeGreaterThan(position.x);
+    expect(Math.abs(state.playerYaw - facing)).toBeCloseTo(.3);
   });
 
   it('locks a telegraph and lets the player walk out before impact', () => {
