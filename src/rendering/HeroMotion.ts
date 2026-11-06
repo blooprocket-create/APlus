@@ -14,7 +14,10 @@ const JOINTS = [
 ] as const;
 type ClipName = 'idle' | 'run' | 'evade' | 'hit' | 'thrust' | 'reverse' | 'sweep' | 'skill1' | 'skill2' | 'charge' | 'eclipse';
 type Action = ClipName | 'locomotion';
-interface PackedClip { seconds: number; samples: string; release?: number; advance?: number; plants?: PlantWindows }
+interface AttackRetreat { distance: number; landAt: number }
+interface PackedClip {
+  seconds: number; samples: string; release?: number; advance?: number; plants?: PlantWindows; retreat?: AttackRetreat;
+}
 interface Clip { seconds: number; samples: Int16Array; frames: number; frameSize: number }
 
 const PACKED_CLIPS: Record<CharacterClassId, Record<ClipName, PackedClip>> = animation.roles;
@@ -64,7 +67,7 @@ export function createHeroMotion(role: CharacterClassId, root: THREE.Group): Her
     fromRotations: bones.map(() => new THREE.Quaternion()), fromPosition: new THREE.Vector3(),
     primary: new THREE.Quaternion(), secondary: new THREE.Quaternion(), next: new THREE.Quaternion(),
     hipsOffset: new THREE.Vector3(), blendOffset: new THREE.Vector3(),
-    feet: role === 'warrior' ? ['Foot.L', 'Foot.R'].map(name => createFootPlant(root.getObjectByName(name)!)) : undefined,
+    feet: role !== 'mage' ? ['Foot.L', 'Foot.R'].map(name => createFootPlant(root.getObjectByName(name)!)) : undefined,
   };
 }
 
@@ -133,6 +136,11 @@ export function heroReleaseProgress(role: CharacterClassId, state: CharacterAnim
 export function heroAttackAdvance(role: CharacterClassId, state: CharacterAnimationState): number {
   const clip = strikeClip(state);
   return clip ? PACKED_CLIPS[role][clip].advance ?? 0 : 0;
+}
+
+export function heroAttackRetreat(role: CharacterClassId, state: CharacterAnimationState): AttackRetreat | undefined {
+  const clip = strikeClip(state);
+  return clip ? PACKED_CLIPS[role][clip].retreat : undefined;
 }
 
 export function animateHero(rig: HeroMotion, dt: number, state: CharacterAnimationState): void {

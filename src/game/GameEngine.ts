@@ -21,11 +21,15 @@ import { ActionId, InputManager } from '../input/InputManager';
 import { PersistenceManager, xpRequiredForLevel } from '../persistence/PersistenceManager';
 import { attachAnimeOutline, createAnimeToonMaterial } from '../rendering/AnimeMaterials';
 import { CharacterAnimationState, CharacterRig } from '../rendering/CharacterMeshBuilder';
-import { heroAttackAdvance, heroReleaseProgress } from '../rendering/HeroMotion';
+import { heroAttackAdvance, heroAttackRetreat, heroReleaseProgress } from '../rendering/HeroMotion';
 import { buildEnemyMesh, EnemyKind, EnemyMeshBundle } from '../rendering/EnemyMeshBuilder';
 import { EnvironmentBuilder, SAFE_ZONE_RADIUS } from '../rendering/EnvironmentBuilder';
+import { buildDeathmark } from '../rendering/Deathmark';
+import { buildGravitySingularity } from '../rendering/GravitySingularity';
 import { IsometricCameraController } from '../rendering/IsometricCamera';
 import { disposeObject } from '../rendering/SceneResources';
+import { buildKunai, buildShadowChakram } from '../rendering/NightbladeProjectiles';
+import { buildStarlightProjectile } from '../rendering/StarlightProjectile';
 import { VfxSystem } from '../rendering/VfxSystem';
 import {
   CharacterClassId,
@@ -91,6 +95,7 @@ function stepIntoStrike(attack: TimedHeroRelease, progress: number, position: TH
 
 interface PendingHeroAttack extends TimedHeroRelease {
   committed: boolean;
+  retreat: ReturnType<typeof heroAttackRetreat>;
 }
 
 const COMPANION_SWING_DURATION = 0.32;
@@ -119,6 +124,7 @@ export interface EnemyEntity {
 }
 
 export interface ProjectileEntity {
+  shape: 'orb' | 'comet' | 'kunai' | 'chakram';
   id: string;
   mesh: THREE.Object3D;
   position: THREE.Vector3;
@@ -146,14 +152,13 @@ export interface GroundHazardEntity {
   radius: number;
   damageMultiplier: number;
   energyGain: number;
-  colorHex: number;
-  accentHex: number;
   colorCss: string;
   age: number;
   duration: number;
   tickInterval: number;
   tickTimer: number;
   pullInward: boolean;
+  pose: (age: number, duration: number, sinceTick: number) => void;
 }
 
 export interface LootOrbEntity {
@@ -278,6 +283,7 @@ export class GameEngine {
   private activeAttackTimer = 0;
   private activeAttackDuration = 0.26;
   private pendingAttack: PendingHeroAttack | null = null;
+  private attackRetreat: { yaw: number; distance: number; from: number; until: number; travelled: number } | null = null;
   private dashTimer = 0;
   private dashDirection = new THREE.Vector3(0, 0, 1);
   private invulnerableTimer = 0;
@@ -1665,6 +1671,7 @@ export class GameEngine {
 
   private clearZoneCombatEntities(): void {
     this.pendingAttack = null;
+    this.attackRetreat = null;
     for (const companion of this.companions) companion.pendingAttack = undefined;
     for (const enemy of this.enemies) {
       this.removeTelegraph(enemy);
@@ -1776,6 +1783,7 @@ export class GameEngine {
 
     if (this.finisher) {
       if (document.visibilityState !== 'hidden' && !this.pauseReasons.has('orientation')) this.finisher.update(Math.min(0.25, elapsed));
+      this.opening?.setSceneryFocus(this.cameraController.camera, null);
       this.renderer.render(this.scene, this.cameraController.camera);
       requestAnimationFrame(this.loop); return;
     }
@@ -1817,6 +1825,8 @@ export class GameEngine {
     }
 
     this.vfx.update(this.isPaused ? 0 : dt, this.cameraController.camera);
+    this.opening?.setSceneryFocus(this.cameraController.camera,
+      this.mode === 'playing' && !this.pauseReasons.has('cutscene') ? this.playerPos : null);
     this.renderer.render(this.scene, this.cameraController.camera);
 
     requestAnimationFrame(this.loop);
@@ -1900,7 +1910,7 @@ export class GameEngine {
         this.playerPos.x += move.x * speed * dt;
         this.playerPos.z += move.y * speed * dt;
         this.clampPlayerToZone();
-        if (!this.pendingAttack && this.sliceWindup <= 0) {
+        if (!this.pendingAttack && !this.attackRetreat && this.sliceWindup <= 0) {
           const heading = Math.atan2(move.x, move.y);
           const spearRecovery = char.classId === 'warrior' && this.activeAttackTimer > 0
             && this.animState.attackComboStep >= 1 && this.animState.attackComboStep <= 3;
@@ -1928,6 +1938,7 @@ export class GameEngine {
       }
     } else if (dodgePressed && this.cooldowns.dash <= 0) {
       this.pendingAttack = null;
+      this.attackRetreat = null;
       this.activeAttackTimer = 0;
       this.animState.attackComboStep = 0;
       this.animState.attackSwingProgress = 0;
@@ -1941,6 +1952,7 @@ export class GameEngine {
       this.cooldowns.ultimate <= 0 &&
       char.ultimateEnergy >= classDef.skills.ultimate.energyCost
     ) {
+      this.attackRetreat = null;
       this.sliceWindup = 0.25;
       this.activeAttackDuration = this.sliceWindup;
       this.activeAttackTimer = this.sliceWindup;
@@ -1971,16 +1983,40 @@ export class GameEngine {
     if (this.pendingAttack && stepIntoStrike(this.pendingAttack, this.animState.attackSwingProgress, this.playerPos, this.playerYaw)) {
       this.clampPlayerToZone();
     }
+    if (this.attackRetreat) {
+      const retreat = this.attackRetreat;
+      const progress = this.animState.attackSwingProgress;
+      const distance = retreat.distance * THREE.MathUtils.smoothstep(progress, retreat.from, retreat.until);
+      const step = distance - retreat.travelled;
+      this.playerPos.x -= Math.sin(retreat.yaw) * step;
+      this.playerPos.z -= Math.cos(retreat.yaw) * step;
+      this.clampPlayerToZone();
+      retreat.travelled = distance;
+      if (progress >= retreat.until) this.attackRetreat = null;
+    }
     if (slice) slice.update(dt, this.sliceActors());
 
     // Update Player Rig transform & animation
     this.playerRig!.root.position.copy(this.playerPos);
     this.playerRig!.root.rotation.y = this.playerYaw;
     this.animState.charging = this.sliceWindup > 0;
-    this.playerRig!.updateAnimation(dt, this.animState);
-    if (this.pendingAttack && this.animState.attackSwingProgress >= this.pendingAttack.releaseAt) {
-      const attack = this.pendingAttack;
+    const attack = this.pendingAttack;
+    const released = attack && this.animState.attackSwingProgress >= attack.releaseAt;
+    const exactContact = char.classId === 'warrior'
+      ? this.animState.attackComboStep === 4
+      : this.animState.attackComboStep <= 3
+        || (char.classId === 'assassin' && this.animState.skillSlot === 'skill2');
+    this.playerRig!.updateAnimation(dt, released && exactContact
+      ? { ...this.animState, attackSwingProgress: attack.releaseAt }
+      : this.animState);
+    if (released) {
       this.pendingAttack = null;
+      if (attack.retreat) {
+        this.attackRetreat = {
+          yaw: this.playerYaw, distance: attack.retreat.distance, from: attack.releaseAt,
+          until: attack.retreat.landAt, travelled: 0,
+        };
+      }
       const hitCount = this.hitComboCount;
       attack.release();
       if (this.finisher) return;
@@ -2555,6 +2591,7 @@ export class GameEngine {
     release: () => void,
     skillSlot?: 'skill1' | 'skill2',
   ): void {
+    this.attackRetreat = null;
     this.activeAttackDuration = duration;
     this.activeAttackTimer = duration;
     this.animState.attackComboStep = step;
@@ -2565,6 +2602,7 @@ export class GameEngine {
       advance: heroAttackAdvance(this.activeCharacter!.classId, this.animState),
       travelled: 0,
       committed: step >= 4,
+      retreat: heroAttackRetreat(this.activeCharacter!.classId, this.animState),
       release,
     };
   }
@@ -2587,7 +2625,7 @@ export class GameEngine {
     const finisherTempo = { warrior: 1.35, mage: 1.2, assassin: 1.15 };
     this.cooldowns.basic = comboStep === 3 ? cd * finisherTempo[char.classId] : cd;
     const duration = char.classId === 'warrior' ? (comboStep === 3 ? 0.42 : 0.28)
-      : char.classId === 'mage' ? 0.30 : (comboStep === 3 ? 0.30 : 0.20);
+      : char.classId === 'mage' ? (comboStep === 3 ? .39 : .30) : (comboStep === 3 ? 0.30 : 0.20);
     this.startHeroAttack(comboStep, duration, () => this.releaseBasicCombo(comboStep, skillLevelBonus));
   }
 
@@ -2691,7 +2729,7 @@ export class GameEngine {
       } else if (comboStep === 2) {
         for (const angleOffset of [-0.18, 0.18]) {
           const emitter = this.playerRig!.getSpellEmitter(angleOffset > 0);
-          if (emitter) this.vfx.spawnCastingFlash(emitter, this.playerYaw + angleOffset, basic.colorHex, basic.accentHex);
+          if (emitter) this.vfx.spawnCastingFlash(emitter, this.playerYaw + angleOffset, basic.colorHex, basic.accentHex, .81);
           this.spawnProjectile({
             emitter,
             yaw: this.playerYaw + angleOffset,
@@ -2710,10 +2748,10 @@ export class GameEngine {
           });
         }
       } else {
-        // Step 3: Large Nova Comet that explodes in a wide AoE splash!
-        this.vfx.spawnShockwaveRing(this.playerPos, 1.4, basic.colorHex, basic.accentHex, 0.2);
+        const staff = this.playerRig!.getSpellEmitter(true);
+        if (staff) this.vfx.spawnCastingFlash(staff, this.playerYaw, 0x7209b7, basic.accentHex, 1.62);
         this.spawnProjectile({
-          emitter: this.playerRig!.getSpellEmitter(true),
+          emitter: staff,
           yaw: this.playerYaw,
           speed: 13.5,
           radius: 0.68,
@@ -2732,11 +2770,17 @@ export class GameEngine {
     } else {
       // RANGED ASSASSIN CADENCE:
       // Ultra-fast staccato kunai volleys + Step 3 Piercing Boomerang Chakram with kiting backflip!
+      const left = this.playerRig!.getBladeEmitter(-1);
+      const right = this.playerRig!.getBladeEmitter(1);
+      if (comboStep < 3 && left && right) {
+        this.vfx.spawnNightbladeRelease(left, right, this.playerYaw, basic.colorHex, basic.accentHex,
+          comboStep === 1 ? .36 : .54);
+      }
       if (comboStep === 1) {
         // Rapid Twin Kunai throw
         for (const side of [-0.07, 0.07]) {
           this.spawnProjectile({
-            emitter: this.playerRig!.getBladeEmitter(side < 0 ? -1 : 1),
+            emitter: side < 0 ? left : right,
             yaw: this.playerYaw + side,
             speed: 24.5,
             radius: 0.34,
@@ -2756,7 +2800,7 @@ export class GameEngine {
         // 3-Kunai Fan Spread
         for (const spread of [-0.24, 0, 0.24]) {
           this.spawnProjectile({
-            emitter: this.playerRig!.getBladeEmitter(spread < 0 ? -1 : 1),
+            emitter: spread < 0 ? left : right,
             yaw: this.playerYaw + spread,
             speed: 24.5,
             radius: 0.34,
@@ -2773,14 +2817,11 @@ export class GameEngine {
           });
         }
       } else {
-        // Release at the takeoff pose and leave a mirage as Akatsuki spins away.
+        // Freeze the departure pose and throw from that same takeoff position.
         this.vfx.spawnMirageAfterimage(this.playerRig!.root, basic.accentHex);
-        this.playerPos.addScaledVector(forward, -1.35);
-        this.clampPlayerToZone();
-        this.playerRig!.root.position.copy(this.playerPos);
 
         this.spawnProjectile({
-          emitter: this.playerRig!.getBladeEmitter(1),
+          emitter: right,
           yaw: this.playerYaw,
           speed: 19.0,
           radius: 0.85,
@@ -2902,9 +2943,6 @@ export class GameEngine {
       if (skillKey === 'skill1') {
         // Skyrend Impale: 8.2m Piercing Golden Spear Beam
         this.cameraController.triggerShake(0.35, 0.22);
-        this.playerPos.addScaledVector(forward, 0.85);
-        this.clampPlayerToZone();
-        this.playerRig!.root.position.copy(this.playerPos);
         this.vfx.spawnSpearThrustBeam(
           this.playerPos,
           this.playerYaw,
@@ -2912,6 +2950,7 @@ export class GameEngine {
           skill.colorHex,
           skill.accentHex,
           this.playerRig!.getSpearTip(),
+          2.45,
         );
         this.dealLineDamage(
           this.playerPos,
@@ -2926,15 +2965,17 @@ export class GameEngine {
       } else {
         // Earthshaker Banner: War-Stomp AoE + 12% Max HP Heal
         this.cameraController.triggerShake(0.42, 0.28);
-        const heal = Math.round(stats.maxHp * 0.12);
-        char.currentHp = Math.min(stats.maxHp, char.currentHp + heal);
-        this.vfx.spawnDamageNumber(this.playerPos, heal, false, '#64dfdf', `+${heal} HP`);
-        this.vfx.spawnShockwaveRing(
+        const heal = Math.min(Math.round(stats.maxHp * 0.12), stats.maxHp - char.currentHp);
+        if (heal > 0) {
+          char.currentHp += heal;
+          this.vfx.spawnDamageNumber(this.playerPos, heal, false, '#64dfdf', `+${heal} HP`);
+        }
+        this.vfx.spawnEarthshaker(
           this.playerPos,
+          this.playerRig!.getSpearButt() ?? this.playerPos,
           skill.aoeRadius,
           skill.colorHex,
           skill.accentHex,
-          0.5
         );
         this.dealAreaDamage(
           this.playerPos,
@@ -2951,6 +2992,8 @@ export class GameEngine {
         const targetPos = nearest
           ? nearest.bundle.root.position.clone()
           : this.playerPos.clone().addScaledVector(forward, 4.8);
+        const palm = this.playerRig!.getSpellEmitter(false);
+        if (palm) this.vfx.spawnGravityCast(palm, targetPos, this.playerYaw, skill.colorHex, skill.accentHex);
         this.spawnGroundHazard({
           position: targetPos,
           radius: skill.aoeRadius,
@@ -2969,6 +3012,8 @@ export class GameEngine {
         const baseTarget = nearest
           ? nearest.bundle.root.position.clone()
           : this.playerPos.clone().addScaledVector(forward, 5.2);
+        const staff = this.playerRig!.getSpellEmitter(true);
+        if (staff) this.vfx.spawnCastingFlash(staff, this.playerYaw, skill.colorHex, skill.accentHex);
 
         for (let m = 0; m < 3; m++) {
           const offset = new THREE.Vector3(
@@ -2987,13 +3032,7 @@ export class GameEngine {
             () => {
               if (this.mode !== 'playing') return;
               this.cameraController.triggerShake(0.32, 0.2);
-              this.vfx.spawnShockwaveRing(
-                impactPos,
-                skill.aoeRadius,
-                skill.colorHex,
-                skill.accentHex,
-                0.4
-              );
+              this.vfx.spawnMeteorImpact(impactPos, skill.aoeRadius, skill.colorHex, skill.accentHex);
               this.dealAreaDamage(
                 impactPos,
                 skill.aoeRadius,
@@ -3037,14 +3076,13 @@ export class GameEngine {
           });
         }
       } else {
-        // Deathmark Shuriken Traps: Deploys 3 spinning ground shuriken traps!
-        for (const angleOffset of [-0.45, 0, 0.45]) {
-          const dir = new THREE.Vector3(
-            Math.sin(this.playerYaw + angleOffset),
-            0,
-            Math.cos(this.playerYaw + angleOffset)
-          );
-          const trapPos = this.playerPos.clone().addScaledVector(dir, 3.4);
+        const targets = [-.45, 0, .45].map(offset => {
+          const angle = this.playerYaw + offset;
+          return this.playerPos.clone().add(new THREE.Vector3(Math.sin(angle) * 3.4, 0, Math.cos(angle) * 3.4));
+        });
+        const blade = this.playerRig!.getBladeEmitter(-1);
+        if (blade) this.vfx.spawnDeathmarkCast(blade, targets, skill.colorHex, skill.accentHex);
+        for (const trapPos of targets) {
           this.spawnGroundHazard({
             position: trapPos,
             radius: skill.aoeRadius,
@@ -3078,7 +3116,7 @@ export class GameEngine {
     pierceRemaining: number;
     explodeRadius: number;
     homingStrength: number;
-    shape: 'orb' | 'comet' | 'kunai' | 'chakram';
+    shape: ProjectileEntity['shape'];
   }): void {
     const group = new THREE.Group();
     const basePos = opts.origin ?? this.playerPos;
@@ -3097,38 +3135,17 @@ export class GameEngine {
     });
 
     if (opts.shape === 'kunai') {
-      const bladeGeo = new THREE.BufferGeometry();
-      bladeGeo.setAttribute('position', new THREE.Float32BufferAttribute([
-        0, 0, .48, -.123, 0, .03, 0, 0, -.25, .123, 0, .03,
-        0, .067, .08, 0, -.043, .08,
-      ], 3));
-      bladeGeo.setIndex([0,1,4, 1,2,4, 2,3,4, 3,0,4, 1,0,5, 2,1,5, 3,2,5, 0,3,5]);
-      coreMat.side = THREE.DoubleSide;
-      const blade = new THREE.Mesh(bladeGeo, coreMat);
-      const trailGeo = new THREE.ConeGeometry(.11, 1.1, 4);
-      trailGeo.rotateX(-Math.PI / 2);
-      trailGeo.translate(0, 0, -0.45);
-      const trail = new THREE.Mesh(trailGeo, glowMat);
-      group.add(blade, trail);
+      group.add(buildKunai(coreMat, glowMat));
     } else if (opts.shape === 'chakram') {
-      const ringGeo = new THREE.TorusGeometry(0.62, 0.08, 8, 24);
-      ringGeo.rotateX(Math.PI / 2);
-      const ring = new THREE.Mesh(ringGeo, coreMat);
-      const crossGeo = new THREE.BoxGeometry(1.15, 0.04, 0.14);
-      const cross1 = new THREE.Mesh(crossGeo, glowMat);
-      const cross2 = new THREE.Mesh(crossGeo, glowMat);
-      cross2.rotation.y = Math.PI / 2;
-      group.add(ring, cross1, cross2);
+      group.add(buildShadowChakram(coreMat, glowMat));
     } else {
-      const r = opts.shape === 'comet' ? 0.38 : 0.22;
-      const core = new THREE.Mesh(new THREE.OctahedronGeometry(r, 1), coreMat);
-      const halo = new THREE.Mesh(new THREE.SphereGeometry(r * 1.55, 12, 12), glowMat);
-      group.add(core, halo);
+      group.add(buildStarlightProjectile(opts.shape === 'comet', coreMat, glowMat));
     }
 
     this.scene.add(group);
 
     this.projectiles.push({
+      shape: opts.shape,
       id: `proj_${Date.now()}_${Math.random()}`,
       mesh: group,
       position: startPos,
@@ -3149,7 +3166,7 @@ export class GameEngine {
       pierceRemaining: opts.pierceRemaining,
       explodeRadius: opts.explodeRadius,
       homingStrength: opts.homingStrength,
-      spinSpeed: opts.shape === 'chakram' ? 18 : opts.shape === 'kunai' ? 0 : 8,
+      spinSpeed: opts.shape === 'chakram' ? 18 : opts.shape === 'kunai' ? 0 : opts.shape === 'comet' ? 7 : 10,
       hitEnemyIds: new Set(),
     });
   }
@@ -3195,9 +3212,8 @@ export class GameEngine {
         p.mesh.position.addScaledVector(p.visualOffset, settle);
         if (settle === 0) p.visualOffset = undefined;
       }
-      if (p.spinSpeed !== 0) {
-        p.mesh.rotation.y += p.spinSpeed * dt;
-      }
+      if (p.shape === 'chakram') p.mesh.rotation.y += p.spinSpeed * dt;
+      else if (p.spinSpeed !== 0) p.mesh.children[0].rotation.z += p.spinSpeed * dt;
 
       // Check collision against enemies
       let shouldRemove = p.age >= p.maxLifetime;
@@ -3214,21 +3230,7 @@ export class GameEngine {
           p.pierceRemaining -= 1;
 
           if (p.explodeRadius > 0) {
-            this.vfx.spawnShockwaveRing(
-              new THREE.Vector3(p.position.x, 0, p.position.z),
-              p.explodeRadius,
-              p.colorHex,
-              p.accentHex,
-              0.28
-            );
-            this.dealAreaDamage(
-              new THREE.Vector3(p.position.x, 0, p.position.z),
-              p.explodeRadius,
-              p.damageMultiplier,
-              p.energyGain,
-              p.colorCss,
-              2.8
-            );
+            this.detonateStarlight(p, 2.8);
           } else {
             this.applySingleEnemyHit(
               enemy,
@@ -3248,29 +3250,19 @@ export class GameEngine {
       }
 
       if (shouldRemove) {
-        if (p.explodeRadius >= 2.8 && p.hitEnemyIds.size === 0) {
-          // Detonate Nova Comet at end of range even if it didn't direct-hit
-          const groundPos = new THREE.Vector3(p.position.x, 0, p.position.z);
-          this.vfx.spawnShockwaveRing(
-            groundPos,
-            p.explodeRadius,
-            p.colorHex,
-            p.accentHex,
-            0.32
-          );
-          this.dealAreaDamage(
-            groundPos,
-            p.explodeRadius,
-            p.damageMultiplier,
-            p.energyGain,
-            p.colorCss,
-            3.5
-          );
-        }
+        if (p.shape === 'comet' && p.hitEnemyIds.size === 0) this.detonateStarlight(p, 3.5);
         this.removeSceneObject(p.mesh);
         this.projectiles.splice(i, 1);
       }
     }
+  }
+
+  private detonateStarlight(projectile: ProjectileEntity, knockback: number): void {
+    const { position, shape, explodeRadius, colorHex, accentHex, damageMultiplier, energyGain, colorCss } = projectile;
+    const ground = new THREE.Vector3(position.x, 0, position.z);
+    if (shape === 'comet') this.vfx.spawnNovaBurst(ground, explodeRadius, colorHex, accentHex);
+    else this.vfx.spawnShockwaveRing(ground, explodeRadius, colorHex, accentHex, .28);
+    this.dealAreaDamage(ground, explodeRadius, damageMultiplier, energyGain, colorCss, knockback);
   }
 
   private spawnGroundHazard(opts: {
@@ -3286,58 +3278,25 @@ export class GameEngine {
     pullInward: boolean;
     visualStyle: 'vortex' | 'shuriken_trap';
   }): void {
-    const group = new THREE.Group();
-    group.position.set(opts.position.x, 0.06, opts.position.z);
-
-    const outerGeo = new THREE.RingGeometry(opts.radius * 0.75, opts.radius, 32);
-    outerGeo.rotateX(-Math.PI / 2);
-    const outerMat = new THREE.MeshBasicMaterial({
-      color: opts.colorHex,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.78,
-      blending: THREE.AdditiveBlending,
-    });
-    group.add(new THREE.Mesh(outerGeo, outerMat));
-
-    if (opts.visualStyle === 'vortex') {
-      const coreGeo = new THREE.SphereGeometry(0.65, 16, 16);
-      const coreMat = new THREE.MeshBasicMaterial({
-        color: 0x10002b,
-      });
-      const core = new THREE.Mesh(coreGeo, coreMat);
-      core.position.y = 0.55;
-      group.add(core);
-    } else {
-      // Spinning 4-blade Shuriken Trap
-      const bladeMat = new THREE.MeshBasicMaterial({ color: opts.accentHex });
-      const b1 = new THREE.Mesh(
-        new THREE.BoxGeometry(opts.radius * 1.4, 0.06, 0.24),
-        bladeMat
-      );
-      const b2 = new THREE.Mesh(
-        new THREE.BoxGeometry(0.24, 0.06, opts.radius * 1.4),
-        bladeMat
-      );
-      group.add(b1, b2);
-    }
-
-    this.scene.add(group);
+    const effect = opts.visualStyle === 'vortex'
+      ? buildGravitySingularity(opts.radius, opts.colorHex, opts.accentHex)
+      : buildDeathmark(opts.radius, opts.colorHex, opts.accentHex);
+    effect.mesh.position.set(opts.position.x, .06, opts.position.z);
+    this.scene.add(effect.mesh);
     this.groundHazards.push({
       id: `haz_${Date.now()}_${Math.random()}`,
-      mesh: group,
+      mesh: effect.mesh,
       position: new THREE.Vector3(opts.position.x, 0, opts.position.z),
       radius: opts.radius,
       damageMultiplier: opts.damageMultiplier,
       energyGain: opts.energyGain,
-      colorHex: opts.colorHex,
-      accentHex: opts.accentHex,
       colorCss: opts.colorCss,
       age: 0,
       duration: opts.duration,
       tickInterval: opts.tickInterval,
       tickTimer: 0.05,
       pullInward: opts.pullInward,
+      pose: effect.pose,
     });
   }
 
@@ -3346,11 +3305,8 @@ export class GameEngine {
       const h = this.groundHazards[i];
       h.age += dt;
       h.tickTimer -= dt;
-      h.mesh.rotation.y += dt * 9.5;
-
       if (h.tickTimer <= 0) {
         h.tickTimer = h.tickInterval;
-        this.vfx.spawnShockwaveRing(h.position, h.radius, h.colorHex, h.accentHex, 0.25);
         this.dealAreaDamage(
           h.position,
           h.radius,
@@ -3361,6 +3317,7 @@ export class GameEngine {
           h.pullInward
         );
       }
+      h.pose(h.age, h.duration, h.tickInterval - h.tickTimer);
 
       if (h.age >= h.duration) {
         this.removeSceneObject(h.mesh);

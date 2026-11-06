@@ -13,7 +13,11 @@ from mathutils import Matrix, Quaternion, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.dont_write_bytecode = True
-from hero_poses import IDLE, JOINTS, RELEASE, SPEAR_ADVANCE, SPEAR_STANCE, actions_for
+from hero_poses import (
+    IDLE, JOINTS, NIGHTBLADE_RETREAT, NIGHTBLADE_STANCE, RELEASE, SPEAR_ADVANCE, SPEAR_STANCE, actions_for,
+)
+
+ATTACK_STANCES = {"warrior": SPEAR_STANCE, "assassin": NIGHTBLADE_STANCE}
 
 GAME_TO_BLENDER = Matrix(((1, 0, 0), (0, 0, -1), (0, 1, 0)))
 BASIS = GAME_TO_BLENDER.to_quaternion()
@@ -146,15 +150,16 @@ def key_run_contact(armature, frame, role, start, end):
 
 def bake_contact(armature, actor, role, clip, start, end):
     scene = bpy.context.scene
-    if role == "warrior" and clip in SPEAR_STANCE:
+    stance = ATTACK_STANCES.get(role, {}).get(clip)
+    if stance:
         release = RELEASE[role][clip]
-        advance = SPEAR_ADVANCE[clip]
+        advance = SPEAR_ADVANCE.get(clip, 0) if role == "warrior" else 0
         first_travel = start + (release - start) * .20
         for frame in range(start, end + 1):
             scene.frame_set(frame)
             travel = min(1, max(0, (frame - first_travel) / (release - first_travel)))
             travel = advance * travel * travel * (3 - 2 * travel)
-            for side, marks in SPEAR_STANCE[clip].items():
+            for side, marks in stance.items():
                 left, right = next((a, b) for a, b in zip(marks, marks[1:]) if frame <= b[0])
                 phase = (frame - left[0]) / (right[0] - left[0])
                 t = phase * phase * (3 - 2 * phase)
@@ -173,7 +178,7 @@ def bake_contact(armature, actor, role, clip, start, end):
     if role == "warrior":
         grounded.add("evade")
     elif role == "mage":
-        grounded.update(("thrust", "reverse"))
+        grounded.update(("thrust", "reverse", "sweep"))
     # Collect corrections against the authored curves before inserting keys.
     hip_locations = []
     idle_ankles = {}
@@ -192,7 +197,8 @@ def bake_contact(armature, actor, role, clip, start, end):
             hip_locations.append((frame, hips.location + shift))
             continue
         bottom = min((foot.matrix @ point).z for foot, vertices in sole.items() for point in vertices)
-        lift = -bottom if clip in grounded else max(0, -bottom)
+        nightblade_landing = role == "assassin" and clip == "sweep" and frame >= NIGHTBLADE_RETREAT[1]
+        lift = -bottom if clip in grounded or nightblade_landing else max(0, -bottom)
         local_shift = hips.bone.matrix_local.to_3x3().inverted() @ Vector((0, 0, lift))
         hip_locations.append((frame, hips.location + local_shift))
     for frame, location in hip_locations:
@@ -370,6 +376,9 @@ def build_rig(hero, paint):
         action["astral_clip"] = clip
         if role == "warrior" and clip in SPEAR_ADVANCE:
             action["astral_advance"] = SPEAR_ADVANCE[clip]
+        if role == "assassin" and clip == "sweep":
+            action["astral_retreat"], landing = NIGHTBLADE_RETREAT
+            action.pose_markers.new("Land").frame = landing
         action.use_fake_user = True
         action.use_frame_range = True
         action.frame_start = keys[0][0]
@@ -458,12 +467,21 @@ def bake_library(scene, armatures):
                 clips[name]["release"] = round((marker.frame - start) / (end - start), 6)
             if "astral_advance" in action:
                 clips[name]["advance"] = float(action["astral_advance"])
-            if role == "warrior" and name in SPEAR_STANCE:
+            if "astral_retreat" in action:
+                land = action.pose_markers.get("Land")
+                if not marker or not land or not marker.frame < land.frame <= end:
+                    raise ValueError(f"{action.name} needs a Land marker after Release")
+                clips[name]["retreat"] = {
+                    "distance": float(action["astral_retreat"]),
+                    "landAt": round((land.frame - start) / (end - start), 6),
+                }
+            stance = ATTACK_STANCES.get(role, {}).get(name)
+            if stance:
                 clips[name]["plants"] = [
                     [{"start": round((a[0] - start) / (end - start), 6),
                       "end": round((b[0] - start) / (end - start), 6)}
                      for a, b in zip(marks, marks[1:]) if a[1:4] == b[1:4] and a[3] == 0]
-                    for marks in (SPEAR_STANCE[name][side] for side in ("L", "R"))
+                    for marks in (stance[side] for side in ("L", "R"))
                 ]
         library[role] = clips
     return {"joints": BONE_ORDER, "castingJoints": CASTING_JOINTS, "roles": library}

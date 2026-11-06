@@ -1293,7 +1293,7 @@ export class UIManager {
     this.hudRefs.questObjProgress.textContent = qv.progressText;
     if (t.opening) {
       this.root.querySelector('#act-dash')!.classList.toggle('ability-committed', t.opening.committed);
-      if (t.opening.committed) this.hudRefs.questObjProgress.textContent = 'Eclipse windup · evade after release';
+      if (t.opening.committed) this.hudRefs.questObjProgress.textContent = 'Committed windup · evade after release';
     }
     this.root.querySelector('.quest-tracker-card')?.classList.toggle('field-objective', Boolean(t.fieldActivity));
     if (qv.companionBanter) {

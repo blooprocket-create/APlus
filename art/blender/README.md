@@ -8,6 +8,8 @@ The 33 actions cover idle, run, evade, hit reaction, three combo strikes, two sk
 
 Brynhildr’s three combo actions use authored foot marks that account for the step into each strike. The `astral_advance` action property records the in-game travel distance. The runtime eases that distance in during the windup and reaches it at `Release`. The exporter records each interval where an ankle holds the same ground mark. During steering, the game uses those intervals to correct sliding and blends out the correction before the foot lifts. To revise the advance and foot marks together, edit `SPEAR_ADVANCE` and `SPEAR_STANCE` in `tools/blender/hero_poses.py` and rebuild the rig.
 
+Akatsuki’s **Combo 3** throws from the `Release` pose and finishes its backward travel at `Land`. The `astral_retreat` property records the distance. Edit `NIGHTBLADE_RETREAT` in the pose source when changing that distance or rebuilding the landing frame.
+
 Select a hero's **expression controls** mesh and open **Object Data → Shape Keys** to preview blinks, brow poses, gaze, and speech shapes. In the game, these shapes blend on top of the body action. Dialogue voice cues drive the visible mouth shapes. Akatsuki's mask leaves her eyes and brows as the visible expression controls.
 
 To bake edits from the saved Blender project into the game, run from the repository root with Blender on your path.

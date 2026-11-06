@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { getViewportProfile } from '../platform/Viewport';
 import { disposeObject } from './SceneResources';
+import { buildMeteorFlight, buildMeteorImpact } from './CelestialMeteor';
+import { buildEarthshakerImpact } from './EarthshakerImpact';
+import { buildDeathmarkCast } from './Deathmark';
+import { buildNovaBurst } from './StarlightProjectile';
 import { placeFloatingLabel, type LabelRect } from './FloatingLabels';
 import type { CharacterClassId } from '../types/game';
 
@@ -124,6 +128,7 @@ export class VfxSystem {
     yaw: number,
     colorHex: number,
     accentHex: number,
+    scale = 1,
   ): void {
     const group = new THREE.Group();
     group.rotation.y = yaw;
@@ -147,15 +152,15 @@ export class VfxSystem {
       stroke.add(body, rim);
       group.add(stroke);
     }
-    group.scale.setScalar(.64);
+    group.scale.setScalar(.64 * scale);
     this.scene.add(group);
     this.activeMeshes.push({
       mesh: group,
       age: 0,
-      duration: .22,
+      duration: .12 + .10 * scale,
       materials: [ink, edge],
       onUpdate: p => {
-        group.scale.setScalar(.64 + .56 * (1 - (1 - p) ** 3));
+        group.scale.setScalar(scale * (.64 + .56 * (1 - (1 - p) ** 3)));
         const fade = 1 - THREE.MathUtils.smoothstep(p, .12, 1);
         ink.opacity = .91 * fade;
         edge.opacity = fade;
@@ -163,7 +168,7 @@ export class VfxSystem {
     });
   }
 
-  public spawnCastingFlash(origin: THREE.Vector3, yaw: number, colorHex: number, accentHex: number): void {
+  public spawnCastingFlash(origin: THREE.Vector3, yaw: number, colorHex: number, accentHex: number, size = 1): void {
     const group = new THREE.Group();
     group.position.copy(origin);
     group.rotation.y = yaw;
@@ -190,7 +195,7 @@ export class VfxSystem {
     outer.rotation.set(.29, 0, -.40);
     inner.rotation.set(-.48, 0, .34);
     group.add(outer, inner, flare);
-    group.scale.setScalar(.62);
+    group.scale.setScalar(.62 * size);
     this.scene.add(group);
     this.activeMeshes.push({
       mesh: group,
@@ -198,11 +203,59 @@ export class VfxSystem {
       duration: .20,
       materials: [halo, white],
       onUpdate: p => {
-        group.scale.setScalar(.62 + .58 * (1 - (1 - p) ** 3));
+        group.scale.setScalar(size * (.62 + .58 * (1 - (1 - p) ** 3)));
         flare.scale.setScalar(1 - .55 * p);
         const fade = 1 - THREE.MathUtils.smoothstep(p, .12, 1);
         halo.opacity = .76 * fade;
         white.opacity = fade;
+      },
+    });
+  }
+
+  public spawnGravityCast(
+    palm: THREE.Vector3, target: THREE.Vector3, yaw: number, color: number, accent: number,
+  ): void {
+    this.spawnCastingFlash(palm, yaw, color, accent);
+    const direction = new THREE.Vector3(target.x - palm.x, .91 - palm.y, target.z - palm.z);
+    const distance = direction.length();
+    if (distance < .25) return;
+    const side = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    const points: number[] = [];
+    const indices: number[] = [];
+    for (let i = 0; i <= 18; i++) {
+      const t = i / 18;
+      const arch = Math.sin(t * Math.PI);
+      const width = .13 * arch * (1 - .65 * t);
+      const x = direction.x * t + side.x * arch * .24;
+      const y = direction.y * t + arch * Math.min(.68, distance * .15);
+      const z = direction.z * t + side.z * arch * .24;
+      points.push(x - side.x * width, y - width * .48, z - side.z * width,
+        x + side.x * width, y + width * .48, z + side.z * width);
+      if (i > 0) {
+        const a = (i - 1) * 2;
+        indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+    geometry.setIndex(indices);
+    const mat = new THREE.MeshBasicMaterial({
+      color: accent, side: THREE.DoubleSide, transparent: true, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, mat);
+    mesh.position.copy(palm);
+    geometry.setDrawRange(0, 12);
+    this.scene.add(mesh);
+    this.activeMeshes.push({
+      mesh,
+      age: 0,
+      duration: .24,
+      materials: [mat],
+      onUpdate: p => {
+        const front = Math.ceil(18 * THREE.MathUtils.smoothstep(p, 0, .42));
+        const tail = Math.floor(18 * THREE.MathUtils.smoothstep(p, .22, 1));
+        geometry.setDrawRange(tail * 6, Math.max(0, front - tail) * 6);
+        mat.opacity = 1 - THREE.MathUtils.smoothstep(p, .48, 1);
       },
     });
   }
@@ -423,6 +476,7 @@ export class VfxSystem {
     colorHex: number,
     accentHex: number,
     tip?: THREE.Vector3,
+    force = 1,
   ): void {
     const group = new THREE.Group();
     group.position.copy(origin);
@@ -452,18 +506,33 @@ export class VfxSystem {
       ], 3));
       return new THREE.Mesh(geometry, material);
     };
-    const ink = stroke(.22, inkMat);
-    const core = stroke(.063, coreMat);
+    const ink = stroke(.22 * force, inkMat);
+    const core = stroke(.063 * force, coreMat);
     core.position.y = .011;
     core.renderOrder = 1;
     group.add(ink, core);
+    if (force > 1) {
+      const splinters: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const angle = i * Math.PI * .4;
+        const x = Math.cos(angle), y = Math.sin(angle);
+        const spread = .48 + .18 * (i % 2);
+        const start = length * (.045 + .065 * i);
+        splinters.push(x * spread, y * spread, start,
+          x * (spread + .12), y * (spread + .12), start + length * .12,
+          x * .27, y * .27, start + length * .52);
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(splinters, 3));
+      group.add(new THREE.Mesh(geometry, inkMat));
+    }
     group.scale.set(.96, .96, .83);
     this.scene.add(group);
 
     this.activeMeshes.push({
       mesh: group,
       age: 0,
-      duration: 0.15,
+      duration: 0.15 + (force - 1) * .04,
       materials: [inkMat, coreMat],
       onUpdate: (p) => {
         group.scale.set(1 - p*.78, 1 - p*.78, .83 + .17 * (1 - (1 - p)**3));
@@ -473,64 +542,58 @@ export class VfxSystem {
     });
   }
 
-  /**
-   * Spawns a telegraph warning circle followed by a falling celestial meteor for the Mage.
-   */
   public spawnFallingMeteor(
-    targetPos: THREE.Vector3,
-    radius: number,
-    duration: number,
-    colorHex: number,
-    accentHex: number,
-    onImpact: () => void
+    target: THREE.Vector3, radius: number, duration: number, color: number, accent: number,
+    onImpact: () => void,
   ): void {
-    const group = new THREE.Group();
-    group.position.set(targetPos.x, 0.04, targetPos.z);
-
-    const ringGeo = new THREE.RingGeometry(radius * 0.88, radius, 32);
-    ringGeo.rotateX(-Math.PI / 2);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: colorHex,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.8,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-
-    const meteorGeo = new THREE.DodecahedronGeometry(0.65, 0);
-    const meteorMat = new THREE.MeshBasicMaterial({
-      color: accentHex,
-      transparent: true,
-      opacity: 0.95,
-    });
-    const meteorMesh = new THREE.Mesh(meteorGeo, meteorMat);
-    meteorMesh.position.set(-2.5, 12.0, -1.5);
-
-    group.add(ringMesh, meteorMesh);
-    this.scene.add(group);
-
-    let impacted = false;
+    const flight = buildMeteorFlight(target, radius, duration, color, accent);
+    this.scene.add(flight.mesh);
+    const impactProgress = .92;
     this.activeMeshes.push({
-      mesh: group,
+      mesh: flight.mesh,
       age: 0,
       duration,
-      materials: [ringMat, meteorMat],
-      onUpdate: (p, dt) => {
-        ringMesh.rotation.z += dt * 4;
-        meteorMesh.position.set(
-          THREE.MathUtils.lerp(-2.5, 0, p),
-          THREE.MathUtils.lerp(12.0, 0.3, p),
-          THREE.MathUtils.lerp(-1.5, 0, p)
-        );
-        meteorMesh.rotation.x += dt * 8;
-        meteorMesh.rotation.y += dt * 6;
-        if (p >= 0.92 && !impacted) {
-          impacted = true;
+      materials: [],
+      onUpdate: p => {
+        if (p < impactProgress) {
+          flight.pose(p * duration, impactProgress * duration);
+        } else if (flight.mesh.visible) {
+          flight.mesh.visible = false;
           onImpact();
         }
       },
+    });
+  }
+
+  public spawnMeteorImpact(target: THREE.Vector3, radius: number, color: number, accent: number): void {
+    const impact = buildMeteorImpact(target, radius, color, accent);
+    this.scene.add(impact.mesh);
+    this.activeMeshes.push({
+      mesh: impact.mesh, age: 0, duration: .36, materials: [], onUpdate: impact.pose,
+    });
+  }
+
+  public spawnNovaBurst(target: THREE.Vector3, radius: number, color: number, accent: number): void {
+    const burst = buildNovaBurst(target, radius, color, accent);
+    this.scene.add(burst.mesh);
+    this.activeMeshes.push({
+      mesh: burst.mesh, age: 0, duration: .39, materials: [], onUpdate: burst.pose,
+    });
+  }
+
+  public spawnEarthshaker(center: THREE.Vector3, contact: THREE.Vector3, radius: number, color: number, accent: number): void {
+    const impact = buildEarthshakerImpact(center, contact, radius, color, accent);
+    this.scene.add(impact.mesh);
+    this.activeMeshes.push({
+      mesh: impact.mesh, age: 0, duration: .53, materials: [], onUpdate: impact.pose,
+    });
+  }
+
+  public spawnDeathmarkCast(origin: THREE.Vector3, targets: readonly THREE.Vector3[], color: number, accent: number): void {
+    const cast = buildDeathmarkCast(origin, targets, color, accent);
+    this.scene.add(cast.mesh);
+    this.activeMeshes.push({
+      mesh: cast.mesh, age: 0, duration: .115, materials: [], onUpdate: cast.pose,
     });
   }
 

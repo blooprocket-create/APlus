@@ -119,6 +119,36 @@ describe('Blender-authored hero motion', () => {
     expect(rig.root.getObjectByName('Hips')!.quaternion.angleTo(evade)).toBeGreaterThan(0.1);
   });
 
+  it('keeps Brynhildr’s spear pointed ahead through the run cycle', () => {
+    const rig = new CharacterRig('warrior');
+    const grip = rig.root.getObjectByName('Weapon')!;
+    const run = { ...BASE, isMoving: true, moveSpeedRatio: 1 };
+    for (let i = 0; i < 48; i++) {
+      rig.updateAnimation(1 / 60, run);
+      if (i < 12) continue;
+      const shaft = rig.getSpearTip()!.sub(grip.getWorldPosition(new Vector3())).normalize();
+      expect(shaft.z).toBeGreaterThan(.75);
+      expect(shaft.y).toBeGreaterThan(.2);
+    }
+  });
+
+  it('keeps Akatsuki’s support foot planted through the twin and fan releases', () => {
+    const rig = new CharacterRig('assassin');
+    const support = rig.root.getObjectByName('Foot.R')!;
+    const releaseWidths: number[] = [];
+    for (const [index, clip] of [clips.roles.assassin.thrust, clips.roles.assassin.reverse].entries()) {
+      const state = { ...BASE, isMoving: true, moveSpeedRatio: .35, attackComboStep: index + 1 };
+      rig.updateAnimation(.06, { ...state, attackSwingProgress: .11 });
+      const anchor = support.getWorldPosition(new Vector3());
+      rig.root.position.x += .09;
+      rig.updateAnimation(.02, { ...state, attackSwingProgress: clip.release });
+      const foot = support.getWorldPosition(new Vector3());
+      expect(Math.hypot(foot.x - anchor.x, foot.z - anchor.z)).toBeLessThan(.02);
+      releaseWidths.push(rig.getBladeEmitter(-1)!.distanceTo(rig.getBladeEmitter(1)!));
+    }
+    expect(releaseWidths[1]).toBeGreaterThan(releaseWidths[0] + .2);
+  });
+
   it('opens Celestia’s fingertips on the same frame as the spell release', () => {
     const rig = new CharacterRig('mage');
     const hand = rig.root.getObjectByName('Celestia’s casting glove') as SkinnedMesh;

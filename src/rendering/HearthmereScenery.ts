@@ -10,13 +10,118 @@ function noise(n: number): number {
   return value - Math.floor(value);
 }
 
-function paintedPalette(): THREE.MeshLambertMaterial {
+const LANES = [
+  [41, 4.3, -8, 5], [26, 5.3, -7, -5.5], [4.8, 12, -16, 0],
+  [5.3, 13, 4, -1], [17, 4.1, 29, 6.5], [8.8, 4.2, -23, 1.5],
+] as const;
+
+function roadWear(x: number, z: number): number {
+  let wear = 0;
+  for (const [lane, [width, depth, centerX, centerZ]] of LANES.entries()) {
+    const eastWest = width >= depth;
+    const along = eastWest ? x - centerX : z - centerZ;
+    const across = eastWest ? z - centerZ : x - centerX;
+    const extent = (eastWest ? width : depth) / 2;
+    const shoulder = (eastWest ? depth : width) / 2;
+    if (Math.abs(along) > extent + .9 || Math.abs(across) > shoulder + 1.2) continue;
+    const wander = .24 * Math.sin(along * .62 + lane * 1.4) + .19 * Math.sin(along * 1.28 + lane);
+    const edge = shoulder + .28 * Math.sin(along * .91 - lane * 2);
+    const crossfade = 1 - THREE.MathUtils.smoothstep(Math.abs(across + wander), edge - .64, edge + .67);
+    const end = lane === 4 ? 1.9 : .48;
+    const endfade = 1 - THREE.MathUtils.smoothstep(Math.abs(along), extent - end, extent + .86);
+    wear = Math.max(wear, crossfade * endfade);
+  }
+  return wear;
+}
+
+function paintTownGround(
+  town: THREE.Group, centerX: number, width: number, grass: THREE.Color,
+  outskirts: THREE.Color, outerGrass: THREE.Color, path: THREE.MeshLambertMaterial,
+): void {
+  const outerSide = Math.sign(centerX);
+  const geometry = new THREE.PlaneGeometry(width + 2, 34.6, Math.ceil((width + 2) / .52), 66);
+  geometry.rotateX(-Math.PI / 2);
+  geometry.translate(outerSide, 0, 0);
+  const points = geometry.attributes.position;
+  const colors = new Float32Array(points.count * 3);
+  const cool = new THREE.Color(0x618a75);
+  const meadow = new THREE.Color(0xa5ab70);
+  const wornClay = new THREE.Color(0xaa8b6d);
+  const dirt = new THREE.Color();
+  const tint = new THREE.Color();
+  for (let i = 0; i < points.count; i++) {
+    const x = points.getX(i) + centerX;
+    const z = points.getZ(i) - 1;
+    const shoulder = THREE.MathUtils.smoothstep(Math.abs(z + 1), 15.5, 17.3);
+    const side = THREE.MathUtils.smoothstep(outerSide * (x - centerX), width / 2, width / 2 + 2);
+    const wash = Math.sin(x * .28 + z * .44) + Math.sin(z * .68 - x * .21) * .64
+      + Math.sin(x * 1.33 + z * .91) * .26;
+    const wet = 1 - THREE.MathUtils.smoothstep(Math.min(Math.abs(x - 12), Math.abs(x - 20)), .25, 4);
+    tint.copy(grass).lerp(cool, wet * .51 + (1 - THREE.MathUtils.smoothstep(wash, -1, -.15)) * .38);
+    tint.lerp(meadow, THREE.MathUtils.smoothstep(wash, -.05, 1.5) * .57);
+    const wear = roadWear(x, z);
+    dirt.copy(path.color).lerp(wornClay, .20 + .20 * Math.sin(x * .42 + z * .31));
+    tint.lerp(dirt, wear).lerp(outskirts, shoulder).lerp(outerGrass, side).toArray(colors, i * 3);
+    points.setY(i, THREE.MathUtils.lerp(-.107 * shoulder, -.206, side));
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  piece(town, geometry, path, centerX, -.012, -1).receiveShadow = true;
+}
+
+function buildCoverWall(
+  town: THREE.Group, stones: THREE.Material[], x: number, z: number, length: number, height: number,
+): void {
+  for (let row = 0; row < 3; row++) {
+    const count = row === 1 ? 5 : 6;
+    const course = length / count;
+    let left = -length / 2;
+    for (let i = 0; i < count; i++) {
+      const seed = x * 31 + row * 17 + i * 3;
+      const end = i === count - 1 ? length / 2
+        : (i + 1) * course - length / 2 + (noise(seed) - .5) * .21;
+      const w = end - left - .027;
+      const h = (row === 2 ? .25 : .36) * height;
+      const cut = .035 + noise(seed + 16) * .043;
+      const block = piece(town, panel([[cut, 0], [w - cut, 0], [w, cut], [w, h - cut],
+        [w - cut, h], [cut, h - .012], [0, h - cut], [0, cut]], .39 + noise(seed + 27) * .075),
+      stones[(row * 3 + i + 1) % stones.length], x + left + .014, height * row * .34, z - .21);
+      block.rotation.y = (noise(seed + 35) - .5) * .105;
+      block.castShadow = block.receiveShadow = true;
+      left = end;
+    }
+  }
+}
+
+function addSceneryCutaway(shader: THREE.WebGLProgramParametersWithUniforms, focus: THREE.IUniform<THREE.Vector4>): void {
+  shader.uniforms.sceneryFocus = focus;
+  const varyings = 'varying vec3 paintPosition;\nvarying vec3 paintView;\n';
+  shader.vertexShader = varyings + shader.vertexShader.replace('#include <project_vertex>', `
+    #include <project_vertex>
+    paintPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
+    paintView = mvPosition.xyz;
+  `);
+  shader.fragmentShader = varyings + 'uniform vec4 sceneryFocus;\n' +
+    shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
+      #include <clipping_planes_fragment>
+      if (sceneryFocus.w > 0.5 && paintPosition.y > 0.15 && paintView.z > sceneryFocus.z + 0.12) {
+        // Compare scenery and hero at the same distance from the eye.
+        vec2 offset = paintView.xy * (sceneryFocus.z / paintView.z) - sceneryFocus.xy;
+        float silhouette = length(offset / vec2(1.10, 1.43));
+        float cutaway = (1.0 - smoothstep(0.71, 1.16, silhouette))
+          * smoothstep(0.12, 0.40, paintView.z - sceneryFocus.z)
+          * smoothstep(0.15, 0.39, paintPosition.y);
+        float grain = fract(0.5 + dot(floor(gl_FragCoord.xy), vec2(0.75487766, 0.56984029)));
+        if (cutaway > grain) discard;
+      }
+    `);
+}
+
+function paintedPalette(focus: THREE.IUniform<THREE.Vector4>): THREE.MeshLambertMaterial {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   material.onBeforeCompile = shader => {
-    shader.vertexShader = 'varying vec3 paintPosition;\n' + shader.vertexShader.replace('#include <project_vertex>',
-      '#include <project_vertex>\npaintPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    addSceneryCutaway(shader, focus);
     shader.fragmentShader = `
-      varying vec3 paintPosition;
       float paperHash(vec2 p) {
         vec3 n = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
         n += dot(n, n.yzx + 33.33);
@@ -85,11 +190,13 @@ function addPaintedSky(parent: THREE.Group): void {
   sky.renderOrder = -20;
 }
 
-export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly TownBuilding[]): THREE.ShaderMaterial {
+export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly TownBuilding[]) {
   addPaintedSky(parent);
   const town = new THREE.Group();
   parent.add(town);
   const time = { value: 0 };
+  const focus = { value: new THREE.Vector4(0, 0, 0, 0) };
+  const viewCenter = new THREE.Vector3();
   const rim = new THREE.DirectionalLight(0xffc79b, 0.58);
   rim.position.set(-14, 16, -22);
   parent.add(rim);
@@ -121,8 +228,8 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
   };
   cube(earth, 44, 1.8, 31, -10, -0.92, -1);
   cube(earth, 18, 1.8, 31, 29, -0.92, -1);
-  cube(grass[0], 44, 0.09, 31, -10, -0.058, -1);
-  cube(grass[1], 18, 0.09, 31, 29, -0.058, -1);
+  paintTownGround(town, -10, 44, grass[0].color, grass[1].color, grass[1].color, path);
+  paintTownGround(town, 29, 18, grass[1].color, grass[0].color, grass[1].color, path);
   cube(grass[1], 30, 1.6, 60, -45, -1.02, -1);
   cube(grass[1], 24, 1.6, 60, 50, -1.02, -1);
   for (const z of [-24, 22]) {
@@ -130,54 +237,36 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     cube(grass[0], 18, 1.2, 17, 29, -0.72, z);
   }
 
-  for (const [lane, [w, d, x, z]] of [[41, 4.3, -8, 5], [26, 5.3, -7, -5.5], [4.8, 12, -16, 0],
-    [5.3, 13, 4, -1], [17, 4.1, 29, 6.5], [8.8, 4.2, -23, 1.5]].entries()) {
-    if (lane === 4) {
-      const positions: number[] = [], colors: number[] = [], indices: number[] = [];
-      const color = new THREE.Color();
-      for (let i = 0; i <= 35; i++) {
-        const span = i / 35;
-        const sway = Math.sin(span * 20) * .11 + Math.sin(span * 37) * .08;
-        const width = d / 2 + Math.sin(span * 14 + .5) * .14;
-        for (const [j, across] of [-1.24, -1.0, -.73, 0, .73, 1.0, 1.24].entries()) {
-          const edge = 1 - THREE.MathUtils.smoothstep(Math.abs(across), .69, 1.24);
-          const fade = 1 - THREE.MathUtils.smoothstep(span, .91, 1);
-          const dust = .85 + noise(i * 11 + j) * .15;
-          color.copy(grass[1].color).lerp(path.color, edge * fade * dust);
-          colors.push(color.r, color.g, color.b);
-          positions.push(x + (span - .5) * w, .016 + edge * .005, z + across * width + sway);
-          if (i && j) {
-            const k = i * 7 + j;
-            indices.push(k - 8, k - 7, k - 1, k - 7, k, k - 1);
-          }
-        }
-      }
-      const surface = new THREE.BufferGeometry();
-      surface.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      surface.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-      surface.setIndex(indices);
-      surface.computeVertexNormals();
-      piece(town, surface, path).receiveShadow = true;
-    } else {
-      cube(path, w, 0.027, d, x, 0.006 + lane * 0.0013, z);
-    }
+  const placedStones: Array<{ x: number; z: number }> = [];
+  for (const [lane, [w, d, x, z]] of LANES.entries()) {
     for (let i = 0; i < Math.ceil(w / 1.25); i++) {
       for (let j = 0; j < Math.ceil(d / 1.08); j++) {
         const key = x * 13 + i * 3 + j * 11;
-        const px = x - w / 2 + 0.53 + i * 1.25 + (j % 2) * 0.2;
-        const pz = z - d / 2 + 0.42 + j * 1.08;
-        if (px > x + w / 2 - 0.25 || pz > z + d / 2 - 0.16 || noise(key + 25) < 0.24) continue;
+        const px = x - w / 2 + .53 + i * 1.25 + (j % 2) * .31 + (noise(key + 8) - .5) * .48;
+        const pz = z - d / 2 + .42 + j * 1.08 + (noise(key + 51) - .5) * .51;
+        const coverage = roadWear(px, pz);
+        const exposed = .66 + .22 * Math.sin(px * .68 - pz * .48);
+        if (coverage < .52 || noise(key + 25) > coverage * exposed || (px > 12 && px < 20)
+          || placedStones.some(stone => Math.hypot(px - stone.x, pz - stone.z) < .71)) continue;
+        placedStones.push({ x: px, z: pz });
         const mat = stones[Math.floor(noise(key) * stones.length)];
-        const width = 0.32 + noise(key + 1) * (lane === 4 ? .25 : .18);
-        const height = 0.28 + noise(key + 2) * (lane === 4 ? .23 : .17);
-        const cut = 0.048 + noise(key + 4) * 0.105;
+        const width = .25 + noise(key + 1) * .29;
+        const height = .22 + noise(key + 2) * .25;
+        const cut = .063 + noise(key + 4) * .16;
         const tile = piece(town, panel([[-width, -height + cut], [-width + cut, -height],
           [width - cut, -height + 0.018], [width, -height + cut * 0.81], [width - 0.019, height - cut],
-          [width - cut, height], [-width + cut * 1.24, height - 0.018], [-width + 0.02, height - cut]], 0.018),
-          mat, px + (noise(key + 8) - 0.5) * 0.14, 0.021 + lane * 0.002,
-          pz + (lane === 4 ? (noise(key + 51) - .5) * .25 : 0));
-        tile.rotation.set(-Math.PI / 2, 0, (noise(key + 3) - 0.5) * (lane === 4 ? .53 : .31));
+          [width - cut, height], [-width + cut * 1.24, height - 0.034], [-width + 0.02, height - cut]], .025),
+          mat, px, -.009 + lane * .0013, pz);
+        tile.rotation.set(-Math.PI / 2, 0, (noise(key + 3) - .5) * .75);
         tile.receiveShadow = true;
+        if (noise(key + 79) > .46) {
+          const side = noise(key + 87) > .5 ? 1 : -1;
+          const chip = piece(town, panel([[-.10, -.05], [-.01, -.092], [.11, -.032], [.064, .064], [-.056, .052]], .009),
+            stones[(lane + j) % stones.length], px + side * (width + .15), -.01, pz + (noise(key + 97) - .5) * .61);
+          chip.rotation.set(-Math.PI / 2, 0, noise(key + 42) * Math.PI);
+          chip.scale.setScalar(.50 + noise(key + 64) * .76);
+          chip.receiveShadow = true;
+        }
       }
     }
   }
@@ -208,6 +297,8 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
   }
 
   buildRefugeBridge(town, surface);
+  buildCoverWall(town, stones, 9, 7.6, 3.4, .8);
+  buildCoverWall(town, stones, 8.8, -4.55, 3.1, .65);
   for (const x of [-25, -18, -10, -3, 4, 11, 23, 29, 35]) {
     cube(timber, 0.18, 1.87, 0.18, x, 0.95, 8.4, true);
     cube(timber, 0.43, 0.09, 0.43, x, 1.88, 8.4, true);
@@ -320,15 +411,15 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
         vector(tx, ty - 0.22 * scale, tz), 0.16 * scale);
     }
   }
-  for (let i = 0; i < 145; i++) {
+  for (let i = 0; i < 260; i++) {
     const x = -31 + noise(i + 26) * 69;
     const z = -14 + noise(i + 89) * 27;
-    if ((x > 11 && x < 21) || Math.abs(z - 5) < 2.35 || Math.abs(z + 5.5) < 2.6 ||
-      (Math.abs(x + 16) < 2.8 || Math.abs(x - 4) < 2.8) ||
+    if ((x > 11 && x < 21) || roadWear(x, z) > .42 ||
       buildings.some(b => Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2)) continue;
     const scale = 0.62 + noise(i + 140) * 0.65;
-    const tuft = piece(town, panel([[-0.24, 0], [-0.21, 0.27], [-0.078, 0.13], [0.012, 0.33],
-      [0.057, 0.134], [0.2, 0.23], [0.17, 0]], 0.026), grass[i % 3], x, 0.007, z);
+    const tuft = piece(town, panel([[-.16, 0], [-.21, .13], [-.31, .23], [-.15, .19], [-.064, .082],
+      [-.066, .21], [-.09, .34], [.013, .26], [.048, .14], [.14, .25], [.24, .29], [.16, .17], [.12, 0]],
+    .014), grass[i % 3], x, -.003, z);
     tuft.rotation.y = noise(i + 24) * 6.3;
     tuft.scale.setScalar(scale);
   }
@@ -345,14 +436,20 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     }
   }
 
-  bakePieces(town, paintedPalette());
+  bakePieces(town, paintedPalette(focus));
+  for (const mesh of town.children) {
+    if (mesh instanceof THREE.Mesh && mesh.material instanceof THREE.MeshBasicMaterial) {
+      mesh.material.onBeforeCompile = shader => addSceneryCutaway(shader, focus);
+    }
+  }
 
   const river = new THREE.ShaderMaterial({
     uniforms: {
       time,
-      deep: { value: new THREE.Color(0x255d7e) },
-      shallows: { value: new THREE.Color(0x65aa9d) },
-      glint: { value: new THREE.Color(0xd1ede0) },
+      deep: { value: new THREE.Color(0x254f71) },
+      channel: { value: new THREE.Color(0x4386a0) },
+      shallows: { value: new THREE.Color(0x80b7a2) },
+      glint: { value: new THREE.Color(0xe0f0df) },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -365,6 +462,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
       varying vec2 vUv;
       uniform float time;
       uniform vec3 deep;
+      uniform vec3 channel;
       uniform vec3 shallows;
       uniform vec3 glint;
       float hash(vec2 p) {
@@ -376,25 +474,31 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
         vec2 cell = floor(p);
         vec2 q = fract(p);
         float seed = hash(cell);
-        float along = (q.y - .5) / (.19 + seed * .27);
-        float width = .022 + .038 * hash(cell.yx);
-        float bend = along * (seed - .5) * .18 + along * along * .086;
+        float along = (q.y - .5) / (.24 + seed * .26);
+        float width = .023 + .048 * hash(cell.yx);
+        float bend = along * (seed - .5) * .23 + along * along * .11;
         float cross = (q.x - (.26 + seed * .47) - bend) / width;
-        return (1.0 - smoothstep(.42, 1.0, cross * cross + along * along)) * smoothstep(.39, .90, seed);
+        return (1.0 - smoothstep(.32, 1.0, cross * cross + along * along)) * smoothstep(.53, .91, seed);
       }
       void main() {
         float edge = min(vUv.x, 1.0 - vUv.x);
-        float tide = vUv.y * 47.0 - time * .42;
-        float ripple = sin(tide * .83 + sin(vUv.x * 14.0 + tide * .33) * 1.6);
-        float bank = 1.0 - smoothstep(.015, .33, edge + sin(tide * 1.13) * .028);
-        float foamEdge = .019 + .007 * sin(vUv.y * 189.0) + .008 * sin(vUv.y * 348.0 + time * 1.5);
-        float foam = (1.0 - smoothstep(.003, .011, abs(edge - foamEdge))) *
-          smoothstep(-.5, .72, sin(tide * 4.2 + ripple));
-        vec2 flow = vec2(vUv.x * 6.9 + .19 * sin(tide * .68), vUv.y * 33.0 - time * .37 + vUv.x * 2.2);
-        float current = strokes(flow) + strokes(flow * vec2(1.6, 1.52) + vec2(.43, .28)) * .39;
-        float pool = smoothstep(-.22, .54, sin(vUv.x * 8.9 + tide * .41) * ripple);
-        vec3 color = mix(deep, shallows, bank * .82 + pool * .14);
-        color = mix(color, glint, min(1.0, current) * (.27 + bank * .34) + foam * .51);
+        float stream = vUv.y * 39.0 - time * .55;
+        float sway = sin(vUv.y * 33.0) * .045 + sin(stream * .75) * .026;
+        float mainFlow = sin((vUv.x + sway) * 16.0 + sin(stream * .31) * .96);
+        float wash = smoothstep(-.66, -.19, mainFlow) * (1.0 - smoothstep(.29, .74, mainFlow));
+        float bank = 1.0 - smoothstep(.014, .27, edge + sin(vUv.y * 76.0) * .019);
+        float shoal = bank * (.71 + .19 * smoothstep(-.47, .47, sin(vUv.y * 135.0 + edge * 24.0)));
+        float foamEdge = .025 + .010 * sin(vUv.y * 142.0) + .007 * sin(vUv.y * 320.0 + time * 1.4);
+        float foam = (1.0 - smoothstep(.002, .009, abs(edge - foamEdge))) *
+          smoothstep(-.17, .78, sin(stream * 4.6 + mainFlow));
+        vec2 flow = vec2((vUv.x + sway) * 7.6, vUv.y * 22.0 - time * .38 + vUv.x * 1.9);
+        float glints = strokes(flow) + strokes(flow * vec2(1.45, 1.8) + vec2(.63, .38)) * .42;
+        vec3 color = mix(deep, channel, .28 + wash * .58);
+        color = mix(color, shallows, shoal);
+        color = mix(color, glint, min(1.0, glints) * (.36 + bank * .27) + foam * .64);
+        float riverZ = (.5 - vUv.y) * 61.0 - 1.0;
+        float deckShade = 1.0 - smoothstep(1.3, 3.1, abs(riverZ - 4.4 + .35 * vUv.x));
+        color *= 1.0 - deckShade * .41;
         gl_FragColor = vec4(color, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -402,5 +506,18 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     `,
   });
   piece(parent, new THREE.PlaneGeometry(8, 61), river, 16, -0.4, -1).rotation.x = -Math.PI / 2;
-  return river;
+  return {
+    river,
+    setFocus(camera: THREE.Camera, player: THREE.Vector3 | null): void {
+      if (!player) {
+        focus.value.w = 0;
+        return;
+      }
+      camera.updateWorldMatrix(true, false);
+      viewCenter.copy(player);
+      viewCenter.y += .94;
+      viewCenter.applyMatrix4(camera.matrixWorldInverse);
+      focus.value.set(viewCenter.x, viewCenter.y, viewCenter.z, 1);
+    },
+  };
 }

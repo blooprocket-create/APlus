@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { getAttackPattern, isInsideAttack, isSafeZone, resolveFlask } from '../src/game/CombatRules';
-import { EnemyEntity, GameEngine, GameEngineCallbacks, HudTelemetry } from '../src/game/GameEngine';
+import { EnemyEntity, GameEngine, GameEngineCallbacks, GroundHazardEntity, HudTelemetry, ProjectileEntity } from '../src/game/GameEngine';
 import { PersistenceManager } from '../src/persistence/PersistenceManager';
 import { InMemoryStorageAdapter } from '../src/persistence/StorageAdapter';
 import { CharacterClassId, CharacterSaveData } from '../src/types/game';
@@ -36,11 +36,15 @@ vi.mock('../src/rendering/VfxSystem', () => ({ VfxSystem: class {
   clearAll() {} update() {} spawnDamageNumber() {} spawnDashAfterimage() {} spawnMirageAfterimage() {}
   spawnFallingMeteor() {} spawnShockwaveRing() {} spawnSlashArc() {}
   spawnSpearThrustBeam() {} spawnEclipseImpact() {} spawnSentinelDischarge() {} spawnFiendCollapse() {}
+  spawnGravityCast() {} spawnNightbladeRelease() {} spawnCastingFlash() {} spawnNovaBurst() {} spawnEarthshaker() {}
+  spawnDeathmarkCast() {}
 } }));
 
 interface EngineState {
   activeCharacter: CharacterSaveData;
   enemies: EnemyEntity[];
+  projectiles: ProjectileEntity[];
+  groundHazards: GroundHazardEntity[];
   companions: unknown[];
   playerPos: THREE.Vector3;
   playerYaw: number;
@@ -310,6 +314,52 @@ describe('gameplay integration', () => {
     expect(state.playerPos.distanceTo(startingPosition)).toBeCloseTo(.45);
   });
 
+  it('steps into Skyrend before releasing its beam at full reach', () => {
+    const enemy = startCombat();
+    enemy.hp = 1000;
+    enemy.attackCooldown = 10;
+    const start = state.playerPos.clone();
+    const beam = vi.spyOn(state.vfx, 'spawnSpearThrustBeam');
+    engine.input.triggerAction('skill1');
+    for (let i = 0; i < 4; i++) state.updateGameplay(.02);
+    expect(state.playerPos.distanceTo(start)).toBeGreaterThan(.2);
+    expect(state.playerPos.distanceTo(start)).toBeLessThan(.85);
+    expect(beam).not.toHaveBeenCalled();
+    expect(enemy.hp).toBe(1000);
+
+    state.updateGameplay(.04);
+    expect(state.playerPos.distanceTo(start)).toBeCloseTo(.85);
+    expect(beam).toHaveBeenCalledTimes(1);
+    expect(enemy.hp).toBeLessThan(1000);
+  });
+
+  it('starts Earthshaker at the grounded spear butt and damages the area once', () => {
+    const enemy = startCombat();
+    enemy.hp = 1000;
+    enemy.attackCooldown = 10;
+    const fullHp = state.activeCharacter.currentHp;
+    state.activeCharacter.currentHp -= 25;
+    const rupture = vi.spyOn(state.vfx, 'spawnEarthshaker');
+    const labels = vi.spyOn(state.vfx, 'spawnDamageNumber');
+    engine.input.triggerAction('skill2');
+    for (let i = 0; i < 8; i++) state.updateGameplay(.02);
+    expect(rupture).not.toHaveBeenCalled();
+    expect(enemy.hp).toBe(1000);
+
+    state.updateGameplay(.02);
+    expect(rupture).toHaveBeenCalledTimes(1);
+    const [center, butt] = rupture.mock.calls[0];
+    expect(Math.abs(butt.y)).toBeLessThan(.035);
+    expect(butt.distanceTo(center)).toBeGreaterThan(.3);
+    expect(state.activeCharacter.currentHp).toBe(fullHp);
+    expect(labels.mock.calls.some(call => call[4] === '+25 HP')).toBe(true);
+    const afterImpact = enemy.hp;
+    expect(afterImpact).toBeLessThan(1000);
+    for (let i = 0; i < 12; i++) state.updateGameplay(.02);
+    expect(rupture).toHaveBeenCalledTimes(1);
+    expect(enemy.hp).toBe(afterImpact);
+  });
+
   it('lets movement steer a spear recovery without snapping the attack pose to the new heading', () => {
     const enemy = startCombat();
     enemy.hp = 1000;
@@ -324,6 +374,132 @@ describe('gameplay integration', () => {
     move.mockRestore();
     expect(state.playerPos.x).toBeGreaterThan(position.x);
     expect(Math.abs(state.playerYaw - facing)).toBeCloseTo(.3);
+  });
+
+  it('launches Gravity Singularity once from Celestia’s release pose toward the well', async () => {
+    const mage = await persistence.createCharacter({
+      accountId: state.activeCharacter.accountId, classId: 'mage', name: 'Celestia',
+    });
+    engine.startGameplayWithCharacter(mage);
+    state.companions = [];
+    const enemy = startCombat();
+    enemy.hp = 1000;
+    enemy.attackCooldown = 10;
+    const target = enemy.bundle.root.position.clone();
+    const cast = vi.spyOn(state.vfx, 'spawnGravityCast');
+
+    engine.input.triggerAction('skill1');
+    for (let i = 0; i < 4; i++) state.updateGameplay(.02);
+    expect(cast).not.toHaveBeenCalled();
+    expect(enemy.hp).toBe(1000);
+
+    for (let i = 0; i < 8; i++) state.updateGameplay(.02);
+    expect(cast).toHaveBeenCalledTimes(1);
+    const [palm, well] = cast.mock.calls[0];
+    expect(palm.y).toBeGreaterThan(.5);
+    expect(well.distanceTo(target)).toBeLessThan(.25);
+    expect(enemy.hp).toBeLessThan(1000);
+  });
+
+  it('launches Akatsuki’s chakram before the retreat and completes travel at the landing', async () => {
+    const assassin = await persistence.createCharacter({
+      accountId: state.activeCharacter.accountId, classId: 'assassin', name: 'Akatsuki',
+    });
+    engine.startGameplayWithCharacter(assassin);
+    startCombat();
+    state.companions = [];
+    state.enemies = [];
+    for (let hit = 0; hit < 2; hit++) {
+      engine.input.triggerAction('basic');
+      for (let i = 0; i < 16; i++) state.updateGameplay(.02);
+    }
+    const start = state.playerPos.clone();
+    const forward = new THREE.Vector3(Math.sin(state.playerYaw), 0, Math.cos(state.playerYaw));
+    const mirage = vi.spyOn(state.vfx, 'spawnMirageAfterimage');
+    engine.input.triggerAction('basic');
+    for (let i = 0; i < 4; i++) state.updateGameplay(.02);
+    expect(mirage).toHaveBeenCalledTimes(1);
+    expect(state.playerPos.distanceTo(start)).toBeCloseTo(0);
+    const chakram = state.projectiles.find(projectile => projectile.radius === .85)!;
+    expect(chakram.position.clone().sub(start).dot(forward)).toBeGreaterThan(.65);
+
+    state.updateGameplay(.04);
+    expect(state.playerPos.distanceTo(start)).toBeGreaterThan(.05);
+    expect(state.playerPos.distanceTo(start)).toBeLessThan(1.35);
+    for (let i = 0; i < 8; i++) state.updateGameplay(.02);
+    expect(state.playerPos.clone().sub(start).dot(forward)).toBeCloseTo(-1.35);
+  });
+
+  it('sends Deathmark to three seals and pulses their effects with the damage ticks', async () => {
+    const assassin = await persistence.createCharacter({
+      accountId: state.activeCharacter.accountId, classId: 'assassin', name: 'Akatsuki',
+    });
+    engine.startGameplayWithCharacter(assassin);
+    const enemy = startCombat();
+    enemy.hp = 1000;
+    enemy.attackCooldown = 10;
+    enemy.speed = 0;
+    enemy.bundle.root.position.copy(state.playerPos).add(new THREE.Vector3(0, 0, -3.4));
+    state.companions = [];
+    const cast = vi.spyOn(state.vfx, 'spawnDeathmarkCast');
+
+    engine.input.triggerAction('skill2');
+    for (let i = 0; i < 6; i++) state.updateGameplay(.02);
+    expect(cast).not.toHaveBeenCalled();
+    expect(state.groundHazards).toHaveLength(0);
+    state.updateGameplay(.02);
+    expect(cast).toHaveBeenCalledTimes(1);
+    const [blade, targets] = cast.mock.calls[0];
+    expect(blade.y).toBeGreaterThan(.3);
+    expect(state.groundHazards.map(hazard => hazard.position)).toEqual(targets);
+
+    const pulse = vi.spyOn(state.groundHazards[1], 'pose');
+    state.updateGameplay(.02);
+    expect(enemy.hp).toBe(1000);
+    state.updateGameplay(.02);
+    expect(pulse).toHaveBeenLastCalledWith(expect.any(Number), 4, 0);
+    expect(enemy.hp).toBeLessThan(1000);
+    const afterFirstPulse = enemy.hp;
+    for (let i = 0; i < 22; i++) state.updateGameplay(.02);
+    expect(enemy.hp).toBe(afterFirstPulse);
+    state.updateGameplay(.02);
+    expect(pulse).toHaveBeenLastCalledWith(expect.any(Number), 4, 0);
+    expect(enemy.hp).toBeLessThan(afterFirstPulse);
+  });
+
+  it.each(['on contact', 'at maximum range'])('bursts Celestia’s Nova once %s', async (when) => {
+    const mage = await persistence.createCharacter({
+      accountId: state.activeCharacter.accountId, classId: 'mage', name: 'Celestia',
+    });
+    engine.startGameplayWithCharacter(mage);
+    const enemy = startCombat();
+    enemy.hp = 1000;
+    enemy.attackCooldown = 10;
+    state.companions = [];
+    state.enemies = [];
+    const burst = vi.spyOn(state.vfx, 'spawnNovaBurst');
+
+    for (let cast = 0; cast < 2; cast++) {
+      engine.input.triggerAction('basic');
+      for (let i = 0; i < 23; i++) state.updateGameplay(.02);
+    }
+    engine.input.triggerAction('basic');
+    for (let i = 0; i < 5; i++) state.updateGameplay(.02);
+    expect(state.projectiles.some(projectile => projectile.shape === 'comet')).toBe(false);
+    state.updateGameplay(.02);
+    const nova = state.projectiles.find(projectile => projectile.shape === 'comet')!;
+    expect(nova).toBeDefined();
+    expect(burst).not.toHaveBeenCalled();
+
+    if (when === 'on contact') {
+      enemy.bundle.root.position.copy(nova.position).addScaledVector(nova.velocity, .02);
+      state.enemies = [enemy];
+    }
+    for (let i = 0; i < 48; i++) state.updateGameplay(.02);
+    expect(burst).toHaveBeenCalledTimes(1);
+    expect(burst.mock.calls[0][1]).toBe(3.4);
+    expect(state.projectiles).not.toContain(nova);
+    if (when === 'on contact') expect(enemy.hp).toBeLessThan(1000);
   });
 
   it('locks a telegraph and lets the player walk out before impact', () => {

@@ -73,6 +73,7 @@ export class CharacterRig {
   private readonly armor: THREE.MeshToonMaterial;
   private readonly auraRing: THREE.Mesh;
   private readonly spearTip: THREE.Object3D | null;
+  private readonly spearButt: THREE.Object3D | null;
   private readonly spellEmitters: readonly [THREE.Object3D, THREE.Object3D] | null;
   private readonly bladeEmitters: readonly [THREE.Object3D, THREE.Object3D] | null;
   private readonly face: HeroFace;
@@ -235,6 +236,7 @@ export class CharacterRig {
     const offhand = makePart('Weapon.L', arms[0].lower.node, 0, -.29, .018);
     const weaponBody = weapon.art;
     this.spearTip = forge ? joint(weaponBody, 0, 0, 1.89) : null;
+    this.spearButt = forge ? joint(weaponBody, 0, 0, -.61) : null;
     this.spellEmitters = tailor ? [joint(offhand.art, 0, -.106, .036), joint(weaponBody, 0, 0, 1.15)] : null;
     this.bladeEmitters = shade ? [joint(offhand.art, 0, 0, .18), joint(weaponBody, 0, 0, .18)] : null;
     if (forge) {
@@ -292,6 +294,10 @@ export class CharacterRig {
 
   public getSpearTip(): THREE.Vector3 | undefined {
     return this.spearTip?.getWorldPosition(new THREE.Vector3());
+  }
+
+  public getSpearButt(): THREE.Vector3 | undefined {
+    return this.spearButt?.getWorldPosition(new THREE.Vector3());
   }
 
   public getSpellEmitter(fromStaff: boolean): THREE.Vector3 | undefined {

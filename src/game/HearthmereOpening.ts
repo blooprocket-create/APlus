@@ -107,6 +107,7 @@ export class HearthmereOpening {
   private readonly evacuees: HearthmereResident[] = [];
   private readonly townsfolk: HearthmereResident[] = [];
   private readonly river: THREE.ShaderMaterial;
+  readonly setSceneryFocus: ReturnType<typeof buildHearthmereScenery>['setFocus'];
   private readonly wheels: THREE.Group[] = [];
   private readonly giant = new HearthmereGiant();
   private readonly impact = new HearthmereImpact();
@@ -135,7 +136,9 @@ export class HearthmereOpening {
       parent.add(mesh);
       return mesh;
     };
-    this.river = buildHearthmereScenery(this.group, BUILDINGS);
+    const scenery = buildHearthmereScenery(this.group, BUILDINGS);
+    this.river = scenery.river;
+    this.setSceneryFocus = scenery.setFocus;
     box(this.group, ember, 1.1, 0.45, 0.65, -8.5, 0.4, 7.5);
     piece(this.group, loft([[0, 0.84, 0.84], [0.16, 0.89, 0.89], [0.72, 0.79, 0.79], [0.81, 0.84, 0.84]], 10, true),
       stone, -13.3, 0, -6.1).castShadow = true;
@@ -162,8 +165,6 @@ export class HearthmereOpening {
     piece(shipment, new THREE.OctahedronGeometry(0.125), violet, 0, 1.47, 0).scale.set(1, 0.43, 1);
     this.group.add(shipment);
     bakePieces(shipment);
-    box(this.group, stone, 3.4, 0.8, 0.4, 9, 0.4, 7.6);
-    box(this.group, stone, 3.1, 0.65, 0.4, 8.8, 0.32, -4.55);
     box(this.group, wood, 0.93, 0.95, 0.75, -22.55, 0.47, -0.85);
     if (role === 'mage') {
       box(this.group, steel, 0.24, 1.35, 0.25, -22.55, 0.67, -0.85);
@@ -211,7 +212,18 @@ export class HearthmereOpening {
       this.group.add(person.root);
     }
     for (let i = 0; i < 5; i++) {
-      box(this.damaged, stone, 1.1, 0.5 + i * 0.12, 1.1, 10.5 + i * 0.37, 0.23, -9.3 + i * 0.66).rotation.y = i * 0.7;
+      const x = 10.5 + i * .37;
+      const z = -9.3 + i * .66;
+      const rubble = piece(this.damaged, new THREE.DodecahedronGeometry(.71, 0),
+        stone, x, .13 + i * .057, z);
+      rubble.scale.set(1.13, .57 + i * .072, 1.04);
+      rubble.rotation.set(.4 + i * .63, i * .76, -.17 + i * .24);
+      rubble.castShadow = rubble.receiveShadow = true;
+      const fragment = piece(this.damaged, new THREE.IcosahedronGeometry(.23 + (i % 3) * .061, 0),
+        stone, x - .57 - i * .077, .075, z + .21);
+      fragment.scale.set(1.15, .62, .94);
+      fragment.rotation.y = i * .91;
+      fragment.receiveShadow = true;
       box(this.gateWreckage, wood, 0.42, 0.3, 2.8, 3.4 + i * 0.24, 0.45 - i * 0.08, 5).rotation.y = i * 0.4;
     }
     for (const z of [-2, 1, 4]) {
