@@ -12,18 +12,20 @@ const JOINTS = [
   'Foot.L', 'Foot.R',
   'Coat.Hem', 'Weapon.L',
 ] as const;
-type ClipName = 'idle' | 'run' | 'evade' | 'hit' | 'thrust' | 'reverse' | 'sweep' | 'skill1' | 'skill2' | 'charge' | 'eclipse';
+type ClipName = 'idle' | 'lobby' | 'run' | 'evade' | 'hit' | 'thrust' | 'reverse' | 'sweep' | 'skill1' | 'skill2' | 'charge' | 'eclipse';
 type Action = ClipName | 'locomotion';
 interface AttackRetreat { distance: number; landAt: number }
 interface PackedClip {
   seconds: number; samples: string; release?: number; advance?: number; plants?: PlantWindows; retreat?: AttackRetreat;
+  heightScale?: number;
 }
-interface Clip { seconds: number; samples: Int16Array; frames: number; frameSize: number }
+interface Clip { seconds: number; samples: Int16Array; frames: number; frameSize: number; heightScale: number }
 
 const PACKED_CLIPS: Record<CharacterClassId, Record<ClipName, PackedClip>> = animation.roles;
 const CLIPS: Record<CharacterClassId, Partial<Record<ClipName, Clip>>> = { warrior: {}, mage: {}, assassin: {} };
 const QUANTIZATION = 1 / 32767;
 const RUN_CADENCE = { warrior: 2.46, mage: 2.62, assassin: 2.92 };
+const IDLE_PLAYBACK = { warrior: .52, mage: .46, assassin: .55 };
 const EVADE_LENGTH = { warrior: 0.31, mage: 0.27, assassin: 0.31 };
 const BASE_HIP_HEIGHT = 0.87;
 
@@ -81,7 +83,8 @@ function getClip(role: CharacterClassId, name: ClipName): Clip {
     samples[index] = binary.charCodeAt(index * 2) | binary.charCodeAt(index * 2 + 1) << 8;
   }
   const frameSize = 3 + 4 * (JOINTS.length + (role === 'mage' ? CASTING_JOINTS.length : 0));
-  const clip = { seconds: packed.seconds, samples, frames: samples.length / frameSize, frameSize };
+  const clip = { seconds: packed.seconds, samples, frames: samples.length / frameSize, frameSize,
+    heightScale: packed.heightScale ?? 1 };
   CLIPS[role][name] = clip;
   return clip;
 }
@@ -106,11 +109,11 @@ function sampleRotation(sample: Sample, joint: number, target: THREE.Quaternion,
   if (sample.mix > 0) target.slerp(readRotation(sample.data, sample.after + offset, next), sample.mix);
 }
 
-function sampleOffset(sample: Sample, target: THREE.Vector3): void {
+function sampleOffset(sample: Sample, target: THREE.Vector3, heightScale: number): void {
   const { data, before, after, mix } = sample;
   target.set(
     THREE.MathUtils.lerp(data[before], data[after], mix) * QUANTIZATION,
-    THREE.MathUtils.lerp(data[before + 1], data[after + 1], mix) * QUANTIZATION + BASE_HIP_HEIGHT,
+    THREE.MathUtils.lerp(data[before + 1], data[after + 1], mix) * QUANTIZATION * heightScale + BASE_HIP_HEIGHT,
     THREE.MathUtils.lerp(data[before + 2], data[after + 2], mix) * QUANTIZATION,
   );
 }
@@ -155,7 +158,7 @@ export function animateHero(rig: HeroMotion, dt: number, state: CharacterAnimati
   const combat = state.charging ? 'charge' : strikeClip(state);
   if (combat && !state.isDashing) rig.evadeElapsed = Number.POSITIVE_INFINITY;
   const action: Action = (state.isDashing || rig.evadeElapsed < EVADE_LENGTH[role]) ? 'evade'
-    : combat ?? (state.hitFlashTimer > 0 ? 'hit' : 'locomotion');
+    : combat ?? (state.hitFlashTimer > 0 ? 'hit' : state.lobbyPhase === undefined ? 'locomotion' : 'lobby');
 
   const actionChanged = action !== rig.action;
   if (actionChanged) {
@@ -168,7 +171,8 @@ export function animateHero(rig: HeroMotion, dt: number, state: CharacterAnimati
   rig.transition = Math.min(1, rig.transition + dt / blendDuration);
   const transition = THREE.MathUtils.smoothstep(rig.transition, 0, 1);
   const clip = getClip(role, action === 'locomotion' ? 'idle' : action);
-  const time = action === 'locomotion' ? (rig.clock / clip.seconds) % 1
+  const time = action === 'lobby' || action === 'locomotion'
+    ? (rig.clock * IDLE_PLAYBACK[role] / clip.seconds + (state.lobbyPhase ?? 0)) % 1
     : action === 'evade' ? rig.evadeElapsed / EVADE_LENGTH[role]
     : action === 'hit' ? 1 - state.hitFlashTimer / 0.22
     : state.attackSwingProgress;
@@ -184,9 +188,9 @@ export function animateHero(rig: HeroMotion, dt: number, state: CharacterAnimati
     if (transition < 1) bone.quaternion.copy(rig.fromRotations[joint]).slerp(rig.primary, transition);
     else bone.quaternion.copy(rig.primary);
   });
-  sampleOffset(sample, rig.hipsOffset);
+  sampleOffset(sample, rig.hipsOffset, clip.heightScale);
   if (run) {
-    sampleOffset(run, rig.blendOffset);
+    sampleOffset(run, rig.blendOffset, 1);
     rig.hipsOffset.lerp(rig.blendOffset, rig.locomotion);
   }
   if (transition < 1) bones[0].position.copy(rig.fromPosition).lerp(rig.hipsOffset, transition);

@@ -98,7 +98,7 @@ describe('Blender-authored hero motion', () => {
 
   it.each(ROLES)('loads complete and distinct action samples for %s', role => {
     const library = clips.roles[role];
-    expect(Object.keys(library)).toHaveLength(11);
+    expect(Object.keys(library)).toHaveLength(12);
     for (const clip of Object.values(library)) {
       expect(clip.seconds).toBeGreaterThan(0);
       const jointCount = clips.joints.length + (role === 'mage' ? clips.castingJoints.length : 0);
@@ -117,6 +117,26 @@ describe('Blender-authored hero motion', () => {
     const evade = rig.root.getObjectByName('Hips')!.quaternion.clone();
     rig.updateAnimation(0.1, { ...BASE, attackComboStep: 5, charging: true, attackSwingProgress: 0.85 });
     expect(rig.root.getObjectByName('Hips')!.quaternion.angleTo(evade)).toBeGreaterThan(0.1);
+  });
+
+  it.each(ROLES)('keeps %s’s lobby feet planted while the upper body settles', role => {
+    const rig = new CharacterRig(role);
+    const bones = ['Foot.L', 'Foot.R'].map(name => rig.root.getObjectByName(name)!);
+    const head = rig.root.getObjectByName('Head')!;
+    const state = { ...BASE, lobbyPhase: 0 };
+    rig.updateAnimation(.1, state);
+    const feet = bones.map(bone => bone.getWorldPosition(new Vector3()));
+    const gaze = head.quaternion.clone();
+    let maxGlance = 0;
+    for (let frame = 0; frame < 55; frame++) {
+      rig.updateAnimation(.1, state);
+      maxGlance = Math.max(maxGlance, head.quaternion.angleTo(gaze));
+      bones.forEach((bone, i) => {
+        expect(bone.getWorldPosition(new Vector3()).distanceTo(feet[i])).toBeLessThan(.02);
+      });
+    }
+    expect(maxGlance).toBeGreaterThan(.035);
+    expect(maxGlance).toBeLessThan(.36);
   });
 
   it('keeps Brynhildr’s spear pointed ahead through the run cycle', () => {
@@ -201,6 +221,15 @@ describe('Blender-authored hero motion', () => {
     expect(Math.hypot(steering.x - anchor.x, steering.z - anchor.z)).toBeLessThan(.018);
     expect(Math.hypot(stopped.x - anchor.x, stopped.z - anchor.z)).toBeLessThan(.018);
     expect(sample(.65, .21, true).distanceTo(anchor)).toBeGreaterThan(.22);
+  });
+
+  it('plays Brynhildr’s full leap and brings the spear tip to the impact marker', () => {
+    const rig = new CharacterRig('warrior');
+    const attack = { ...BASE, attackComboStep: 5 };
+    rig.updateAnimation(.08, { ...attack, attackSwingProgress: .36 });
+    expect(rig.root.getObjectByName('Hips')!.position.y).toBeGreaterThan(3.2);
+    rig.updateAnimation(.02, { ...attack, attackSwingProgress: clips.roles.warrior.eclipse.release });
+    expect(Math.abs(rig.getSpearTip()!.y)).toBeLessThan(.06);
   });
 
   it.each(['warrior', 'assassin'] as const)('plays the %s Eclipse turn through its authored rotation', role => {

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { bakePieces, beam, loft, panel, piece, smoothLoft } from './ArtMesh';
 import { buildRefugeBridge, buildRefugeFire, buildRefugeGrove, buildRefugeLodge } from './HearthmereRefuge';
+import { addPaintedMeadow, type MeadowPlant } from './PaintedMeadow';
+import { GroundMeshCollider } from '../game/GroundMeshCollider';
+import { RIVER_CENTER_X, RIVER_WAKES, RIVER_WIDTH, SceneryMotion } from './SceneryMotion';
 
 export interface TownBuilding { x: number; z: number; w: number; d: number; refuge?: true }
 const vector = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -70,7 +73,7 @@ function paintTownGround(
 }
 
 function buildCoverWall(
-  town: THREE.Group, stones: THREE.Material[], x: number, z: number, length: number, height: number,
+  town: THREE.Group, stones: THREE.Material[], x: number, z: number, length: number, height: number, blockers: THREE.Mesh[],
 ): void {
   for (let row = 0; row < 3; row++) {
     const count = row === 1 ? 5 : 6;
@@ -88,6 +91,7 @@ function buildCoverWall(
       stones[(row * 3 + i + 1) % stones.length], x + left + .014, height * row * .34, z - .21);
       block.rotation.y = (noise(seed + 35) - .5) * .105;
       block.castShadow = block.receiveShadow = true;
+      blockers.push(block);
       left = end;
     }
   }
@@ -194,7 +198,9 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
   addPaintedSky(parent);
   const town = new THREE.Group();
   parent.add(town);
+  const blockers: THREE.Mesh[] = [];
   const time = { value: 0 };
+  const motion = new SceneryMotion();
   const focus = { value: new THREE.Vector4(0, 0, 0, 0) };
   const viewCenter = new THREE.Vector3();
   const rim = new THREE.DirectionalLight(0xffc79b, 0.58);
@@ -271,6 +277,8 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     }
   }
 
+  const meadow: MeadowPlant[] = [];
+  const blooms: MeadowPlant[] = [];
   for (const [bank, x] of [12, 20].entries()) {
     const inward = bank === 0 ? 1 : -1;
     for (let i = 0; i < 44; i++) {
@@ -284,23 +292,20 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
       rock.rotation.set(noise(key + 53) * .73, noise(key + 44) * Math.PI, noise(key + 87) * .58);
       rock.receiveShadow = true;
       if (i % 4 === 1) {
-        for (let blade = 0; blade < 5; blade++) {
-          const height = .40 + noise(key + blade * 17) * .72;
-          const reed = piece(town, panel([[-.032, 0], [-.048, height * .57], [blade * .040 - .09, height],
-            [.027, height * .55], [.047, 0]], .018), foliage[blade % 3],
-          x - inward * (.15 + blade * .076), -.029, z + (blade - 2) * .10);
-          reed.rotation.y = noise(key + blade * 8) * Math.PI;
-          reed.receiveShadow = true;
-        }
+        meadow.push({ x: x - inward * .33, z, scale: 1.48 + noise(key + 17) * .47,
+          angle: noise(key + 8) * Math.PI * 2, tint: 0xc3dcab });
+        meadow.push({ x: x - inward * .62, z: z + .38, scale: .82 + noise(key + 29) * .48,
+          angle: noise(key + 28) * Math.PI * 2, tint: 0xd6e6b9 });
       }
     }
   }
 
-  buildRefugeBridge(town, surface);
-  buildCoverWall(town, stones, 9, 7.6, 3.4, .8);
-  buildCoverWall(town, stones, 8.8, -4.55, 3.1, .65);
+  const bridge = buildRefugeBridge(town, surface);
+  blockers.push(...bridge.rails);
+  buildCoverWall(town, stones, 9, 7.6, 3.4, .8, blockers);
+  buildCoverWall(town, stones, 8.8, -4.55, 3.1, .65, blockers);
   for (const x of [-25, -18, -10, -3, 4, 11, 23, 29, 35]) {
-    cube(timber, 0.18, 1.87, 0.18, x, 0.95, 8.4, true);
+    blockers.push(cube(timber, 0.18, 1.87, 0.18, x, 0.95, 8.4, true));
     cube(timber, 0.43, 0.09, 0.43, x, 1.88, 8.4, true);
     cube(warm, 0.25, 0.35, 0.25, x, 2.06, 8.4);
     cube(iron, 0.37, 0.085, 0.37, x, 2.28, 8.4, true);
@@ -308,7 +313,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
 
   for (const [index, { x, z, w, d, refuge }] of buildings.entries()) {
     if (refuge) {
-      buildRefugeLodge(town, x, z, w, d, surface);
+      blockers.push(...buildRefugeLodge(town, x, z, w, d, surface));
       continue;
     }
     const front = z > 0 ? -1 : 1;
@@ -316,8 +321,8 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     const pitch = 1.18;
     const facade = z + front * (d / 2 + 0.013);
     const facadePlaster = plaster[index % plaster.length];
-    cube(masonry, w + 0.14, 0.51, d + 0.14, x, 0.25, z, true);
-    cube(facadePlaster, w, height - 0.45, d, x, (height + 0.45) / 2, z, true);
+    blockers.push(cube(masonry, w + 0.14, 0.51, d + 0.14, x, 0.25, z, true));
+    blockers.push(cube(facadePlaster, w, height - 0.45, d, x, (height + 0.45) / 2, z, true));
     for (const side of [-1, 1]) {
       const gable = piece(town, panel([[-w / 2, 0], [w / 2, 0], [0, pitch]], 0.13), facadePlaster,
         x, height, z + side * d / 2 - 0.065);
@@ -348,7 +353,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     cube(timber, 0.94, 1.7, 0.16, x, 0.94, facade, true);
     cube(plank, 0.71, 1.48, 0.083, x, 0.88, facade + front * 0.086);
     cube(iron, 0.075, 0.08, 0.065, x + 0.23, 0.85, facade + front * 0.143);
-    cube(masonry, 1.04, 0.16, 0.48, x, 0.08, facade + front * 0.29);
+    blockers.push(cube(masonry, 1.04, 0.16, 0.48, x, 0.08, facade + front * 0.29));
     if (index === 2 || index === 3) {
       cube(masonry, 0.78, 3.8, 0.78, x - w / 2 + 0.28, 1.91, z + 0.78, true);
       cube(iron, 0.91, 0.22, 0.91, x - w / 2 + 0.28, 3.82, z + 0.78, true);
@@ -359,10 +364,10 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     const z = index === 0 ? -8.8 : -7.4;
     const canvas = index === 1 ? surface(0x976f56) : index === 0 ? surface(0x4d7473) : straw;
     for (const px of [x - 1.07, x + 1.07]) {
-      cube(timber, 0.14, 2.05, 0.14, px, 1.02, z + 0.64, true);
-      cube(timber, 0.14, 1.83, 0.14, px, 0.92, z - 0.65, true);
+      blockers.push(cube(timber, 0.14, 2.05, 0.14, px, 1.02, z + 0.64, true));
+      blockers.push(cube(timber, 0.14, 1.83, 0.14, px, 0.92, z - 0.65, true));
     }
-    cube(plank, 2.13, 0.14, 1.09, x, 0.8, z, true);
+    blockers.push(cube(plank, 2.13, 0.14, 1.09, x, 0.8, z, true));
     for (let j = 0; j < 7; j++) {
       const stripe = cube(j % 3 === 0 ? straw : canvas, 0.34, 0.04, 1.62, x - 0.99 + j * 0.33, 1.96, z, true);
       stripe.rotation.x = 0.15;
@@ -386,7 +391,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
   buildRefugeFire(town, parent, time, surface);
   for (const x of [27.2, 28.8]) cube(timber, 0.23, 0.21, 1.45, x, 0.18, 8.96, true);
 
-  buildRefugeGrove(town, surface);
+  blockers.push(...buildRefugeGrove(town, surface));
   for (const [i, [x, z]] of [[-28, -8], [-26, 11], [-22, -12], [-17, 12], [-9, 12], [-4, -11], [6, 11],
     [8.9, 12.8]].entries()) {
     const scale = i >= 6 ? .86 + noise(i + 3) * .19 : .88 + noise(i + 3) * .7;
@@ -394,6 +399,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
       [2.8, 0.064, 0.064, 0.23]], 8), timber, x, 0, z);
     trunk.scale.setScalar(scale);
     trunk.castShadow = true;
+    blockers.push(trunk);
     for (let k = 0; k < 8; k++) {
       const angle = k * 2.39996 + i;
       const distance = (0.54 + (k % 3) * 0.2) * scale;
@@ -411,17 +417,31 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
         vector(tx, ty - 0.22 * scale, tz), 0.16 * scale);
     }
   }
-  for (let i = 0; i < 260; i++) {
+  const canPlant = (x: number, z: number) =>
+    !(x > 11 && x < 21) && roadWear(x, z) < .23 &&
+    !buildings.some(b => Math.abs(x - b.x) < b.w / 2 + .53 && Math.abs(z - b.z) < b.d / 2 + .58);
+  for (let i = 0; i < 1520; i++) {
     const x = -31 + noise(i + 26) * 69;
     const z = -14 + noise(i + 89) * 27;
-    if ((x > 11 && x < 21) || roadWear(x, z) > .42 ||
-      buildings.some(b => Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2)) continue;
-    const scale = 0.62 + noise(i + 140) * 0.65;
-    const tuft = piece(town, panel([[-.16, 0], [-.21, .13], [-.31, .23], [-.15, .19], [-.064, .082],
-      [-.066, .21], [-.09, .34], [.013, .26], [.048, .14], [.14, .25], [.24, .29], [.16, .17], [.12, 0]],
-    .014), grass[i % 3], x, -.003, z);
-    tuft.rotation.y = noise(i + 24) * 6.3;
-    tuft.scale.setScalar(scale);
+    const bed = Math.sin(x * .71 + z * .36) + Math.sin(z * .92 - x * .22) * .68;
+    if (bed < -.36 || !canPlant(x, z)) continue;
+    const scale = .55 + noise(i + 141) * .63 + Math.max(0, bed) * .11;
+    const tint = bed > .71 ? 0xf3f6d5 : 0xdbeccb;
+    meadow.push({ x, z, scale, angle: noise(i + 24) * Math.PI * 2, tint });
+  }
+  for (const [bed, [x, z]] of [[-27.3, -2.8], [-25.2, 1.4], [-18.4, 2.2], [-12.1, -7.4],
+    [-8.2, 7.9], [3.2, 8.2], [9.5, 9.2], [10.9, .3], [21.6, -.5], [24.1, 9.5], [30.2, 2.1],
+    [33.7, 12.7]].entries()) {
+    for (let i = 0; i < 42; i++) {
+      const seed = bed * 53 + i;
+      const px = x + (noise(seed + 5) - .5) * 2.9;
+      const pz = z + (noise(seed + 74) - .5) * 1.9;
+      if (!canPlant(px, pz)) continue;
+      const scale = .73 + noise(seed + 43) * .50;
+      const angle = noise(seed + 83) * Math.PI * 2;
+      if (i % 3 === 0) blooms.push({ x: px, z: pz, scale, angle });
+      else meadow.push({ x: px, z: pz, scale, angle, tint: 0xe2eac2 });
+    }
   }
   for (const [row, z] of [-46, -34, -24, 24, 36].entries()) {
     const haze = surface(row === 0 ? 0x8cabb3 : row === 1 || row === 4 ? 0x789d99 : 0x638e74);
@@ -436,7 +456,11 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     }
   }
 
+  // Capture the physical surfaces before the renderer merges meshes by material.
+  const solids = new GroundMeshCollider(blockers);
+  const crossing = new GroundMeshCollider(bridge.deck);
   bakePieces(town, paintedPalette(focus));
+  addPaintedMeadow(town, time, motion, meadow, blooms);
   for (const mesh of town.children) {
     if (mesh instanceof THREE.Mesh && mesh.material instanceof THREE.MeshBasicMaterial) {
       mesh.material.onBeforeCompile = shader => addSceneryCutaway(shader, focus);
@@ -446,6 +470,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
   const river = new THREE.ShaderMaterial({
     uniforms: {
       time,
+      wakes: motion.wakes,
       deep: { value: new THREE.Color(0x254f71) },
       channel: { value: new THREE.Color(0x4386a0) },
       shallows: { value: new THREE.Color(0x80b7a2) },
@@ -461,6 +486,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     fragmentShader: `
       varying vec2 vUv;
       uniform float time;
+      uniform vec4 wakes[${RIVER_WAKES}];
       uniform vec3 deep;
       uniform vec3 channel;
       uniform vec3 shallows;
@@ -474,9 +500,9 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
         vec2 cell = floor(p);
         vec2 q = fract(p);
         float seed = hash(cell);
-        float along = (q.y - .5) / (.24 + seed * .26);
+        float along = (q.y - .5) / (.19 + seed * .29);
         float width = .023 + .048 * hash(cell.yx);
-        float bend = along * (seed - .5) * .23 + along * along * .11;
+        float bend = along * (seed - .5) * .31 + along * along * .19;
         float cross = (q.x - (.26 + seed * .47) - bend) / width;
         return (1.0 - smoothstep(.32, 1.0, cross * cross + along * along)) * smoothstep(.53, .91, seed);
       }
@@ -488,6 +514,8 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
         float wash = smoothstep(-.66, -.19, mainFlow) * (1.0 - smoothstep(.29, .74, mainFlow));
         float bank = 1.0 - smoothstep(.014, .27, edge + sin(vUv.y * 76.0) * .019);
         float shoal = bank * (.71 + .19 * smoothstep(-.47, .47, sin(vUv.y * 135.0 + edge * 24.0)));
+        float backwash = sin(stream * 2.5 + edge * 70.0 + sin(stream * 1.5) * .9);
+        float ripple = smoothstep(.67, .96, backwash) * bank;
         float foamEdge = .025 + .010 * sin(vUv.y * 142.0) + .007 * sin(vUv.y * 320.0 + time * 1.4);
         float foam = (1.0 - smoothstep(.002, .009, abs(edge - foamEdge))) *
           smoothstep(-.17, .78, sin(stream * 4.6 + mainFlow));
@@ -495,8 +523,26 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
         float glints = strokes(flow) + strokes(flow * vec2(1.45, 1.8) + vec2(.63, .38)) * .42;
         vec3 color = mix(deep, channel, .28 + wash * .58);
         color = mix(color, shallows, shoal);
-        color = mix(color, glint, min(1.0, glints) * (.36 + bank * .27) + foam * .64);
+        float skyRibbon = smoothstep(.72, .94, mainFlow) *
+          smoothstep(-.85, .82, sin(stream * 1.33 + vUv.x * 5.0));
+        color = mix(color, glint, min(.84,
+          min(1.0, glints) * (.36 + bank * .27) + foam * .64 + ripple * .12 + skyRibbon * .17));
         float riverZ = (.5 - vUv.y) * 61.0 - 1.0;
+        vec2 world = vec2(${RIVER_CENTER_X.toFixed(1)} + (vUv.x - .5) * ${RIVER_WIDTH.toFixed(1)}, riverZ);
+        float footprint = 0.0;
+        for (int i = 0; i < ${RIVER_WAKES}; i++) {
+          vec4 wake = wakes[i];
+          vec2 delta = world - wake.xy;
+          delta.y += wake.z * .34;
+          if (wake.z >= 1.0 || max(abs(delta.x), abs(delta.y)) > 1.6) continue;
+          float radius = length(delta * vec2(1.0, .84));
+          float ring = radius - (.14 + wake.z * 1.20);
+          float arc = 1.0 - smoothstep(.023, .070, abs(ring));
+          float echo = 1.0 - smoothstep(.008, .038, abs(ring + .15));
+          float tail = 1.0 - smoothstep(.26, 1.0, wake.z);
+          footprint = max(footprint, (arc + echo * .37) * tail * wake.w);
+        }
+        color = mix(color, glint, min(1.0, footprint * .97));
         float deckShade = 1.0 - smoothstep(1.3, 3.1, abs(riverZ - 4.4 + .35 * vUv.x));
         color *= 1.0 - deckShade * .41;
         gl_FragColor = vec4(color, 1.0);
@@ -505,9 +551,14 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
       }
     `,
   });
-  piece(parent, new THREE.PlaneGeometry(8, 61), river, 16, -0.4, -1).rotation.x = -Math.PI / 2;
+  const water = piece(parent, new THREE.PlaneGeometry(RIVER_WIDTH, 61), river, RIVER_CENTER_X, -0.4, -1);
+  water.rotation.x = -Math.PI / 2;
   return {
     river,
+    solids,
+    crossing,
+    water: new GroundMeshCollider([water]),
+    motion,
     setFocus(camera: THREE.Camera, player: THREE.Vector3 | null): void {
       if (!player) {
         focus.value.w = 0;

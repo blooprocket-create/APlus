@@ -37,6 +37,54 @@ function cord(parent: THREE.Object3D, points: THREE.Vector3[], radius: number, p
   piece(parent, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 14, radius, 5), paint);
 }
 
+function breastplate(outline: Point[]): THREE.BufferGeometry {
+  const positions: number[] = [], colors: number[] = [], indices: number[] = [];
+  const centerY = .306;
+  const warm = new THREE.Color(ivory);
+  const shade = new THREE.Color(0xc6b3a4);
+  const tint = new THREE.Color();
+  const rings = [
+    [1, .145, darkSteel], [1.014, .168, darkSteel], [.995, .177, bevelGold],
+    [.967, .183, brightGold], [.907, .201, bevelGold], [.884, .206, 0xe2cfad],
+    [.868, .209, ivory], [.72, .222, ivory], [.52, .230, ivory], [.30, .235, ivory], [.12, .239, ivory],
+  ];
+  for (const [row, [scale, rise, color]] of rings.entries()) {
+    outline.forEach(([px, py], col) => {
+      const x = px * scale;
+      const y = centerY + (py - centerY) * scale;
+      const z = rise - x * x * 1.46;
+      positions.push(x, y, z);
+      tint.setHex(color);
+      if (color === ivory) {
+        const wash = (1 - THREE.MathUtils.smoothstep(y, .15, .43)) * .28;
+        tint.copy(warm).lerp(shade, wash);
+      }
+      colors.push(tint.r, tint.g, tint.b);
+      if (!row) return;
+      const a = (row - 1) * outline.length + col;
+      const b = (row - 1) * outline.length + (col + 1) % outline.length;
+      indices.push(a, a + outline.length, b, b, a + outline.length, b + outline.length);
+    });
+  }
+  const front = positions.length / 3;
+  positions.push(0, centerY, .240, 0, centerY, .145);
+  tint.copy(warm).lerp(shade, .11);
+  colors.push(tint.r, tint.g, tint.b);
+  tint.setHex(darkSteel);
+  colors.push(tint.r, tint.g, tint.b);
+  const inner = (rings.length - 1) * outline.length;
+  for (let i = 0; i < outline.length; i++) {
+    const next = (i + 1) % outline.length;
+    indices.push(inner + i, front, inner + next, i, next, front + 1);
+  }
+  const geometry = new THREE.BufferGeometry()
+    .setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    .setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+    .setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export function forgeBrynhildrWardrobe(toon: Paint) {
   const enamel = toon(ivory);
   const gold = toon(bevelGold);
@@ -51,12 +99,10 @@ export function forgeBrynhildrWardrobe(toon: Paint) {
       const outline: Point[] = [[-.233,.425],[-.134,.468],[-.064,.421],[0,.403],[.064,.421],
         [.134,.468],[.233,.425],[.214,.285],[.159,.196],[.082,.143],[0,.122],[-.082,.143],
         [-.159,.196],[-.214,.285]];
-      plate(parent, outline, shadow, .027, .148, 1.62, .012);
-      plate(parent, outline.map(([x,y]) => [x * .93, .316 + (y - .316) * .90]), gold, .014, .185, 1.56);
-      plate(parent, outline.map(([x,y]) => [x * .85, .317 + (y - .317) * .80]), enamel, .018, .207, 1.64);
-      // Raised central keel and two overlapping abdominal lames.
-      plate(parent, [[0,.406],[.025,.312],[.019,.236],[0,.195],[-.019,.236],[-.025,.312]],
-        gilt, .01, .228, 0, .004);
+      piece(parent, breastplate(outline), enamel);
+      // An inlaid spearhead sits flat against the center of the enamel.
+      plate(parent, [[0,.367],[.016,.324],[.012,.272],[0,.232],[-.012,.272],[-.016,.324]],
+        gold, .004, .244, 0, .0015);
       for (const [y, width, z] of [[.100,.176,.164],[.054,.162,.156]]) {
         plate(parent, [[-width,y+.024],[0,y+.003],[width,y+.024],[width*.82,y-.017],
           [0,y-.024],[-width*.82,y-.017]], blue, .017, z, 1.0, .006);
@@ -81,17 +127,34 @@ export function forgeBrynhildrWardrobe(toon: Paint) {
       const shieldArm = side < 0;
       const outer = shieldArm ? .170 : .132;
       const offset = side * (shieldArm ? .040 : .024);
-      piece(parent, loft([[-.17,.088,.09,0,offset*.6],[-.124,outer*.77,.111,0,offset*.75],
-        [-.097,outer*.91,.124,0,offset],[-.064,outer*.94,.118,0,offset]], 12), shadow);
-      piece(parent, loft([[-.126,outer*.77,.111,0,offset*.75],[-.111,outer*.86,.119,0,offset*.87],
-        [-.096,outer*.91,.126,0,offset]], 12), gold);
-      piece(parent, loft([[-.096,outer*.91,.126,0,offset],[-.069,outer,.138,0,offset],
-        [-.019,outer,.132,-.004,offset],[.039,outer*.84,.116,-.01,offset*.8],
-        [.083,outer*.63,.091,-.016,offset*.45],[.111,outer*.24,.044,-.02,0]], 12), enamel);
-      const crest = plate(parent, [[-.049,-.04],[0,.028],[.057,-.046],[.014,-.073],[-.015,-.075]],
-        blue, .012, .133, 1.75, .006);
+      const shell = smoothLoft([[-.17,.088,.09,0,offset*.6],[-.130,outer*.76,.111,0,offset*.75],
+        [-.123,outer*.81,.114,0,offset*.8],[-.116,outer*.86,.119,0,offset*.87],
+        [-.101,outer*.91,.127,0,offset],[-.094,outer*.92,.129,0,offset],
+        [-.069,outer,.138,0,offset],[-.019,outer,.132,-.004,offset],
+        [.039,outer*.84,.116,-.01,offset*.8],[.083,outer*.63,.091,-.016,offset*.45],
+        [.111,outer*.24,.044,-.02,0]], 18);
+      const points = shell.getAttribute('position');
+      const colors = new Float32Array(points.count * 3);
+      const tint = new THREE.Color();
+      for (let i = 0; i < points.count; i++) {
+        const y = points.getY(i);
+        const band = THREE.MathUtils.smoothstep(y, -.129, -.121);
+        const edge = THREE.MathUtils.smoothstep(y, -.120, -.109) * (1 - THREE.MathUtils.smoothstep(y, -.107, -.099));
+        tint.copy(shadow.color).lerp(gold.color, band).lerp(gilt.color, edge * .64)
+          .lerp(enamel.color, THREE.MathUtils.smoothstep(y, -.100, -.094)).toArray(colors, i * 3);
+      }
+      shell.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      piece(parent, shell, enamel);
+      const crest = plate(parent, [[-.048,-.041],[0,.022],[.048,-.041],[.018,-.063],[0,-.072],[-.018,-.063]],
+        blue, .004, .133, 2.6, .003);
       crest.position.x = offset;
-      piece(parent, new THREE.OctahedronGeometry(.016, 0), gilt, offset,.002,.15);
+      const sun = plate(parent, [[0,.006],[.019,-.030],[0,-.050],[-.019,-.030]], gold, .004, .140, 2.6, .002);
+      sun.position.x = offset;
+      for (const wing of [-1, 1]) {
+        const slash = plate(parent, [[wing * .013,-.042],[wing * .031,-.036],
+          [wing * .021,-.052],[wing * .006,-.055]], gilt, .002, .141, 2.6, .001);
+        slash.position.x = offset;
+      }
     },
 
     vambrace(parent: THREE.Object3D, side: number) {

@@ -27,8 +27,10 @@ export class EnvironmentBuilder {
   private fieldGroup: THREE.Group | null = null;
   private fieldMarkers: THREE.Object3D[] = [];
   private escortActor: THREE.Object3D | null = null;
+  private biome: ReturnType<typeof buildChronicleEnvironment>['biome'] = null;
 
   private clearZone(scene: THREE.Scene): void {
+    this.biome = null;
     if (!this.zoneGroup) return;
     scene.remove(this.zoneGroup);
     disposeObject(this.zoneGroup);
@@ -81,8 +83,22 @@ export class EnvironmentBuilder {
 
   public buildChronicle(scene: THREE.Scene, chapter: ChronicleChapter, layout: ProceduralPathLayout, sites: ChronicleSite[]): BuiltZoneResult {
     this.initBaseLighting(scene); this.clearZone(scene);
-    this.zoneGroup = buildChronicleEnvironment(scene, chapter, layout, sites);
+    const environment = buildChronicleEnvironment(scene, chapter, layout, sites);
+    this.zoneGroup = environment.group;
+    this.biome = environment.biome;
     return { portals: [], npcs: [] };
+  }
+
+  public get biomeWalkable(): ((point: { x: number; z: number }) => boolean) | undefined {
+    return this.biome?.walkable;
+  }
+
+  public updateBiomeMotion(
+    dt: number, player: THREE.Object3D, companions: THREE.Object3D[], enemies: THREE.Object3D[],
+  ): void {
+    if (!this.biome) return;
+    this.biome.motion.update(dt, player, companions, enemies,
+      this.escortActor ? [...this.biome.residents, this.escortActor] : this.biome.residents);
   }
 
   public buildPreviewScene(scene: THREE.Scene): void {
@@ -1136,6 +1152,7 @@ export class EnvironmentBuilder {
 
   public update(dt: number): void {
     this.time += dt;
+    if (this.biome) this.biome.time.value += dt;
     for (let i = 0; i < this.floatingCrystals.length; i++) {
       const c = this.floatingCrystals[i];
       c.rotation.y += dt * 1.4;

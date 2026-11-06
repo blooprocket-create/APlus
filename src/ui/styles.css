@@ -781,6 +781,8 @@ body,
   right: 0;
   padding: 14px 28px;
   background: linear-gradient(90deg, rgba(255, 23, 68, 0.92), rgba(18, 12, 36, 0.95), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ultimate-ink, #ff1744) 67%, #0e1228),
+    rgba(18, 12, 36, 0.95), transparent);
   border-top: 3px solid #fff;
   border-bottom: 3px solid var(--accent-gold);
   transform: skewY(-3deg);

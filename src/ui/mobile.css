@@ -25,6 +25,8 @@ html, body { overscroll-behavior: none; touch-action: manipulation; }
 .touch-controls-guide p + p { margin-top: 12px; }
 .touch-ui kbd, .touch-ui .desktop-move-hint { display: none; }
 .touch-ui .hud-screen { padding: calc(12px + var(--safe-top)) calc(14px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(14px + var(--safe-left)); }
+.touch-ui .ultimate-cutin { top: calc(15% + var(--safe-top)); padding: 8px calc(18px + var(--safe-left)); }
+.touch-ui #hud-ult-title { font-size: clamp(.84rem, 2.45vw, 1.35rem) !important; }
 .touch-ui .joystick-zone { display: flex; position: absolute; bottom: calc(18px + var(--safe-bottom)); left: calc(22px + var(--safe-left)); width: 124px; height: 124px; border: 1px solid #b0c4a35c; background: radial-gradient(circle, #a1c2a52c, #0c202888); }
 .touch-ui .joystick-zone::before { content: ''; position: absolute; inset: 15px; border: 1px solid #b4c8ae20; border-radius: 50%; }
 .touch-ui .joystick-knob { width: 46px; height: 46px; background: radial-gradient(circle at 35% 30%, #cedfc9, #628c7c); }

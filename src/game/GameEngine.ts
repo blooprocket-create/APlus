@@ -11,6 +11,7 @@ import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
 import { ChronicleInteraction, ChronicleSite } from '../types/campaign';
 import { advanceChronicle, beginChapter, chronicleObjectiveView, currentChapter, currentObjective, ensureCampaign, isChronicleRegion } from './CampaignEngine';
 import { buildChronicleLayout, chapterSeed } from './ChronicleWorld';
+import { sweepGroundMovement } from './GroundMeshCollider';
 import { campaignRoads, roadDirectionTarget } from './WorldRoutes';
 import { createFieldPlan, FieldPlan, FieldSpawn, fieldSpawns, fieldStatus, fieldTarget, newFieldProgress, updateFieldActivity } from './FieldActivities';
 import { AudioSystem } from '../audio/AudioSystem';
@@ -27,6 +28,7 @@ import { EnvironmentBuilder, SAFE_ZONE_RADIUS } from '../rendering/EnvironmentBu
 import { buildDeathmark } from '../rendering/Deathmark';
 import { buildGravitySingularity } from '../rendering/GravitySingularity';
 import { IsometricCameraController } from '../rendering/IsometricCamera';
+import { buildLobbyMote } from '../rendering/LobbyMote';
 import { disposeObject } from '../rendering/SceneResources';
 import { buildKunai, buildShadowChakram } from '../rendering/NightbladeProjectiles';
 import { buildStarlightProjectile } from '../rendering/StarlightProjectile';
@@ -250,6 +252,7 @@ export class GameEngine {
   private sliceWindup = 0;
   private previewRig: CharacterRig | null = null;
   private previewCompanionRigs: CharacterRig[] = [];
+  private previewMote: ReturnType<typeof buildLobbyMote> | null = null;
   private pedestalMesh: THREE.Mesh | null = null;
 
   // Active Gameplay State
@@ -257,6 +260,7 @@ export class GameEngine {
   private effectiveStats: CharacterStats | null = null;
   private playerRig: CharacterRig | null = null;
   private playerPos = new THREE.Vector3(0, 0, 0);
+  private readonly biomePlayerSafe = new THREE.Vector3();
   private playerYaw = 0;
   private animState: CharacterAnimationState = {
     isMoving: false,
@@ -370,6 +374,7 @@ export class GameEngine {
     if (this.finisher || this.mode !== 'preview') return;
     this.setPreviewCharacter(classId);
     const hero = this.previewRig!;
+    if (this.previewMote) this.previewMote.visible = false;
     const boss = buildEnemyMesh('boss_knight');
     boss.root.position.set(0, 0, -2.5); this.scene.add(boss.root);
     this.previewCompanionRigs.forEach(rig => { rig.root.visible = false; });
@@ -663,6 +668,7 @@ export class GameEngine {
       this.removeSceneObject(this.previewRig.root);
       this.previewRig = null;
     }
+    this.previewMote = null;
     for (const cRig of this.previewCompanionRigs) {
       this.removeSceneObject(cRig.root);
     }
@@ -671,15 +677,21 @@ export class GameEngine {
     if (classId) {
       this.previewRig = new CharacterRig(classId);
       this.previewRig.root.position.set(0, 0.26, 0.2);
+      this.previewRig.root.rotation.y = { warrior: .10, mage: .12, assassin: .24 }[classId];
       this.scene.add(this.previewRig.root);
+      if (classId === 'mage') {
+        this.previewMote = buildLobbyMote();
+        this.previewRig.root.add(this.previewMote);
+      }
 
       const compClasses = getCompanionClassesForPlayer(classId);
       compClasses.forEach((compClass, idx) => {
         const side = idx === 0 ? -1 : 1;
         const cRig = new CharacterRig(compClass);
         cRig.root.scale.setScalar(0.86);
-        cRig.root.position.set(side * 1.25, 0.02, -0.65);
-        cRig.root.rotation.y = side * -0.35;
+        const spacing = classId === 'mage' && compClass === 'warrior' ? 1.63 : 1.36;
+        cRig.root.position.set(side * spacing, 0.02, -0.65);
+        cRig.root.rotation.y = side * -0.27;
         this.scene.add(cRig.root);
         this.previewCompanionRigs.push(cRig);
       });
@@ -702,6 +714,7 @@ export class GameEngine {
       this.removeSceneObject(this.previewRig.root);
       this.previewRig = null;
     }
+    this.previewMote = null;
     for (const cRig of this.previewCompanionRigs) {
       this.removeSceneObject(cRig.root);
     }
@@ -1145,6 +1158,7 @@ export class GameEngine {
       for (const road of roads) { this.activePortals.push(road); this.environment.addTravelGate(road); }
     }
     this.expedition.total = resume ? resume.enemies.length + resume.defeatedEnemyIds.length : this.enemies.length;
+    this.biomePlayerSafe.copy(this.playerPos);
     if (resume && savedPosition) {
       this.defeatedEnemyIds = new Set(resume.defeatedEnemyIds);
       for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -1157,6 +1171,9 @@ export class GameEngine {
           if (savedEnemy) {
             enemy.hp = Math.max(1, Math.min(enemy.maxHp, savedEnemy.hp));
             enemy.bundle.root.position.set(savedEnemy.x, 0, savedEnemy.z);
+            if (this.environment.biomeWalkable) {
+              this.constrainBiomeActor(enemy.bundle.root.position, savedEnemy.x, savedEnemy.z, true);
+            }
           }
         }
       }
@@ -1167,7 +1184,7 @@ export class GameEngine {
       if (!isSafeZone(zoneId)) this.flaskCharges = Math.max(0, Math.min(FLASK_CAPACITY, resume.flaskCharges));
       if (savedQuest) this.activeCharacter.questState = savedQuest;
       this.playerPos.set(savedPosition.x, 0, savedPosition.z);
-      this.clampPlayerToZone();
+      this.clampPlayerToZone(true);
       for (const orb of resume.pendingLoot) this.spawnLootOrb(new THREE.Vector3(orb.x, 0, orb.z), orb.gold, orb.item);
     }
     if (this.playerRig) {
@@ -1175,12 +1192,14 @@ export class GameEngine {
       this.playerRig.root.rotation.y = this.playerYaw;
     }
     // Snap companions into formation next to the player on zone entry
+    const biomeWalkable = this.environment.biomeWalkable;
     for (const comp of this.companions) {
       comp.position.set(
         this.playerPos.x + comp.wingSide * 1.9,
         0,
         this.playerPos.z + 1.6
       );
+      if (biomeWalkable && !biomeWalkable(comp.position)) comp.position.copy(this.playerPos);
       comp.rig.root.position.copy(comp.position);
       comp.rig.root.rotation.y = this.playerYaw;
     }
@@ -1791,6 +1810,7 @@ export class GameEngine {
 
     if (this.mode === 'preview') {
       const idleAnim: CharacterAnimationState = {
+        lobbyPhase: 0,
         isMoving: false,
         moveSpeedRatio: 0,
         attackComboStep: 0,
@@ -1799,13 +1819,22 @@ export class GameEngine {
         hitFlashTimer: 0,
       };
       if (this.previewRig) {
-        this.previewRig.root.rotation.y = -0.18 + Math.sin(now * 0.00035) * 0.16;
         this.previewRig.updateAnimation(dt, idleAnim);
       }
-      for (const cRig of this.previewCompanionRigs) {
+      for (const [index, cRig] of this.previewCompanionRigs.entries()) {
+        idleAnim.lobbyPhase = .29 + index * .34;
         cRig.updateAnimation(dt, idleAnim);
       }
       this.cameraController.updatePedestalPreview(dt);
+      if (this.previewMote && this.previewRig) {
+        const palm = this.previewRig.getSpellEmitter(false)!;
+        const time = now * .001;
+        palm.y += .215 + .026 * Math.sin(time * 2.1);
+        this.previewMote.position.copy(this.previewRig.root.worldToLocal(palm));
+        this.previewMote.lookAt(this.cameraController.camera.position);
+        this.previewMote.material.uniforms.time.value = time;
+        this.previewMote.visible = true;
+      }
     } else if (this.mode === 'playing' && this.activeCharacter && this.playerRig && this.effectiveStats) {
       if (this.isPaused) {
         if (this.pauseReasons.has('cutscene') && !this.pauseReasons.has('cutsceneHold') &&
@@ -1959,7 +1988,19 @@ export class GameEngine {
       this.animState.attackComboStep = 5;
       this.animState.attackSwingProgress = 0;
       this.audio.cinematic('charge');
-      this.vfx.spawnShockwaveRing(this.playerPos, 1.35, classDef.skills.ultimate.colorHex, 0xffffff, this.sliceWindup);
+      const { colorHex, accentHex } = classDef.skills.ultimate;
+      if (char.classId === 'mage') {
+        const windup = this.sliceWindup;
+        this.vfx.spawnGenesisCharge(.48, colorHex, accentHex, () => {
+          if (this.animState.attackComboStep !== 5 || (!this.sliceWindup && !this.pendingAttack)) return undefined;
+          const staff = this.playerRig?.getSpellEmitter(true);
+          const palm = this.playerRig?.getSpellEmitter(false);
+          const strength = this.sliceWindup ? 1 - this.sliceWindup / windup : 1;
+          return staff && palm ? { staff, palm, strength } : undefined;
+        });
+      } else {
+        this.vfx.spawnShockwaveRing(this.playerPos, 1.35, colorHex, accentHex, this.sliceWindup);
+      }
     } else if (this.input.consumeAction('skill2') && this.cooldowns.skill2 <= 0) {
       this.executeSkill('skill2');
     } else if (this.input.consumeAction('skill1') && this.cooldowns.skill1 <= 0) {
@@ -2003,8 +2044,9 @@ export class GameEngine {
     const attack = this.pendingAttack;
     const released = attack && this.animState.attackSwingProgress >= attack.releaseAt;
     const exactContact = char.classId === 'warrior'
-      ? this.animState.attackComboStep === 4
+      ? this.animState.attackComboStep >= 4
       : this.animState.attackComboStep <= 3
+        || this.animState.attackComboStep === 5
         || (char.classId === 'assassin' && this.animState.skillSlot === 'skill2');
     this.playerRig!.updateAnimation(dt, released && exactContact
       ? { ...this.animState, attackSwingProgress: attack.releaseAt }
@@ -2047,6 +2089,8 @@ export class GameEngine {
       if (slice.startIfNear(this.playerPos)) this.triggerCutscene('slice_moat_plan');
     } else if (this.opening) {
       const event = this.opening.update(dt, this.playerPos);
+      this.opening.updateSceneryMotion(dt, this.playerRig!.root,
+        this.companions.map(companion => companion.rig.root), this.enemies.map(enemy => enemy.bundle.root));
       if (event.tell) this.audio.cinematic('charge');
       if (event.strike) {
         this.audio.cinematic('strike');
@@ -2056,6 +2100,10 @@ export class GameEngine {
       if (event.changed) void this.saveActiveCharacterNow();
     } else {
       this.updateFieldObjective(dt);
+      if (this.environment.biomeWalkable) {
+        this.environment.updateBiomeMotion(dt, this.playerRig!.root,
+          this.companions.map(companion => companion.rig.root), this.enemies.map(enemy => enemy.bundle.root));
+      }
       this.updatePortalAndNpcProximity();
       this.updateCompassArrow();
     }
@@ -2177,7 +2225,7 @@ export class GameEngine {
         }
       } else {
         // Follow player in formation
-        const destination = this.opening ? this.opening.companionDestination(this.playerPos, formationPos, comp.classId)
+        const destination = this.opening ? this.opening.companionDestination(this.playerPos, formationPos, comp.classId, comp.position)
           : this.slice ? this.slice.companionRoute(comp.position, formationPos, this.playerPos) : formationPos;
         const toFormation = destination.clone().sub(comp.position);
         toFormation.y = 0;
@@ -2200,7 +2248,9 @@ export class GameEngine {
 
       if (comp.pendingAttack) stepIntoStrike(comp.pendingAttack, comp.animState.attackSwingProgress, comp.position, comp.yaw);
       // The belllands are explorable landscapes; the tutorial retains its corridor bounds.
-      if (this.currentPathLayout) {
+      if (this.environment.biomeWalkable) {
+        this.constrainBiomeActor(comp.position, previousX, previousZ);
+      } else if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(
           comp.position.x,
           comp.position.z,
@@ -2209,9 +2259,10 @@ export class GameEngine {
         );
         comp.position.x = clamped.x;
         comp.position.z = clamped.z;
-      } else if (this.slice || this.opening) {
-        const walkable = this.opening ? this.opening.walkable(comp.position) : this.slice!.walkable(comp.position.x, comp.position.z);
-        if (!walkable) {
+      } else if (this.opening) {
+        this.opening.constrainMovement(comp.position, previousX, previousZ);
+      } else if (this.slice) {
+        if (!this.slice.walkable(comp.position.x, comp.position.z)) {
           comp.position.set(previousX, 0, previousZ);
         }
       } else {
@@ -2392,7 +2443,24 @@ export class GameEngine {
     }
   }
 
-  private clampPlayerToZone(): void {
+  private constrainBiomeActor(position: THREE.Vector3, x: number, z: number, restore = false): void {
+    const walkable = this.environment.biomeWalkable!;
+    if (!restore && walkable({ x, z })) {
+      sweepGroundMovement(position, x, z, walkable);
+    } else if (!walkable(position)) {
+      const layout = this.currentPathLayout!;
+      const clamped = clampToProceduralPath(position.x, position.z, layout);
+      if (walkable(clamped)) {
+        position.set(clamped.x, 0, clamped.z);
+      } else {
+        const distance = (point: { x: number; z: number }) => (point.x - position.x) ** 2 + (point.z - position.z) ** 2;
+        const nearest = layout.waypoints.reduce((best, point) => distance(point) < distance(best) ? point : best);
+        position.set(nearest.x, 0, nearest.z);
+      }
+    }
+  }
+
+  private clampPlayerToZone(restore = false): void {
     if (this.opening) {
       this.opening.constrainPlayer(this.playerPos);
       return;
@@ -2402,14 +2470,21 @@ export class GameEngine {
       return;
     }
     if (this.currentPathLayout) {
+      const walkable = this.environment.biomeWalkable;
+      if (walkable) {
+        this.constrainBiomeActor(this.playerPos, this.biomePlayerSafe.x, this.biomePlayerSafe.z, restore);
+        this.biomePlayerSafe.copy(this.playerPos);
+      }
       const clamped = clampToProceduralPath(
         this.playerPos.x,
         this.playerPos.z,
         this.currentPathLayout,
         0.55
       );
-      this.playerPos.x = clamped.x;
-      this.playerPos.z = clamped.z;
+      if (!walkable) {
+        this.playerPos.x = clamped.x;
+        this.playerPos.z = clamped.z;
+      }
       this.currentPathProgress = clamped.progress;
     } else {
       const maxR = SAFE_ZONE_RADIUS - 1.2;
@@ -2867,8 +2942,27 @@ export class GameEngine {
     this.cooldowns[skillKey] = effectiveCd;
 
     const ultimate = skillKey === 'ultimate';
-    this.startHeroAttack(ultimate ? 5 : 4, ultimate ? 0.50 : 0.38,
+    const heavensfall = ultimate && char.classId === 'warrior';
+    const shadowExecution = ultimate && char.classId === 'assassin';
+    const duration = ultimate ? { warrior: .68, assassin: .64, mage: .58 }[char.classId] : .38;
+    this.startHeroAttack(ultimate ? 5 : 4, duration,
       () => this.releaseSkill(skillKey, skillLevelBonus, nearest, forward), ultimate ? undefined : skillKey);
+    if (heavensfall) {
+      const leap = this.pendingAttack!;
+      this.vfx.spawnHeavensfallDescent(duration, skill.colorHex, skill.accentHex, () => {
+        if (this.pendingAttack !== leap) return undefined;
+        const tip = this.playerRig?.getSpearTip();
+        return tip ? { tip, phase: this.animState.attackSwingProgress / leap.releaseAt } : undefined;
+      });
+    } else if (shadowExecution) {
+      this.vfx.spawnShadowBladeTrails(duration + .15, skill.colorHex, skill.accentHex, () => {
+        const phase = this.animState.attackSwingProgress;
+        if (this.animState.attackComboStep !== 5 || this.animState.isDashing || phase > .76) return undefined;
+        const left = this.playerRig?.getBladeEmitter(-1);
+        const right = this.playerRig?.getBladeEmitter(1);
+        return left && right ? { phase, blades: [left, right], center: this.playerPos } : undefined;
+      });
+    }
   }
 
   private releaseSkill(
@@ -2898,14 +2992,21 @@ export class GameEngine {
       this.cameraController.triggerUltimateZoom();
       this.cameraController.triggerShake(0.65, 0.45);
       this.callbacks.onUltimateCutIn(classDef.name, skill.name, classDef.elementColor);
-      this.vfx.spawnEclipseImpact(this.playerPos, this.playerYaw, skill.aoeRadius,
-        skill.colorHex, skill.accentHex, char.classId);
-
       if (char.classId === 'warrior') {
-        const heal = Math.round(stats.maxHp * 0.25);
-        char.currentHp = Math.min(stats.maxHp, char.currentHp + heal);
-        this.vfx.spawnDamageNumber(this.playerPos, heal, false, '#64dfdf', `+${heal} HP`);
-      } else if (char.classId === 'assassin') {
+        this.vfx.spawnHeavensfallImpact(this.playerPos, this.playerRig!.getSpearTip() ?? this.playerPos,
+          skill.aoeRadius, skill.colorHex, skill.accentHex);
+        this.audio.cinematic('strike');
+        const heal = Math.min(Math.round(stats.maxHp * .25), stats.maxHp - char.currentHp);
+        if (heal > 0) {
+          char.currentHp += heal;
+          this.vfx.spawnDamageNumber(this.playerPos, heal, false, '#64dfdf', `+${heal} HP`);
+        }
+      } else if (char.classId === 'mage') {
+        this.vfx.spawnGenesisImpact(this.playerPos, this.playerRig!.getSpellEmitter(true) ?? this.playerPos, skill.aoeRadius,
+          skill.colorHex, skill.accentHex);
+      }
+      if (char.classId === 'assassin') {
+        this.vfx.spawnThousandShadows(this.playerPos, this.playerYaw, skill.aoeRadius, skill.colorHex, skill.accentHex);
         // Assassin Ultimate also unleashes a 16-blade radial kunai storm!
         for (let i = 0; i < 16; i++) {
           const angle = (i / 16) * Math.PI * 2;
@@ -3743,17 +3844,23 @@ export class GameEngine {
         if (d > 0.001 && d < minDist) {
           const push = diff.normalize().multiplyScalar((minDist - d) * 0.5);
           pos.add(push);
-          other.bundle.root.position.sub(push);
+          const otherPosition = other.bundle.root.position;
+          const { x, z } = otherPosition;
+          otherPosition.sub(push);
+          if (this.environment.biomeWalkable) this.constrainBiomeActor(otherPosition, x, z);
+          else this.opening?.constrainMovement(otherPosition, x, z);
         }
       }
 
       // Clamp enemy to the procedural path if in a procedural corridor zone
-      if (this.currentPathLayout) {
+      if (this.environment.biomeWalkable) {
+        this.constrainBiomeActor(pos, previousX, previousZ);
+      } else if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(pos.x, pos.z, this.currentPathLayout, 0.65);
         pos.x = clamped.x;
         pos.z = clamped.z;
-      } else if (this.opening && !this.opening.walkable(pos)) {
-        pos.set(previousX, 0, previousZ);
+      } else if (this.opening) {
+        this.opening.constrainMovement(pos, previousX, previousZ);
       }
 
       const anticipation = enemy.windup > 0 ? 1 - enemy.windup / pattern.windup : null;

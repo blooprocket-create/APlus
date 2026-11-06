@@ -10,7 +10,7 @@ export function buildRefugeLodge(
   w: number,
   d: number,
   paint: (color: number) => THREE.Material,
-): void {
+): THREE.Mesh[] {
   const lodge = new THREE.Group();
   lodge.position.set(x, 0, z);
   parent.add(lodge);
@@ -27,8 +27,8 @@ export function buildRefugeLodge(
     return block;
   };
   const eave = 2.26, pitch = .53, length = w * .61;
-  box(mortar, w, .72, d, 0, .36, 0);
-  box(lime, w - .04, eave - .69, d - .04, 0, (eave + .69) / 2, 0);
+  const foundation = box(mortar, w, .72, d, 0, .36, 0);
+  const walls = box(lime, w - .04, eave - .69, d - .04, 0, (eave + .69) / 2, 0);
   box(wood, w + .15, .15, d + .14, 0, .72, 0);
   box(wood, w + .17, .18, d + .16, 0, eave - .04, 0);
 
@@ -73,7 +73,7 @@ export function buildRefugeLodge(
   for (let i = 0; i < 5; i++) box(i % 2 ? wood : cutWood, .16, 1.61, .055, (i - 2) * .17, .93, entry - .188);
   for (const height of [.48, 1.46]) box(wood, .84, .10, .081, 0, height, entry - .206);
   box(bronze, .08, .086, .07, .29, .89, entry - .257);
-  box(stone[2], 1.16, .16, .41, 0, .08, entry - .20);
+  const doorstep = box(stone[2], 1.16, .16, .41, 0, .08, entry - .20);
 
   for (const side of [-1, 1]) {
     const roof = new THREE.Group();
@@ -138,6 +138,7 @@ export function buildRefugeLodge(
   for (let i = 0; i < 6; i++) box(stone[(i + 1) % 4], .59, .19, .66, .98, 2.50 + i * .226, .70);
   box(stone[0], .77, .15, .81, .98, 3.78, .70);
   box(darkness, .45, .028, .49, .98, 3.862, .70);
+  return [foundation, walls, doorstep];
 }
 
 export function buildRefugeFire(
@@ -205,7 +206,7 @@ export function buildRefugeFire(
   for (const angle of [.31, 1.91]) piece(parent, shape, flame, x, .80, z).rotation.y = angle;
 }
 
-export function buildRefugeBridge(parent: THREE.Group, paint: (color: number) => THREE.Material): void {
+export function buildRefugeBridge(parent: THREE.Group, paint: (color: number) => THREE.Material) {
   const bridge = new THREE.Group();
   bridge.position.set(16.04, 0, 5);
   parent.add(bridge);
@@ -213,6 +214,8 @@ export function buildRefugeBridge(parent: THREE.Group, paint: (color: number) =>
   const boards = [0x8f6b50, 0x9e7959, 0x8c6550, 0xa58463, 0x765a49].map(paint);
   const stone = [0x807e78, 0xa19985, 0x8f8b7e].map(paint);
   const iron = paint(0x434c4b), rope = paint(0xa69271);
+  const rails: THREE.Mesh[] = [];
+  const deck: THREE.Mesh[] = [];
   const block = (mat: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number) => {
     const mesh = piece(bridge, new THREE.BoxGeometry(w, h, d), mat, x, y, z);
     mesh.castShadow = mesh.receiveShadow = true;
@@ -229,11 +232,13 @@ export function buildRefugeBridge(parent: THREE.Group, paint: (color: number) =>
     block(oak, 8.46, .29, .22, 0, -.14, side * 1.77);
     const handrail = block(oak, 8.42, .16, .18, 0, .65, side * 2.12);
     handrail.rotation.y = side * .003;
+    rails.push(handrail);
     block(trim, 8.45, .043, .205, 0, .751, side * 2.12);
     for (let bay = 0; bay < 6; bay++) {
       const x = (bay - 2.5) * 1.60;
       const post = block(oak, .20, .91, .22, x, .32, side * 2.12);
       post.rotation.z = Math.sin(bay * 13.1) * .026;
+      rails.push(post);
       block(trim, .233, .057, .255, x, .791, side * 2.12);
       for (const y of [.13, .189]) block(rope, .228, .031, .248, x, y, side * 2.12);
       if (bay < 5) {
@@ -252,6 +257,7 @@ export function buildRefugeBridge(parent: THREE.Group, paint: (color: number) =>
     boards[(i * 3 + Math.floor(i / 3)) % boards.length], x, -.12, 0);
     board.rotation.set(-Math.PI / 2, 0, Math.sin(i * 31.1) * .008);
     board.castShadow = board.receiveShadow = true;
+    deck.push(board);
     for (const side of [-1, 1]) {
       const nail = piece(bridge, new THREE.CylinderGeometry(.029, .031, .012, 7),
         iron, x + .048, .042, side * (1.79 + Math.cos(i) * .042));
@@ -264,9 +270,10 @@ export function buildRefugeBridge(parent: THREE.Group, paint: (color: number) =>
       streak.receiveShadow = true;
     }
   }
+  return { rails, deck };
 }
 
-export function buildRefugeGrove(parent: THREE.Group, paint: (color: number) => THREE.Material): void {
+export function buildRefugeGrove(parent: THREE.Group, paint: (color: number) => THREE.Material): THREE.Mesh[] {
   const bark = paint(0x675444);
   const barkLight = paint(0x8d7050);
   const leafMaterial = paint(0xffffff);
@@ -279,6 +286,7 @@ export function buildRefugeGrove(parent: THREE.Group, paint: (color: number) => 
     [21.05, -6.25, 1.22, .23, 0], [24, 10, .96, -1.2, 1], [28.2, -4.0, 1.34, .8, 2],
     [34, 2, .81, 2.51, 1], [36.6, 10.3, 1.04, -1.8, 2], [36, -7, 1.22, 1.98, 0],
   ];
+  const trunks: THREE.Mesh[] = [];
   const clump = (tree: THREE.Group, x: number, y: number, z: number, width: number,
     height: number, depth: number, rotation: number, palette: THREE.Color[]) => {
     const geometry = smoothLoft([[-.72,.16,.16,.04],[-.57,.62,.61,.10],[-.30,.91,.87,.10],[-.03,1,.96,.056],
@@ -323,6 +331,7 @@ export function buildRefugeGrove(parent: THREE.Group, paint: (color: number) => 
       [1.5,.14,.15,.081,-.079], [2.1,.13,.13,.13,-.057], [2.73,.078,.084,.22,.11], [3.15,.042,.045,.29,.22]],
     12), bark);
     trunk.castShadow = trunk.receiveShadow = true;
+    trunks.push(trunk);
     for (const angle of [-.39, 1.16, 2.72, 4.21]) {
       const root = point(Math.cos(angle) * .64, .035, Math.sin(angle) * .55);
       branch(tree, point(0, .43, 0), root, .106);
@@ -344,4 +353,5 @@ export function buildRefugeGrove(parent: THREE.Group, paint: (color: number) => 
       [-.046,.89], [.035,.44], [.016,.18]], .004), barkLight, 0, 0, .174);
     barkSplit.receiveShadow = true;
   }
+  return trunks;
 }

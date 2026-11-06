@@ -35,9 +35,10 @@ vi.mock('../src/rendering/EnvironmentBuilder', () => ({
 vi.mock('../src/rendering/VfxSystem', () => ({ VfxSystem: class {
   clearAll() {} update() {} spawnDamageNumber() {} spawnDashAfterimage() {} spawnMirageAfterimage() {}
   spawnFallingMeteor() {} spawnShockwaveRing() {} spawnSlashArc() {}
-  spawnSpearThrustBeam() {} spawnEclipseImpact() {} spawnSentinelDischarge() {} spawnFiendCollapse() {}
+  spawnSpearThrustBeam() {} spawnGenesisCharge() {} spawnGenesisImpact() {} spawnSentinelDischarge() {} spawnFiendCollapse() {}
+  spawnShadowBladeTrails() {} spawnThousandShadows() {}
   spawnGravityCast() {} spawnNightbladeRelease() {} spawnCastingFlash() {} spawnNovaBurst() {} spawnEarthshaker() {}
-  spawnDeathmarkCast() {}
+  spawnDeathmarkCast() {} spawnHeavensfallDescent() {} spawnHeavensfallImpact() {}
 } }));
 
 interface EngineState {
@@ -240,6 +241,53 @@ describe('gameplay integration', () => {
     expect(state.enemies).toHaveLength(1);
   });
 
+  it('sweeps movement against the Hearthmere bridge rails and shaped scenery', () => {
+    const opening = new HearthmereOpening('warrior', 'far_hold');
+    const position = new THREE.Vector3();
+    opening.placePlayer(position, { x: 10.5, z: 5 });
+    position.set(22, 0, 5);
+    opening.constrainPlayer(position);
+    expect(position.x).toBeCloseTo(22);
+
+    opening.placePlayer(position, { x: 16, z: 5 });
+    position.set(16, 0, 1);
+    opening.constrainPlayer(position);
+    expect(position.z).toBeGreaterThan(3.12);
+    expect(position.z).toBeLessThan(3.5);
+
+    expect(opening.walkable({ x: 9, z: 7.39 })).toBe(false);
+    opening.placePlayer(position, { x: 8, z: 6.5 });
+    position.set(10, 0, 8.6);
+    opening.constrainPlayer(position);
+    expect(position.x).toBeCloseTo(10);
+    expect(position.z).toBeLessThan(7.39);
+    expect(opening.walkable(position)).toBe(true);
+
+    const companion = new THREE.Vector3(21, 0, 2.2);
+    const formation = new THREE.Vector3(10, 0, 3);
+    for (let i = 0; i < 100; i++) {
+      const target = opening.companionDestination(formation, formation, 'mage', companion);
+      const delta = target.clone().sub(companion);
+      if (delta.length() <= .45) continue;
+      const { x, z } = companion;
+      companion.add(delta.setLength(.18));
+      opening.constrainMovement(companion, x, z);
+      expect(opening.walkable(companion)).toBe(true);
+    }
+    expect(companion.distanceTo(formation)).toBeLessThan(.45);
+  });
+
+  it('clears the fallen timber collider when the party opens the yard gate', () => {
+    const opening = new HearthmereOpening('warrior', 'yard_gate');
+    const gate = { x: 4, z: 5 };
+    const position = new THREE.Vector3();
+    expect(opening.walkable(gate)).toBe(false);
+    opening.placePlayer(position, gate);
+    expect(opening.walkable(position)).toBe(true);
+    expect(opening.interact(position, 0, 'Brynhildr')).toBe(true);
+    expect(opening.walkable(gate)).toBe(true);
+  });
+
   it('stages the colossus contact over the bridge and strikes only once per tell', () => {
     const opening = new HearthmereOpening('warrior', 'far_hold');
     const fist = opening.group.getObjectByName('Colossus striking fist')!;
@@ -277,13 +325,18 @@ describe('gameplay integration', () => {
     const character = structuredClone(state.activeCharacter);
     engine.startGameplayWithCharacter(character, [], true);
     state.activeCharacter.ultimateEnergy = 100;
+    const impact = vi.spyOn(state.vfx, 'spawnHeavensfallImpact');
     engine.input.triggerAction('ultimate');
     state.updateGameplay(0.02);
     expect(callbacks.onUltimateCutIn).not.toHaveBeenCalled();
 
     engine.input.triggerAction('dash');
     for (let i = 0; i < 20; i++) state.updateGameplay(0.02);
+    expect(impact).not.toHaveBeenCalled();
+    for (let i = 0; i < 20 && impact.mock.calls.length === 0; i++) state.updateGameplay(0.02);
     expect(callbacks.onUltimateCutIn).toHaveBeenCalledTimes(1);
+    expect(impact).toHaveBeenCalledTimes(1);
+    expect(Math.abs(impact.mock.calls[0][1].y)).toBeLessThan(.06);
     expect(state.cooldowns.dash).toBe(0);
     expect(state.activeAttackTimer).toBeGreaterThan(0);
 
@@ -291,6 +344,43 @@ describe('gameplay integration', () => {
     state.updateGameplay(0.02);
     expect(state.cooldowns.dash).toBeGreaterThan(0);
     expect(state.activeAttackTimer).toBe(0);
+  });
+
+  it('carries Celestia’s charge to the staff pose before the pillar releases', async () => {
+    await startOpening('mage');
+    state.activeCharacter.ultimateEnergy = 100;
+    const charge = vi.spyOn(state.vfx, 'spawnGenesisCharge');
+    const impact = vi.spyOn(state.vfx, 'spawnGenesisImpact');
+    engine.input.triggerAction('ultimate');
+    state.updateGameplay(.02);
+    expect(charge).toHaveBeenCalledTimes(1);
+    const sample = charge.mock.calls[0][3];
+    const initial = sample()!;
+    for (let i = 0; i < 9; i++) state.updateGameplay(.02);
+    expect(sample()!.staff.distanceTo(initial.staff)).toBeGreaterThan(.3);
+    expect(sample()!.strength).toBeGreaterThan(initial.strength);
+    expect(impact).not.toHaveBeenCalled();
+    for (let i = 0; i < 20 && impact.mock.calls.length === 0; i++) state.updateGameplay(.02);
+    expect(impact).toHaveBeenCalledTimes(1);
+    expect(impact.mock.calls[0][1].y).toBeGreaterThan(1);
+    expect(sample()).toBeUndefined();
+  });
+
+  it('releases Akatsuki’s shadow cuts and all sixteen kunai on the same cast', async () => {
+    await startOpening('assassin');
+    state.activeCharacter.ultimateEnergy = 100;
+    const trails = vi.spyOn(state.vfx, 'spawnShadowBladeTrails');
+    const shadowCuts = vi.spyOn(state.vfx, 'spawnThousandShadows');
+    engine.input.triggerAction('ultimate');
+    for (let i = 0; i < 18 && trails.mock.calls.length === 0; i++) state.updateGameplay(.02);
+    expect(trails).toHaveBeenCalledTimes(1);
+    expect(trails.mock.calls[0][3]()?.blades).toHaveLength(2);
+    expect(shadowCuts).not.toHaveBeenCalled();
+    for (let i = 0; i < 30 && shadowCuts.mock.calls.length === 0; i++) state.updateGameplay(.02);
+    expect(shadowCuts).toHaveBeenCalledTimes(1);
+    expect(state.projectiles).toHaveLength(16);
+    state.updateGameplay(.02);
+    expect(shadowCuts).toHaveBeenCalledTimes(1);
   });
 
   it('applies the spear thrust once, when the visible strike reaches its release', () => {

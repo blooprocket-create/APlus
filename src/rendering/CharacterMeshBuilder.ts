@@ -12,6 +12,7 @@ import { createHeroUnderlayer, type HeroLimb } from './HeroUnderlayer';
 import { buildCastingHand, buildClosedGrip } from './HeroHands';
 
 export interface CharacterAnimationState {
+  lobbyPhase?: number;
   isMoving: boolean;
   moveSpeedRatio: number;
   attackComboStep: number;
@@ -94,7 +95,7 @@ export class CharacterRig {
     const skin = toon(palette.skin);
     const hairLight = toon(new THREE.Color(palette.hair).lerp(new THREE.Color(0xfff3ec), 0.22).getHex());
     const silhouetteInk = createSilhouetteInk(0.0115);
-    const faceInk = createSilhouetteInk(.0078);
+    const faceInk = classId === 'mage' ? createSilhouetteInk(.0048, 0x35354f) : createSilhouetteInk(.0078);
     const light = new THREE.MeshBasicMaterial({ color: accent });
     const warrior = classId === 'warrior';
     const mage = classId === 'mage';
@@ -141,22 +142,19 @@ export class CharacterRig {
     const head = makePart('Head', torso.node, 0, 0.744);
     head.node.scale.setScalar(warrior ? .93 : mage ? .96 : .94);
     piece(head.art, heroSkin(classId), skin);
-    piece(head.art, smoothLoft([[0.018, 0.146, 0.14, -0.026], [0.089, 0.165, 0.146, -0.017],
-      [0.151, 0.158, 0.138, -0.02], [0.204, 0.111, 0.103, -0.019], [0.228, 0.036, 0.04, -0.023]], 24), hair);
+    if (!mage) {
+      piece(head.art, smoothLoft([[0.018, 0.146, 0.14, -0.026], [0.089, 0.165, 0.146, -0.017],
+        [0.151, 0.158, 0.138, -0.02], [0.204, 0.111, 0.103, -0.019], [0.228, 0.036, 0.04, -0.023]], 24), hair);
+    }
     for (const side of [-1, 1]) {
       piece(head.art, smoothLoft([[-0.047, 0.018, 0.015], [-0.019, 0.029, 0.027], [0.035, 0.025, 0.024]], 12),
         skin, side * 0.149, 0, -0.006);
-      piece(head.art, hairLock([[side * 0.121, 0.148, 0.076], [side * 0.153, 0.068, 0.104],
-        [side * 0.147, -0.036, 0.107], [side * 0.111, mage ? -0.169 : -0.13, 0.131]], 0.046, 0.028), hair);
+      if (!mage) {
+        piece(head.art, hairLock([[side * 0.121, 0.148, 0.076], [side * 0.153, 0.068, 0.104],
+          [side * 0.147, -0.036, 0.107], [side * 0.111, -0.13, 0.131]], 0.046, 0.028), hair);
+      }
     }
-    if (tailor) {
-      piece(head.art, hairLock([[.052,.190,.083],[-.003,.161,.149],[-.071,.101,.151],[-.102,.026,.137]],
-        .062,.026), hairLight);
-      piece(head.art, hairLock([[.041,.183,.077],[.106,.153,.118],[.134,.072,.136],[.130,-.057,.117]],
-        .052,.026), hair);
-      piece(head.art, hairLock([[.016,.190,.093],[-.047,.167,.139],[-.126,.111,.125],[-.147,.053,.100]],
-        .046,.023), hair);
-    } else if (shade) {
+    if (shade) {
       piece(head.art, hairLock([[-.11,.207,.049],[-.043,.187,.133],[.058,.119,.160],[.116,.045,.130]],
         .063,.031), hair);
       piece(head.art, hairLock([[-.117,.193,.039],[-.039,.189,.117],[.037,.139,.155],[.094,.092,.157]],
@@ -165,7 +163,7 @@ export class CharacterRig {
         .046,.029), hair);
       piece(head.art, panel([[-.034,-.004],[-.028,.009],[.036,.013],[.040,-.003]],.008),
         trim,-.123,.103,.146).rotation.z = -.60;
-    } else {
+    } else if (forge) {
       piece(head.art, hairLock([[-0.101, 0.182, 0.098], [-0.056, 0.145, 0.147], [0.017, 0.112, 0.16], [0.052, 0.051, 0.151]], 0.067, 0.029), hair);
       piece(head.art, hairLock([[-0.062, 0.196, 0.093], [0.005, 0.171, 0.145], [0.077, 0.13, 0.154], [0.12, 0.071, 0.116]], 0.054, 0.023), hairLight);
       piece(head.art, hairLock([[-0.081, 0.168, 0.102], [-0.103, 0.133, 0.145], [-0.113, 0.081, 0.143], [-0.128, 0.039, 0.115]], 0.047, 0.022), hair);
@@ -174,16 +172,16 @@ export class CharacterRig {
     if (forge) {
       forge.circlet(head.art);
     } else if (tailor) {
+      tailor.hair(head.art, hairTail.art);
       tailor.jewelry(head.art, light);
     } else shade?.mask(head.art);
-    const locks = mage ? [-.108, -.026, .082] : [0];
-    locks.forEach(x => {
-      const length = warrior ? .47 : mage ? .58 - x*.52 : .32;
-      piece(hairTail.art, hairLock([[x, 0.038, -0.016], [x * 1.15 - 0.026, -length * 0.22, -0.095],
-        [x * 1.3 - 0.012, -length * 0.64, -0.137], [x * 1.4 + 0.018, -length, -0.23]], 0.074, 0.061), hair);
-      piece(hairTail.art, hairLock([[x + 0.043, 0.012, -0.031], [x + 0.068, -length * 0.26, -0.111],
-        [x + 0.064, -length * 0.59, -0.142], [x + 0.025, -length * 0.92, -0.213]], 0.033, 0.035), hairLight);
-    });
+    if (!mage) {
+      const length = warrior ? .47 : .32;
+      piece(hairTail.art, hairLock([[0, .038, -.016], [-.026, -length * .22, -.095],
+        [-.012, -length * .64, -.137], [.018, -length, -.23]], .074, .061), hair);
+      piece(hairTail.art, hairLock([[.043, .012, -.031], [.068, -length * .26, -.111],
+        [.064, -length * .59, -.142], [.025, -length * .92, -.213]], .033, .035), hairLight);
+    }
     if (forge) {
       // A broad sweep over the ear breaks the shared head silhouette in close shots.
       piece(head.art, hairLock([[.037,.192,.02],[.119,.157,.067],[.157,.080,.087],[.142,-.061,.103]],

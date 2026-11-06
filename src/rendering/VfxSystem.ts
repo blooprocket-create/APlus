@@ -4,9 +4,11 @@ import { disposeObject } from './SceneResources';
 import { buildMeteorFlight, buildMeteorImpact } from './CelestialMeteor';
 import { buildEarthshakerImpact } from './EarthshakerImpact';
 import { buildDeathmarkCast } from './Deathmark';
+import { buildHeavensfallDescent, buildHeavensfallImpact } from './Heavensfall';
+import { buildShadowBladeTrails, buildThousandShadows } from './ThousandShadows';
+import { buildGenesisCharge, buildGenesisImpact, type GenesisChargeSample } from './CelestialGenesis';
 import { buildNovaBurst } from './StarlightProjectile';
 import { placeFloatingLabel, type LabelRect } from './FloatingLabels';
-import type { CharacterClassId } from '../types/game';
 
 interface ActiveVfxMesh {
   mesh: THREE.Object3D;
@@ -412,60 +414,24 @@ export class VfxSystem {
     });
   }
 
-  public spawnEclipseImpact(
-    center: THREE.Vector3,
-    yaw: number,
-    radius: number,
-    colorHex: number,
-    accentHex: number,
-    role: CharacterClassId,
+  public spawnGenesisCharge(
+    duration: number, color: number, accent: number, sample: () => GenesisChargeSample | undefined,
   ): void {
-    this.spawnShockwaveRing(center, radius, colorHex, accentHex, 0.65);
-    if (role === 'warrior') this.spawnSlashArc(center, yaw - 0.75, radius, colorHex, accentHex, 0.14);
-
-    const group = new THREE.Group();
-    group.position.copy(center);
-    group.position.y += 0.65;
-    group.rotation.y = yaw;
-    const ink: number[] = [];
-    const light: number[] = [];
-    const count = role === 'mage' ? 8 : 12;
-    for (let i = 0; i < count; i++) {
-      const angle = i / count * Math.PI * 2;
-      const edge = radius * (0.79 + (i % 3) * 0.10);
-      const inner = role === 'assassin' ? edge * 0.36 : edge * 0.23;
-      const lift = role === 'mage' ? edge * (0.55 + i % 2 * 0.28) : 0.12;
-      const tip = [Math.sin(angle) * edge, lift, Math.cos(angle) * edge];
-      const width = role === 'warrior' ? 0.10 : 0.062;
-      const point = (side: number) => [Math.sin(angle + side) * inner, 0, Math.cos(angle + side) * inner];
-      ink.push(...point(-width), ...tip, ...point(width * 1.4));
-      light.push(...point(-width * 0.34), tip[0], tip[1] + 0.014, tip[2], ...point(width * 0.46));
-    }
-    const wedge = (vertices: number[], color: number) => {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-      return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
-        color, side: THREE.DoubleSide, transparent: true, depthWrite: false,
-      }));
-    };
-    const outline = wedge(ink, role === 'assassin' ? 0x24112f : colorHex);
-    const core = wedge(light, accentHex);
-    core.position.y = 0.015;
-    core.renderOrder = 1;
-    group.add(outline, core);
-    group.scale.setScalar(0.56);
-    this.scene.add(group);
-
+    const charge = buildGenesisCharge(color, accent);
+    this.scene.add(charge.mesh);
     this.activeMeshes.push({
-      mesh: group,
-      age: 0,
-      duration: role === 'mage' ? 0.30 : 0.22,
-      materials: [outline.material, core.material],
-      onUpdate: (p) => {
-        group.scale.setScalar(0.56 + 0.55 * (1 - (1 - p) ** 3));
-        outline.material.opacity = 0.94 * (1 - p);
-        core.material.opacity = 1 - p * p;
-      },
+      mesh: charge.mesh, age: 0, duration, materials: [],
+      onUpdate: progress => charge.pose(progress, sample()),
+    });
+  }
+
+  public spawnGenesisImpact(
+    center: THREE.Vector3, staff: THREE.Vector3, radius: number, color: number, accent: number,
+  ): void {
+    const impact = buildGenesisImpact(center, staff, radius, color, accent);
+    this.scene.add(impact.mesh);
+    this.activeMeshes.push({
+      mesh: impact.mesh, age: 0, duration: 1.04, materials: [], onUpdate: impact.pose,
     });
   }
 
@@ -594,6 +560,47 @@ export class VfxSystem {
     this.scene.add(cast.mesh);
     this.activeMeshes.push({
       mesh: cast.mesh, age: 0, duration: .115, materials: [], onUpdate: cast.pose,
+    });
+  }
+
+  public spawnHeavensfallDescent(
+    duration: number, color: number, accent: number,
+    sample: () => { tip: THREE.Vector3; phase: number } | undefined,
+  ): void {
+    const trail = buildHeavensfallDescent(color, accent);
+    this.scene.add(trail.mesh);
+    this.activeMeshes.push({
+      mesh: trail.mesh, age: 0, duration, materials: [], onUpdate: () => trail.pose(sample()),
+    });
+  }
+
+  public spawnHeavensfallImpact(
+    center: THREE.Vector3, tip: THREE.Vector3, radius: number, color: number, accent: number,
+  ): void {
+    const impact = buildHeavensfallImpact(center, tip, radius, color, accent);
+    this.scene.add(impact.mesh);
+    this.activeMeshes.push({
+      mesh: impact.mesh, age: 0, duration: .62, materials: [], onUpdate: impact.pose,
+    });
+  }
+
+  public spawnShadowBladeTrails(
+    duration: number, color: number, accent: number,
+    sample: () => Parameters<ReturnType<typeof buildShadowBladeTrails>['pose']>[1],
+  ): void {
+    const trail = buildShadowBladeTrails(color, accent);
+    this.scene.add(trail.mesh);
+    this.activeMeshes.push({
+      mesh: trail.mesh, age: 0, duration, materials: [], onUpdate: progress => trail.pose(progress, sample()),
+    });
+  }
+
+  public spawnThousandShadows(center: THREE.Vector3, yaw: number, radius: number, color: number, accent: number): void {
+    const impact = buildThousandShadows(center, yaw, radius, color, accent);
+    const duration = .9;
+    this.scene.add(impact.mesh);
+    this.activeMeshes.push({
+      mesh: impact.mesh, age: 0, duration, materials: [], onUpdate: progress => impact.pose(progress * duration),
     });
   }
 

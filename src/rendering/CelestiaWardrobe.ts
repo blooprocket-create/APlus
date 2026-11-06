@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { hairLock, loft, panel, piece, smoothLoft } from './ArtMesh';
+import { hairLock, loft, panel, piece, smoothLoft, type Section } from './ArtMesh';
 
 type Paint = (color: number) => THREE.MeshToonMaterial;
 
@@ -11,20 +11,127 @@ export function tailorCelestiaWardrobe(toon: Paint) {
   const silver = toon(0xc0c9da);
   const lining = toon(0x685a90);
 
+  // Paint the binding onto the same continuous surface as the fabric.
+  const boundFabric = (
+    parent: THREE.Object3D, rings: Section[], fabric: THREE.Color,
+    binding: THREE.Color, edge: THREE.Color, start: number, end: number,
+  ) => {
+    const geometry = smoothLoft(rings, 24);
+    const positions = geometry.getAttribute('position');
+    const colors = new Float32Array(positions.count * 3);
+    const tint = new THREE.Color();
+    for (let i = 0; i < positions.count; i++) {
+      const y = positions.getY(i);
+      const hem = THREE.MathUtils.smoothstep(y, start - .002, start + .002)
+        * (1 - THREE.MathUtils.smoothstep(y, end - .002, end + .002));
+      const welt = 1 - THREE.MathUtils.smoothstep(Math.abs(y - (start + .005)), .001, .005);
+      tint.copy(fabric).lerp(binding, hem).lerp(edge, welt * hem * .80).toArray(colors, i * 3);
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    piece(parent, geometry, midnight);
+  };
+
   return {
-    bodice(parent: THREE.Object3D, light: THREE.Material) {
-      piece(parent, smoothLoft([[-.112,.178,.117],[-.051,.190,.132],[.025,.181,.130],
-        [.101,.164,.125],[.202,.144,.122],[.31,.189,.162,.013],
-        [.426,.223,.147],[.493,.145,.111]], 20), midnight);
-      // Crossed lapels follow the curved jacket and meet at the waist.
-      for (const side of [-1,1]) {
-        piece(parent, hairLock([[side*.183,.458,.073],[side*.148,.386,.129],
-          [side*.071,.250,.159],[-side*.065,.135,.149]], .051,.019), side < 0 ? pearl : lapis);
-        piece(parent, hairLock([[side*.204,.447,.071],[side*.163,.374,.124],
-          [side*.092,.237,.156],[-side*.052,.115,.15]], .012,.01), seaGlass);
+    hair(head: THREE.Object3D, tail: THREE.Object3D) {
+      const silverBlue = new THREE.Color(0xc7daf4);
+      const moonlight = new THREE.Color(0xfff7f2);
+      const shade = new THREE.Color(0x7891bd);
+      const tint = new THREE.Color();
+      const painted = (parent: THREE.Object3D, geometry: THREE.BufferGeometry, bias: number, loose = false) => {
+        const positions = geometry.getAttribute('position');
+        const colors = new Float32Array(positions.count * 3);
+        for (let i = 0; i < positions.count; i++) {
+          const y = positions.getY(i), x = positions.getX(i), z = positions.getZ(i);
+          const slope = y + x * .30 + z * .20;
+          const shine = loose
+            ? THREE.MathUtils.smoothstep(slope, -.38, -.14) * (1 - THREE.MathUtils.smoothstep(slope, -.10, -.015))
+            : THREE.MathUtils.smoothstep(slope, .078, .114) * (1 - THREE.MathUtils.smoothstep(slope, .136, .176));
+          const underside = 1 - THREE.MathUtils.smoothstep(z, loose ? -.18 : -.06, loose ? -.08 : .09);
+          tint.copy(silverBlue).lerp(shade, .12 + underside * .37 + bias)
+            .lerp(moonlight, shine * .65).toArray(colors, i * 3);
+        }
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        piece(parent, geometry, pearl);
+      };
+      const scalp = smoothLoft([[-.122,.066,.044,-.091],[-.087,.123,.066,-.078],
+        [-.041,.147,.097,-.046],[.027,.158,.124,-.023],[.084,.163,.144,-.017],
+        [.141,.157,.137,-.02],[.194,.122,.106,-.017],[.221,.072,.059,-.016],
+        [.229,.028,.028,-.019]], 32);
+      const scalpPoints = scalp.getAttribute('position');
+      for (let i = 0; i < scalpPoints.count; i++) {
+        const z = scalpPoints.getZ(i);
+        const brow = 1 - THREE.MathUtils.smoothstep(scalpPoints.getY(i), .112, .166);
+        const forehead = 1 - THREE.MathUtils.smoothstep(Math.abs(scalpPoints.getX(i)), .046, .123);
+        scalpPoints.setZ(i, z - brow * forehead * THREE.MathUtils.smoothstep(z, .038, .113) * .029);
       }
-      piece(parent, loft([[.467,.126,.112],[.53,.109,.101],[.607,.098,.090]], 18), midnight);
-      piece(parent, loft([[.586,.102,.096],[.607,.099,.093],[.613,.096,.091]], 18), silver);
+      scalp.computeVertexNormals();
+      painted(head, scalp, .07);
+      painted(head, hairLock([[.044,.212,.062],[.012,.185,.126],[-.059,.125,.153],
+        [-.091,.069,.145],[-.107,.019,.116]], .057,.020), -.07);
+      painted(head, hairLock([[.015,.217,.054],[-.063,.171,.120],[-.117,.127,.128],
+        [-.147,.055,.102],[-.163,-.043,.068]], .042,.022), .04);
+      painted(head, hairLock([[.064,.204,.038],[.106,.177,.099],[.137,.114,.113],
+        [.154,.029,.076],[.141,-.134,.019]], .043,.026), -.02);
+      painted(head, hairLock([[.109,.162,.008],[.153,.105,.032],[.168,.014,.015],
+        [.154,-.099,-.007],[.133,-.160,-.033]], .035,.023), .08);
+      painted(head, hairLock([[-.100,.160,.045],[-.145,.098,.069],[-.164,.011,.072],
+        [-.155,-.083,.058],[-.115,-.171,.050]], .038,.023), .05);
+      // The long sections follow the hair joint and leave the collar visible.
+      painted(tail, hairLock([[-.070,.064,.019],[-.136,-.125,-.081],[-.165,-.366,-.105],
+        [-.131,-.576,-.191]], .078,.053), .05, true);
+      painted(tail, hairLock([[.017,.058,.008],[-.014,-.118,-.105],[-.039,-.391,-.147],
+        [-.091,-.649,-.238]], .092,.055), -.04, true);
+      painted(tail, hairLock([[.072,.061,.010],[.108,-.106,-.086],[.137,-.292,-.111],
+        [.165,-.492,-.186]], .077,.048), .01, true);
+    },
+
+    bodice(parent: THREE.Object3D, light: THREE.Material) {
+      const jacket = smoothLoft([[-.112,.178,.117],[-.051,.190,.132],[.025,.181,.130],
+        [.101,.164,.125],[.202,.144,.122],[.31,.189,.162,.013],
+        [.426,.223,.147],[.493,.145,.111]], 24);
+      piece(parent, jacket, midnight);
+      // Draw each lapel against the actual jacket surface.
+      const dressForm = new THREE.Mesh(jacket, midnight);
+      const projection = new THREE.Raycaster();
+      projection.ray.direction.set(0, 0, -1);
+      const hits: THREE.Intersection[] = [];
+      const tint = new THREE.Color();
+      for (const side of [-1,1]) {
+        const positions: number[] = [], colors: number[] = [], index: number[] = [];
+        const paint = side < 0 ? pearl.color : lapis.color;
+        const edges = [-1, -.92, -.70, .72, .93, 1];
+        for (let row = 0; row <= 20; row++) {
+          const t = row / 20;
+          const y = .447 - t * .316;
+          const center = side * (.161 - .213 * t ** 1.22);
+          const width = .032 * (1 - .70 * t ** 2);
+          for (const [column, edge] of edges.entries()) {
+            const x = center + edge * width;
+            projection.ray.origin.set(x, y, 1);
+            hits.length = 0;
+            projection.intersectObject(dressForm, false, hits);
+            const z = hits[0]?.point.z ?? .06;
+            const fold = (1 - edge * edge) * .006;
+            positions.push(x, y, z + (side < 0 ? .019 : .008) + fold);
+            tint.copy(paint).lerp(seaGlass.color, column === 1 || column === 4 ? .78 : 0);
+            if (column === 0 || column === 5) tint.multiplyScalar(.72);
+            colors.push(tint.r, tint.g, tint.b);
+            if (!row || !column) continue;
+            const d = row * edges.length + column;
+            const a = d - edges.length - 1;
+            index.push(a, d - 1, a + 1, a + 1, d - 1, d);
+          }
+        }
+        const lapel = new THREE.BufferGeometry()
+          .setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+          .setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+          .setIndex(index);
+        lapel.computeVertexNormals();
+        piece(parent, lapel, midnight);
+      }
+      boundFabric(parent, [[.467,.126,.112],[.53,.109,.101],[.581,.099,.091],
+        [.586,.102,.095],[.591,.102,.095],[.608,.099,.093],[.614,.095,.089]],
+      midnight.color, silver.color, pearl.color, .586, .618);
       piece(parent, loft([[-.052,.204,.154],[-.011,.209,.149],[.056,.182,.141],[.087,.171,.137]], 18), lapis);
       const clasp = piece(parent, new THREE.TorusGeometry(.046,.008,6,16), silver, 0,.04,.153);
       clasp.scale.y = 1.20;
@@ -32,19 +139,21 @@ export function tailorCelestiaWardrobe(toon: Paint) {
     },
 
     shoulder(parent: THREE.Object3D, side: number) {
-      const rim = side > 0 ? .111 : .129;
-      piece(parent, smoothLoft([[-.099,.098,.101,-.002,side*.018],
-        [-.041,rim,.112,-.005,side*.019],[.032,.097,.095,-.008,side*.012],
-        [.073,.046,.055,-.008]], 15), side < 0 ? pearl : lapis);
-      piece(parent, loft([[-.137,.083,.088,0,side*.012],[-.114,.095,.099,-.002,side*.017],
-        [-.098,.098,.101,-.002,side*.018]], 15), side < 0 ? lapis : seaGlass);
+      const crown = side > 0 ? .111 : .129;
+      boundFabric(parent, [[-.151,.082,.087,0,side*.013],[-.139,.091,.097,0,side*.017],
+        [-.134,.094,.100,-.001,side*.019],[-.121,.097,.102,-.002,side*.019],
+        [-.109,.100,.104,-.003,side*.019],[-.104,.100,.104,-.003,side*.019],
+        [-.098,.099,.103,-.003,side*.019],[-.038,crown,.115,-.004,side*.020],
+        [.030,.098,.097,-.006,side*.012],[.076,.046,.055,-.008]],
+      side < 0 ? pearl.color : lapis.color, side < 0 ? lapis.color : seaGlass.color,
+      side < 0 ? silver.color : pearl.color, -.139, -.104);
     },
 
     sleeve(parent: THREE.Object3D) {
-      piece(parent, smoothLoft([[-.252,.065,.068],[-.226,.074,.077],[-.150,.085,.091],
-        [-.073,.075,.077],[-.023,.061,.059]], 14), midnight);
-      piece(parent, loft([[-.259,.070,.071],[-.224,.082,.082],[-.204,.074,.076]], 15), pearl);
-      piece(parent, loft([[-.263,.064,.065],[-.249,.072,.074]], 15), silver);
+      boundFabric(parent, [[-.263,.063,.067],[-.258,.069,.073],[-.251,.072,.076],
+        [-.231,.081,.083],[-.208,.081,.084],[-.201,.079,.084],[-.150,.085,.091],
+        [-.073,.075,.077],[-.023,.061,.059]],
+      midnight.color, pearl.color, seaGlass.color, -.258, -.209);
     },
 
     boots(shin: THREE.Object3D, foot: THREE.Object3D) {
@@ -58,10 +167,11 @@ export function tailorCelestiaWardrobe(toon: Paint) {
     },
 
     jewelry(head: THREE.Object3D, light: THREE.Material) {
-      piece(head, panel([[-.112,.140],[-.067,.103],[0,.085],[.067,.103],[.112,.140],
-        [.064,.117],[0,.104],[-.064,.117]], .008), silver,0,0,.130);
-      const jewel = piece(head, new THREE.OctahedronGeometry(.025), light, 0,.104,.149);
-      jewel.scale.set(.72,1.28,.50);
+      piece(head, panel([[-.070,.120],[-.044,.099],[0,.081],[.040,.096],[.077,.129],
+        [.044,.113],[0,.096],[-.046,.110]], .005), silver,0,0,.128);
+      piece(head, panel([[0,.024],[.015,0],[0,-.027],[-.015,0]], .008), silver, 0,.097,.136);
+      const jewel = piece(head, new THREE.OctahedronGeometry(.018), light, 0,.097,.149);
+      jewel.scale.set(.56,1.13,.42);
       for (const side of [-1,1]) {
         piece(head, new THREE.TorusGeometry(.025,.005,6,14), silver,side*.163,-.058,.014)
           .rotation.y = side*.30;

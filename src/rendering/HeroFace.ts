@@ -6,7 +6,7 @@ import { loft } from './ArtMesh';
 const SHAPES = ['Blink', 'Focus', 'Concern', 'Gaze', 'SpeakOpen', 'SpeakWide', 'SpeakRound'] as const;
 type Shape = typeof SHAPES[number];
 type Point = [number, number];
-type Feature = 'eye' | 'pupil' | 'lash' | 'brow' | 'mouth' | 'nose';
+type Feature = 'eye' | 'pupil' | 'lash' | 'brow' | 'mouth' | 'lip' | 'nose';
 
 type FaceRing = [y: number, width: number, depth: number, offset: number];
 
@@ -22,29 +22,30 @@ function faceRings(role: CharacterClassId): FaceRing[] {
   ];
 }
 
-function noseBridge(x: number, y: number): number {
-  const bridge = .012 * Math.exp(-((y - .005) ** 2) / .00085);
-  const tip = .026 * Math.exp(-((y + .025) ** 2) / .00020);
-  return (bridge + tip) * Math.exp(-(x ** 2) / .00021);
+function noseBridge(x: number, y: number, mage: boolean): number {
+  const bridge = (mage ? .009 : .012) * Math.exp(-((y - .005) ** 2) / .00085);
+  const tip = (mage ? .021 : .026) * Math.exp(-((y + .025) ** 2) / .00020);
+  return (bridge + tip) * Math.exp(-(x ** 2) / (mage ? .00027 : .00021));
 }
 
-function faceDepth(rings: readonly FaceRing[], x: number, y: number): number {
+function faceDepth(rings: readonly FaceRing[], x: number, y: number, mage: boolean): number {
   const upper = rings.findIndex((ring, index) => index > 0 && y <= ring[0]);
   const index = upper < 0 ? rings.length - 1 : upper;
   const [lowY, lowW, lowD, lowZ] = rings[index - 1];
   const [highY, highW, highD, highZ] = rings[index];
   const t = THREE.MathUtils.clamp((y - lowY) / (highY - lowY), 0, 1);
   const width = THREE.MathUtils.lerp(lowW, highW, t);
-  return THREE.MathUtils.lerp(lowZ, highZ, t) + noseBridge(x,y)
+  return THREE.MathUtils.lerp(lowZ, highZ, t) + noseBridge(x,y,mage)
     + THREE.MathUtils.lerp(lowD, highD, t) * Math.sqrt(Math.max(0, 1 - (x / width) ** 2));
 }
 
 export function heroSkin(role: CharacterClassId): THREE.BufferGeometry {
-  const geometry = loft(faceRings(role), 42);
+  const mage = role === 'mage';
+  const geometry = loft(faceRings(role), mage ? 72 : 42);
   const positions = geometry.getAttribute('position');
   for (let i = 0; i < positions.count; i++) {
     if (positions.getZ(i) > 0) {
-      positions.setZ(i, positions.getZ(i) + noseBridge(positions.getX(i), positions.getY(i)));
+      positions.setZ(i, positions.getZ(i) + noseBridge(positions.getX(i), positions.getY(i), mage));
     }
   }
   geometry.computeVertexNormals();
@@ -78,9 +79,23 @@ export class HeroFace {
     const dark = 0x312034;
     const eyeWhite = 0xf1e9e5;
     const iris = { warrior: 0xae7139, mage: 0x438aa7, assassin: 0xb35167 }[role];
+    const mage = role === 'mage';
     const rings = faceRings(role);
+    const speechShapes = {
+      SpeakOpen: [.92, .006, .021],
+      SpeakWide: [1.22, .004, .009],
+      SpeakRound: [.62, .010, .017],
+    } as const;
     const expression = (x: number, y: number, shape: Shape, kind: Feature, side: number): Point => {
       const center = side * .067;
+      if (mage && (kind === 'mouth' || kind === 'lip') &&
+          (shape === 'SpeakOpen' || shape === 'SpeakWide' || shape === 'SpeakRound')) {
+        const [width, upper, lower] = speechShapes[shape];
+        const arch = Math.sqrt(Math.max(0, 1 - (x / .023) ** 2));
+        const edge = kind === 'mouth' && y > -.079 ? upper : -lower;
+        const lipOffset = kind === 'lip' ? y + .080 : 0;
+        return [x * width, -.080 + arch * edge + lipOffset];
+      }
       if (kind === 'mouth') {
         const centered = y + .079;
         if (shape === 'SpeakOpen') return [x*.91, -.082+centered*5.4];
@@ -109,12 +124,12 @@ export class HeroFace {
       const tint = new THREE.Color(color);
       for (const point of points) {
         const {x,y} = point;
-        const z = faceDepth(rings,x,y)+layer;
+        const z = faceDepth(rings,x,y,mage)+layer;
         positions.push(x,y,z);
         colors.push(tint.r,tint.g,tint.b);
         for (const [i, name] of SHAPES.entries()) {
           const [u,v] = expression(x,y,name,kind,side);
-          deltas[i].push(u-x,v-y,faceDepth(rings,u,v)+layer-z);
+          deltas[i].push(u-x,v-y,faceDepth(rings,u,v,mage)+layer-z);
         }
       }
       for (const face of THREE.ShapeUtils.triangulateShape(points, [])) {
@@ -127,23 +142,37 @@ export class HeroFace {
     for (const side of [-1,1]) {
       const center = side * .067;
       const map = (points: Point[]): Point[] => points.map(([x,y]) => [center+side*x,y]);
-      const top = { warrior: .026, mage: .031, assassin: .020 }[role];
+      const top = { warrior: .026, mage: .029, assassin: .020 }[role];
       const edge = role === 'assassin' ? .015 : .010;
       polygon(map([[-.038,.008],[-.024,top-.003],[-.006,top],[.014,top+.001],[.038,edge],
         [.028,-.004],[.012,-.011],[-.015,-.009],[-.030,-.002]]),eyeWhite,.008,'eye',side);
       const pupilX = center - side*.004;
-      polygon(oval(pupilX,.009,.014,.014),iris,.010,'pupil',side);
+      polygon(oval(pupilX,.009,mage ? .017 : .014,mage ? .016 : .014),iris,.010,'pupil',side);
+      if (mage) {
+        polygon(oval(pupilX,.012,.0147,.0118),0x406b91,.0105,'pupil',side);
+        polygon(oval(pupilX+.002,.002,.010,.0052),0x7ad1d6,.0108,'pupil',side);
+        polygon(map([[.005,-.011],[.023,-.009],[.034,-.003],[.030,-.007],[.017,-.013],[.008,-.013]]),
+          0x976873,.010,'lash',side);
+      }
       polygon(oval(pupilX,.010,.006,.011),dark,.011,'pupil',side);
       polygon(oval(pupilX-.004,.016,.0042,.0047,8),0xfff8f1,.012,'pupil',side);
+      if (mage) polygon(oval(pupilX+.007,.004,.0024,.0020,8),0xdaf6f5,.012,'pupil',side);
       polygon(map([[-.041,.008],[-.027,top+.002],[-.007,top+.006],[.014,top+.005],
         [.041,edge+.006],[.034,edge-.004],[.012,top-.001],[-.007,top],[-.026,top-.006]]),
       dark,.014,'lash',side);
       polygon(map([[-.034,.047],[-.016,.054],[.009,.054],[.032,.047],[.019,.047],
         [-.015,.047],[-.032,.042]]),dark,.011,'brow',side);
     }
-    if (role !== 'assassin') {
+    if (mage) {
+      polygon([[.004,-.024],[.011,-.030],[.008,-.035],[.001,-.037],[-.005,-.035],[.002,-.033]],
+        0xc09082,.002,'nose');
+      polygon([[-.023,-.079],[-.012,-.077],[-.006,-.075],[.001,-.077],[.008,-.075],
+        [.016,-.078],[.023,-.079],[.011,-.081],[.004,-.083],[-.007,-.083],[-.017,-.081]],
+        0x66374c,.008,'mouth');
+      polygon(oval(0,-.085,.009,.0014,12),0xeab0a9,.007,'lip');
+    } else if (role === 'warrior') {
       polygon([[.008,-.016],[.014,-.031],[.008,-.038],[-.004,-.036],[.005,-.033]],
-        role === 'warrior' ? 0xa57464 : 0xb78b7a,.003,'nose');
+        0xa57464,.003,'nose');
       polygon(oval(0,-.079,.024,.0046,18),0x532638,.008,'mouth');
       polygon(oval(.001,-.0761,.013,.00065,12),0xe4c8bf,.009,'mouth');
     }

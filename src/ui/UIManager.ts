@@ -1409,6 +1409,7 @@ export class UIManager {
     this.hudRefs.ultCutinSub.textContent = `${className} // SECRET ART`;
     this.hudRefs.ultCutinTitle.textContent = `✦ ${skillName} ✦`;
     this.hudRefs.ultCutin.style.borderTopColor = colorCss;
+    this.hudRefs.ultCutin.style.setProperty('--ultimate-ink', colorCss);
     this.hudRefs.ultCutin.classList.remove('hidden');
 
     if (this.cutinTimeout) window.clearTimeout(this.cutinTimeout);

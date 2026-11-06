@@ -48,7 +48,15 @@ export function createHeroUnderlayer(
   const color = new THREE.Color();
 
   for (const { upper, lower, fold, foot } of limbs) {
-    const tube = loft(foot ? TROUSER : SLEEVE, 14);
+    let sections = foot ? TROUSER : SLEEVE;
+    if (!foot && role === 'mage') {
+      // The shoulder binding follows its own bone, so the cloth needs clearance underneath.
+      sections = SLEEVE.map(([y, width, depth]) => {
+        const inset = .014 * (1 - THREE.MathUtils.smoothstep(Math.abs(y + .13), .035, .10));
+        return [y, width - inset, depth - inset];
+      });
+    }
+    const tube = loft(sections, 14);
     const points = tube.getAttribute('position');
     const sourceNormals = tube.getAttribute('normal');
     const upperIndex = bones.indexOf(upper);

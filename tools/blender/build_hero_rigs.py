@@ -14,7 +14,7 @@ from mathutils import Matrix, Quaternion, Vector
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.dont_write_bytecode = True
 from hero_poses import (
-    IDLE, JOINTS, NIGHTBLADE_RETREAT, NIGHTBLADE_STANCE, RELEASE, SPEAR_ADVANCE, SPEAR_STANCE, actions_for,
+    IDLE, JOINTS, LOBBY_FEET, NIGHTBLADE_RETREAT, NIGHTBLADE_STANCE, RELEASE, SPEAR_ADVANCE, SPEAR_STANCE, actions_for,
 )
 
 ATTACK_STANCES = {"warrior": SPEAR_STANCE, "assassin": NIGHTBLADE_STANCE}
@@ -47,6 +47,7 @@ FOLD_SOURCES = {
 SHOULDER_FOLLOW = {"warrior": .78, "mage": .83, "assassin": .87}
 LABELS = {
     "idle": "Idle guard", "run": "Run cycle", "evade": "Evade", "hit": "Hit reaction",
+    "lobby": "Lobby idle",
     "thrust": "Combo 1", "reverse": "Combo 2", "sweep": "Combo 3",
     "skill1": "Skill 1", "skill2": "Skill 2", "charge": "Eclipse anticipation", "eclipse": "Eclipse release",
 }
@@ -77,7 +78,7 @@ def bake_hem_drag(scene, armature, clip, start, end):
         scene.frame_set(frame)
         rotations.append(current_rotation(coat))
     follow = rotations[0]
-    loop = clip in ("idle", "run")
+    loop = clip in ("idle", "lobby", "run")
     if loop:
         for rotation in rotations[:-1] * 3:
             follow = follow.slerp(rotation, .36)
@@ -150,6 +151,12 @@ def key_run_contact(armature, frame, role, start, end):
 
 def bake_contact(armature, actor, role, clip, start, end):
     scene = bpy.context.scene
+    if clip == "lobby":
+        for frame in range(start, end + 1):
+            scene.frame_set(frame)
+            for side, (x, z, yaw) in zip(("L", "R"), LOBBY_FEET[role]):
+                key_leg_to(armature, frame, side, Vector((x, .067, z)), 0, yaw)
+        return
     stance = ATTACK_STANCES.get(role, {}).get(clip)
     if stance:
         release = RELEASE[role][clip]
@@ -376,6 +383,8 @@ def build_rig(hero, paint):
         action["astral_clip"] = clip
         if role == "warrior" and clip in SPEAR_ADVANCE:
             action["astral_advance"] = SPEAR_ADVANCE[clip]
+        if role == "warrior" and clip == "eclipse":
+            action["astral_height_scale"] = 3
         if role == "assassin" and clip == "sweep":
             action["astral_retreat"], landing = NIGHTBLADE_RETREAT
             action.pose_markers.new("Land").frame = landing
@@ -443,12 +452,13 @@ def bake_library(scene, armatures):
             name = action["astral_clip"]
             set_action(armature, action)
             start, end = action.frame_range
+            height_scale = float(action.get("astral_height_scale", 1))
             samples = []
             for frame in range(round(start), round(end) + 1):
                 scene.frame_set(frame)
                 hips = armature.pose.bones["Hips"]
                 shift = GAME_TO_BLENDER.transposed() @ (hips.bone.matrix_local.to_3x3() @ hips.location)
-                row = [*shift]
+                row = [shift.x, shift.y / height_scale, shift.z]
                 for bone_name in joint_order:
                     bone = armature.pose.bones[bone_name]
                     rest = bone.bone.matrix_local.to_quaternion()
@@ -460,6 +470,8 @@ def bake_library(scene, armatures):
                 samples.extend(round(max(-1, min(1, component)) * 32767) for component in row)
             packed = struct.pack(f"<{len(samples)}h", *samples)
             clips[name] = {"seconds": round((end - start) / FPS, 4), "samples": base64.b64encode(packed).decode("ascii")}
+            if height_scale != 1:
+                clips[name]["heightScale"] = height_scale
             marker = action.pose_markers.get("Release")
             if marker:
                 if not start < marker.frame < end:

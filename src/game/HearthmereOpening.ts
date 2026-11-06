@@ -4,6 +4,7 @@ import { buildHearthmereScenery } from '../rendering/HearthmereScenery';
 import { HearthmereImpact, HearthmereResident } from '../rendering/HearthmereCast';
 import { HearthmereGiant } from '../rendering/HearthmereGiant';
 import { bakePieces, beam, loft, piece } from '../rendering/ArtMesh';
+import { GroundMeshCollider, sweepGroundMovement } from './GroundMeshCollider';
 
 export const HEARTHMERE_WAYSTATION = { x: -24, z: 5 };
 export const HEARTHMERE_REFUGE = { x: 30, z: 7 };
@@ -106,7 +107,11 @@ export class HearthmereOpening {
   private readonly guard = new HearthmereResident('guard');
   private readonly evacuees: HearthmereResident[] = [];
   private readonly townsfolk: HearthmereResident[] = [];
+  private readonly sceneryResidents: readonly THREE.Object3D[];
   private readonly river: THREE.ShaderMaterial;
+  private readonly sceneryCollision: ReturnType<typeof buildHearthmereScenery>;
+  private readonly fixtures: GroundMeshCollider;
+  private readonly wreckageCollider: GroundMeshCollider;
   readonly setSceneryFocus: ReturnType<typeof buildHearthmereScenery>['setFocus'];
   private readonly wheels: THREE.Group[] = [];
   private readonly giant = new HearthmereGiant();
@@ -137,15 +142,18 @@ export class HearthmereOpening {
       return mesh;
     };
     const scenery = buildHearthmereScenery(this.group, BUILDINGS);
+    this.sceneryCollision = scenery;
     this.river = scenery.river;
     this.setSceneryFocus = scenery.setFocus;
     box(this.group, ember, 1.1, 0.45, 0.65, -8.5, 0.4, 7.5);
-    piece(this.group, loft([[0, 0.84, 0.84], [0.16, 0.89, 0.89], [0.72, 0.79, 0.79], [0.81, 0.84, 0.84]], 10, true),
-      stone, -13.3, 0, -6.1).castShadow = true;
+    const well = piece(this.group, loft([[0, 0.84, 0.84], [0.16, 0.89, 0.89], [0.72, 0.79, 0.79], [0.81, 0.84, 0.84]], 10, true),
+      stone, -13.3, 0, -6.1);
+    well.castShadow = true;
     piece(this.group, new THREE.CircleGeometry(0.65, 14), steel, -13.3, 0.816, -6.1).rotation.x = -Math.PI / 2;
     for (const x of [-14.08, -12.53]) box(this.group, wood, 0.15, 2.15, 0.15, x, 1.02, -6.1).castShadow = true;
     box(this.group, wood, 1.93, 0.16, 0.16, -13.3, 2.08, -6.1).castShadow = true;
-    box(this.group, wood, 0.5, 5.6, 0.5, 2.5, 2.8, -11).castShadow = true;
+    const cranePost = box(this.group, wood, 0.5, 5.6, 0.5, 2.5, 2.8, -11);
+    cranePost.castShadow = true;
     const crane = new THREE.Group();
     crane.position.set(4.1, 5.5, -11);
     box(crane, wood, 4.2, 0.45, 0.45, 0, 0, 0).castShadow = true;
@@ -156,7 +164,8 @@ export class HearthmereOpening {
     this.craneBeam = crane;
     const shipment = new THREE.Group();
     shipment.position.set(4.2, 0, -9.7);
-    box(shipment, steel, 2, 1.31, 1.4, 0, 0.68, 0).castShadow = true;
+    const shipmentCrate = box(shipment, steel, 2, 1.31, 1.4, 0, 0.68, 0);
+    shipmentCrate.castShadow = true;
     for (const x of [-0.75, 0.75]) {
       box(shipment, wood, 0.1, 1.35, 1.47, x, 0.68, 0).castShadow = true;
       for (const z of [-0.56, 0.56]) box(shipment, stone, 0.19, 0.16, 0.21, x, 1.38, z);
@@ -164,6 +173,7 @@ export class HearthmereOpening {
     box(shipment, violet, 0.082, 0.028, 1.26, 0, 1.35, 0);
     piece(shipment, new THREE.OctahedronGeometry(0.125), violet, 0, 1.47, 0).scale.set(1, 0.43, 1);
     this.group.add(shipment);
+    this.fixtures = new GroundMeshCollider([well, cranePost, shipmentCrate]);
     bakePieces(shipment);
     box(this.group, wood, 0.93, 0.95, 0.75, -22.55, 0.47, -0.85);
     if (role === 'mage') {
@@ -211,6 +221,9 @@ export class HearthmereOpening {
       this.townsfolk.push(person);
       this.group.add(person.root);
     }
+    this.sceneryResidents = [this.mara, this.rowan, this.guard, ...this.townsfolk, ...this.evacuees]
+      .map(resident => resident.root);
+    const wreckageMeshes: THREE.Mesh[] = [];
     for (let i = 0; i < 5; i++) {
       const x = 10.5 + i * .37;
       const z = -9.3 + i * .66;
@@ -224,7 +237,9 @@ export class HearthmereOpening {
       fragment.scale.set(1.15, .62, .94);
       fragment.rotation.y = i * .91;
       fragment.receiveShadow = true;
-      box(this.gateWreckage, wood, 0.42, 0.3, 2.8, 3.4 + i * 0.24, 0.45 - i * 0.08, 5).rotation.y = i * 0.4;
+      const fallenTimber = box(this.gateWreckage, wood, 0.42, 0.3, 2.8, 3.4 + i * 0.24, 0.45 - i * 0.08, 5);
+      fallenTimber.rotation.y = i * 0.4;
+      wreckageMeshes.push(fallenTimber);
     }
     for (const z of [-2, 1, 4]) {
       box(this.occupied, steel, 0.2, 2.4, 0.2, -17, 1.2, z);
@@ -232,6 +247,7 @@ export class HearthmereOpening {
     }
     this.giant.root.position.set(15, 0, -7);
     bakePieces(this.damaged);
+    this.wreckageCollider = new GroundMeshCollider(wreckageMeshes);
     bakePieces(this.gateWreckage);
     bakePieces(this.occupied);
     this.warning.position.set((ATTACK_START + ATTACK_END) / 2, 0.06, BRIDGE_Z);
@@ -322,33 +338,33 @@ export class HearthmereOpening {
 
   walkable(point: OpeningPoint): boolean {
     if (point.x < -30 || point.x > 37 || point.z < -13.7 || point.z > 13.7) return false;
-    if (BUILDINGS.some(({ x, z, w, d }) => Math.abs(point.x - x) < w / 2 + 0.2 && Math.abs(point.z - z) < d / 2 + 0.2)) return false;
-    if (point.x <= ATTACK_START) return true;
-    if (this.index < OPENING_STEPS.indexOf('far_hold')) return false;
-    return point.x >= ATTACK_END || Math.abs(point.z - BRIDGE_Z) <= 2;
+    if (point.x > ATTACK_START && this.index < OPENING_STEPS.indexOf('far_hold')) return false;
+    const { solids, crossing, water } = this.sceneryCollision;
+    const clearance = .22;
+    if (solids.overlaps(point, clearance) || this.fixtures.overlaps(point, clearance) ||
+        (this.gateWreckage.visible && this.wreckageCollider.overlaps(point, clearance))) return false;
+    // Allow the narrow seams between boards while the rails provide lateral clearance.
+    return !water.overlaps(point) || crossing.overlaps(point, .04);
   }
 
   placePlayer(position: THREE.Vector3, requested: OpeningPoint): void {
-    const fallback = this.step === 'square' ? HEARTHMERE_COVER : this.crisis ? this.objective.target : HEARTHMERE_WAYSTATION;
-    const point = this.walkable(requested) ? requested : fallback;
+    const fallback = this.step === 'square' ? HEARTHMERE_COVER : this.step === 'yard_gate' ? { x: 2.5, z: 5 }
+      : this.crisis ? this.objective.target : HEARTHMERE_WAYSTATION;
+    const point = this.walkable(requested) ? requested : this.walkable(fallback) ? fallback : HEARTHMERE_WAYSTATION;
     this.safePosition.set(point.x, 0, point.z);
     position.copy(this.safePosition);
   }
 
   constrainPlayer(position: THREE.Vector3): void {
-    const dx = position.x - this.safePosition.x;
-    const dz = position.z - this.safePosition.z;
-    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.4));
-    for (let i = 0; i < steps; i++) {
-      const x = this.safePosition.x + dx / steps;
-      const z = this.safePosition.z + dz / steps;
-      if (this.walkable({ x, z: this.safePosition.z })) this.safePosition.x = x;
-      if (this.walkable({ x: this.safePosition.x, z })) this.safePosition.z = z;
-    }
-    position.copy(this.safePosition);
+    this.constrainMovement(position, this.safePosition.x, this.safePosition.z);
+    this.safePosition.copy(position);
   }
 
-  companionDestination(player: OpeningPoint, formation: THREE.Vector3, role: CharacterClassId): THREE.Vector3 {
+  constrainMovement(position: THREE.Vector3, x: number, z: number): void {
+    sweepGroundMovement(position, x, z, point => this.walkable(point));
+  }
+
+  companionDestination(player: OpeningPoint, formation: THREE.Vector3, role: CharacterClassId, position: OpeningPoint): THREE.Vector3 {
     if (this.step === 'yard_gate' && distance(player, GATE) < 5) {
       if (role === 'warrior') return new THREE.Vector3(3, 0, 2);
       if (role === 'mage') return new THREE.Vector3(5, 0, 6);
@@ -356,7 +372,26 @@ export class HearthmereOpening {
     if (this.step === 'far_hold' && role === 'assassin' && distance(player, FAR_HOLD) < 4) {
       return new THREE.Vector3(23, 0, 5.7);
     }
-    return this.walkable(formation) ? formation : new THREE.Vector3(player.x, 0, player.z);
+    const destination = this.walkable(formation) ? formation : new THREE.Vector3(player.x, 0, player.z);
+    const westApproach = ATTACK_START - .55;
+    const eastApproach = ATTACK_END + .55;
+    const sideOfBridge = ({ x, z }: OpeningPoint) => {
+      const outsideDeck = Math.abs(z - BRIDGE_Z) > 1.8;
+      if (x <= (outsideDeck ? ATTACK_START : westApproach)) return -1;
+      if (x >= (outsideDeck ? ATTACK_END : eastApproach)) return 1;
+      return 0;
+    };
+    const side = sideOfBridge(position);
+    const destinationSide = sideOfBridge(destination);
+    if (side === destinationSide) return destination;
+    // Enter and leave on the centerline so the formation cannot catch the rail ends.
+    if (side !== 0 && Math.abs(position.z - BRIDGE_Z) > .5) {
+      return new THREE.Vector3(side < 0 ? westApproach : eastApproach, 0, BRIDGE_Z);
+    }
+    if (destinationSide !== 0) {
+      return new THREE.Vector3(destinationSide < 0 ? westApproach - .7 : eastApproach + .7, 0, BRIDGE_Z);
+    }
+    return new THREE.Vector3(destination.x, 0, BRIDGE_Z);
   }
 
   actionAt(player: OpeningPoint, enemies: number): string | undefined {
@@ -390,6 +425,10 @@ export class HearthmereOpening {
     if (!next) return;
     this.step = next;
     this.refresh();
+  }
+
+  updateSceneryMotion(dt: number, player: THREE.Object3D, companions: THREE.Object3D[], enemies: THREE.Object3D[]): void {
+    this.sceneryCollision.motion.update(dt, player, companions, enemies, this.sceneryResidents);
   }
 
   update(dt: number, player: OpeningPoint): { changed: boolean; tell: boolean; strike: boolean; hit: boolean } {

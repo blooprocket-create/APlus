@@ -27,7 +27,7 @@ IDLE = {
 
 # Frame at which the weapon connects or the spell leaves the hand.
 RELEASE = {
-    "warrior": dict(thrust=4, reverse=5, sweep=7, skill1=6, skill2=8, eclipse=7),
+    "warrior": dict(thrust=4, reverse=5, sweep=7, skill1=6, skill2=8, eclipse=15),
     "mage": dict(thrust=5, reverse=6, sweep=6, skill1=6, skill2=8, eclipse=6),
     "assassin": dict(thrust=4, reverse=5, sweep=5, skill1=6, skill2=7, eclipse=6),
 }
@@ -99,12 +99,62 @@ def key(frame, position=(0, 0, 0), **angles):
 
 
 def idle_loop(role):
+    base = IDLE[role]
+    drift = {"warrior": (-1, 2, 1), "mage": (1, -3, -1), "assassin": (-2, 3, -1)}[role]
+    head = tuple(a + b for a, b in zip(base["head"], drift))
+    settle = tuple(a - b * .55 for a, b in zip(base["head"], drift))
     return [
         key(1),
-        key(19, (0, 0.013, 0), head=(-2, 4, -2), hair=(-5, 2, 1)),
-        key(36, (0, -0.006, 0), head=(1, -2, 2), coat=(-17, 3, -2)),
+        key(19, (0, .012, 0), head=head, hair=(base["hair"][0] + 1.7, 1.5, base["hair"][2])),
+        key(36, (0, -.006, 0), head=settle, coat=(base["coat"][0] - 2.5, base["coat"][1], base["coat"][2])),
         key(49),
     ]
+
+
+LOBBY_FEET = {
+    "warrior": ((-.205, .106, -10), (.225, -.108, 13)),
+    "mage": ((-.147, .083, -10), (.167, -.112, 8)),
+    "assassin": ((-.18, .147, -18), (.17, -.194, 15)),
+}
+
+
+def lobby_loop(role):
+    if role == "warrior":
+        # The spear rests beside the dominant foot and the shield hangs against the forearm.
+        base = dict(hips=(2, -13, 3), head=(-3, 12, -2), right_arm=(-12, 9, 22),
+                    right_elbow=(-21, 0, 0), aim=(.055, 1, .034), left_arm=(-21, -12, -13),
+                    left_elbow=(-61, 0, 0), coat=(-5, -7, 2), hair=(-4, 2, 2))
+        home = (-.019, -.056, -.005)
+        beats = [
+            key(19, (-.013, -.046, -.006), head=(-4, 9, -1), left_elbow=(-64, 0, 0), coat=(-8, -8, 3)),
+            key(39, (.008, -.057, -.008), head=(-1, 17, -2), hips=(2, -12, 1), left_elbow=(-59, 0, 0)),
+            key(56, (-.016, -.059, -.004), head=(-2, 14, 0), hair=(-7, 3, 1)),
+        ]
+    elif role == "mage":
+        # An open hand weighs an unseen mote while the staff sits off her shoulder.
+        base = dict(hips=(-2, 8, -4), head=(2, -5, 2), right_arm=(-32, 9, 19),
+                    right_elbow=(-37, 0, 0), aim=(.20, .96, -.07), left_arm=(-44, -25, -24),
+                    left_elbow=(-70, 0, 0), offhand=(-22, -30, 4), gesture="gather",
+                    coat=(-5, 2, -5), hair=(-3, -2, 2))
+        home = (.023, -.041, -.01)
+        beats = [
+            key(18, (.022, -.034, -.01), head=(5, -16, 4), left_elbow=(-76, 0, 0), gesture="offer"),
+            key(36, (.014, -.041, -.006), head=(6, -19, 2), left_arm=(-49, -22, -27),
+                left_elbow=(-73, 0, 0), offhand=(-16, -23, 8), gesture="offer", coat=(-8, 5, -5)),
+            key(57, (.024, -.047, -.012), head=(1, -7, 3), left_elbow=(-68, 0, 0), gesture="gather"),
+        ]
+    else:
+        # Quiet profile, one blade tucked near her hip and the other held low.
+        base = dict(hips=(11, 25, -7), head=(-9, -23, 2), left_arm=(-16, 8, -17),
+                    left_elbow=(-74, 0, 0), offhand_aim=(-.73, -.44, -.35), right_arm=(1, 14, 19),
+                    right_elbow=(-12, 0, 0), aim=(.38, -.86, .27), coat=(-7, -11, -7), hair=(-5, 3, -3))
+        home = (-.031, -.104, -.02)
+        beats = [
+            key(21, (-.028, -.097, -.023), head=(-8, -27, 3), right_elbow=(-15, 0, 0), coat=(-10, -13, -8)),
+            key(42, (-.040, -.105, -.021), head=(-11, -9, 1), hips=(12, 24, -7), hair=(-7, 6, -2)),
+            key(59, (-.029, -.108, -.018), head=(-10, -17, 0), left_elbow=(-77, 0, 0), coat=(-8, -8, -5)),
+        ]
+    return [(frame, shift, dict(base, **pose)) for frame, shift, pose in [key(1, home), *beats, key(73, home)]]
 
 
 def run_loop(role):
@@ -251,18 +301,41 @@ WARRIOR = {
     ],
     "eclipse": [
         key(1),  # Starts from the fully charged pose.
-        key(4, (0, .09, .05), hips=(9, 126, 13), head=(-8, -56, -6), left_arm=(-72, -4, -43),
-            right_arm=(-91, -14, 45), right_elbow=(-17, 0, 0), aim=(.65, .43, -.61),
-            left_leg=(-31, 0, -10), right_knee=(42, 0, 0), coat=(-83, 31, 16)),
-        key(7, (0, .20, .18), hips=(15, 224, -12), head=(-10, 30, 7), left_arm=(-77, 10, -46),
-            right_arm=(-96, -19, 48), right_elbow=(-8, 0, 0), aim=(-.94, -.02, .35),
-            left_leg=(-39, 0, -13), right_leg=(27, 0, 16), right_knee=(61, 0, 0),
-            coat=(-96, 33, 20), hair=(-68, 16, 18)),
-        key(11, (0, .10, .09), hips=(11, 281, -6), right_arm=(-80, -12, 41),
-            right_elbow=(-19, 0, 0), aim=(-.46, .15, .88), coat=(-81, 29, -19)),
-        key(15, (0, -.12, .067), hips=(32, 329, 7), head=(-18, 23, -4), right_arm=(-91, 6, 13),
-            right_elbow=(-32, 0, 0), left_leg=(-44, 0, -8), left_knee=(58, 0, 0), coat=(-74, 28, 14)),
-        key(24, hips=(3, 353, 0)),
+        key(3, (.022, .40, -.03), hips=(-8, 106, 17), head=(4, -38, -8), right_arm=(-137, 4, 27),
+            right_elbow=(-19, 0, 0), aim=(.28, .91, .30), left_arm=(-42, -9, -40),
+            left_leg=(-48, 0, -12), right_leg=(26, 0, 13), left_knee=(67, 0, 0), right_knee=(39, 0, 0),
+            coat=(-83, 37, 17)),
+        key(6, (.081, 1.88, -.16), hips=(-19, 167, -9), head=(7, 22, 5), right_arm=(-93, -7, 49),
+            right_elbow=(-56, 0, 0), aim=(-.21, .86, -.52), left_arm=(-71, 10, -49),
+            left_leg=(-57, 0, -17), right_leg=(-24, 0, 18), left_knee=(94, 0, 0), right_knee=(88, 0, 0),
+            coat=(-96, 34, 29), hair=(-68, 12, 13)),
+        key(8, (.065, 2.45, -.11), hips=(-17, 231, 14), head=(8, 24, -9), right_arm=(-69, 19, 44),
+            right_elbow=(-45, 0, 0), aim=(-.31, .29, -.90), left_arm=(-65, 17, -50),
+            left_leg=(-65, 0, -11), right_leg=(-37, 0, 19), left_knee=(89, 0, 0), right_knee=(106, 0, 0),
+            coat=(-100, 32, 20), hair=(-61, 11, -13)),
+        key(10, (.02, 2.55, -.05), hips=(7, 289, -13), head=(8, 26, 7), right_arm=(-54, 26, 31),
+            right_elbow=(-23, 0, 0), aim=(-.28, -.94, .18), left_arm=(-48, 6, -44),
+            left_leg=(-61, 0, -14), right_leg=(-13, 0, 19), left_knee=(79, 0, 0), right_knee=(99, 0, 0),
+            coat=(-74, 16, -26), hair=(-54, -7, 14)),
+        key(12, (-.022, 1.83, .04), hips=(31, 335, -8), head=(-7, 21, 6), right_arm=(-45, 5, 25),
+            right_elbow=(-12, 0, 0), aim=(.06, -.93, .36), left_arm=(-71, -8, -43),
+            left_leg=(-55, 0, -12), right_leg=(17, 0, 17), left_knee=(72, 0, 0), right_knee=(42, 0, 0),
+            coat=(-91, 26, 21)),
+        key(15, (-.032, .09, .106), hips=(35, 354, 6), head=(-16, 6, -3), right_arm=(-57, -11, 16),
+            right_elbow=(-18, 0, 0), aim=(.13, -.46, .88), left_arm=(-64, -7, -41),
+            left_leg=(-47, 0, -13), right_leg=(24, 0, 18), left_knee=(54, 0, 0), right_knee=(49, 0, 0),
+            coat=(-97, 27, 18), hair=(-59, -9, 11)),
+        key(16, (-.03, -.054, .089), hips=(38, 352, 7), head=(-20, 8, -4), right_arm=(-51, -8, 18),
+            right_elbow=(-21, 0, 0), aim=(.13, -.36, .93), left_arm=(-65, 3, -40),
+            left_leg=(-43, 0, -13), right_leg=(21, 0, 18), left_knee=(59, 0, 0), right_knee=(48, 0, 0),
+            coat=(-85, 23, 17)),
+        key(17, (-.028, -.165, .072), hips=(40, 350, 7), head=(-24, 10, -4), right_arm=(-46, -4, 19),
+            right_elbow=(-24, 0, 0), aim=(.12, -.31, .94), left_arm=(-66, 8, -39),
+            left_leg=(-40, 0, -13), right_leg=(19, 0, 17), left_knee=(61, 0, 0), right_knee=(47, 0, 0),
+            coat=(-78, 20, 16)),
+        key(21, (0, -.078, .02), hips=(17, 354, 4), right_arm=(-48, 17, 24),
+            right_elbow=(-48, 0, 0), aim=(.24, .43, .87), coat=(-49, 9, 8)),
+        key(26, (0, -.049, 0), hips=(3, 353, 0)),
     ],
     "evade": [
         key(1, (0, -.08, .037), hips=(25, -15, 9), left_arm=(-75, -3, -19), right_arm=(-32, 23, 31),
@@ -525,7 +598,7 @@ def actions_for(role):
     actions = dict({"warrior": WARRIOR, "mage": MAGE, "assassin": ASSASSIN}[role])
     run = run_loop(role)
     run[-1] = (21, run[0][1], run[0][2])
-    actions.update(idle=idle_loop(role), run=run, hit=impact_reaction(role))
+    actions.update(idle=idle_loop(role), lobby=lobby_loop(role), run=run, hit=impact_reaction(role))
     actions["eclipse"] = [(1, *actions["charge"][-1][1:]), *actions["eclipse"][1:]]
     # Keep the cloth behind the body as the hero accelerates.
     pitch_gain = {"warrior": .79, "mage": .59, "assassin": .68}[role]
