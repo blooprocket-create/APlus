@@ -39,6 +39,13 @@ function isSave(value: unknown, role: CharacterClassId): value is HearthmereSave
 
 function key(role: CharacterClassId): string { return `astral_hearthmere_v1_${role}`; }
 
+export function deleteHearthmereSave(role: CharacterClassId, storage?: Pick<Storage, 'removeItem'>): boolean {
+  try {
+    (storage ?? localStorage).removeItem(key(role));
+    return true;
+  } catch { return false; }
+}
+
 export function readHearthmereSave(role: CharacterClassId, storage?: HearthmereStorage): HearthmereSave | null {
   try {
     const parsed: unknown = JSON.parse((storage ?? localStorage).getItem(key(role)) ?? 'null');

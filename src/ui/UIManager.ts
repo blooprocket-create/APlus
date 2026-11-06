@@ -26,7 +26,7 @@ import {
 import { ActionId } from '../input/InputManager';
 import { PersistenceManager } from '../persistence/PersistenceManager';
 import { InMemoryStorageAdapter } from '../persistence/StorageAdapter';
-import { readHearthmereSave, type HearthmereSave } from '../persistence/HearthmereSave';
+import { deleteHearthmereSave, readHearthmereSave, type HearthmereSave } from '../persistence/HearthmereSave';
 import { HEARTHMERE_WAYSTATION } from '../game/HearthmereOpening';
 import {
   BasicRuneId,
@@ -160,6 +160,7 @@ export class UIManager {
                 <input id="opening-hero-name" class="input-field" minlength="2" maxlength="18" required value="${this.escapeHtml(name)}">`}
               <p id="opening-start-error" class="form-error" role="alert"></p>
               <button id="btn-hearthmere" class="btn-anime btn-primary journey-button" type="submit">${save ? 'Continue Hearthmere' : 'Start Hearthmere'} ${icon('arrow', 22)}</button>
+              ${save ? '<button id="btn-delete-save" class="btn-anime btn-danger" type="button">Delete save</button>' : ''}
             </form>
           </section>
         </main>
@@ -175,6 +176,22 @@ export class UIManager {
       audioButton.innerHTML = icon(muted ? 'mute' : 'sound', 19);
     });
     const selector = this.root.querySelector<HTMLSelectElement>('#hearthmere-hero')!;
+    const deleteButton = this.root.querySelector<HTMLButtonElement>('#btn-delete-save');
+    deleteButton?.addEventListener('click', () => {
+      this.openOverlay('Delete this save?', `<p>Permanently delete ${this.escapeHtml(name)}'s Hearthmere progress on this device, including the recovery backup? Other heroes are not affected. This cannot be undone.</p><p id="delete-save-error" class="form-error" role="alert"></p>`, [
+        { label: 'Keep save', action: () => this.closeOverlay() },
+        { label: 'Delete save', action: () => {
+          if (!deleteHearthmereSave(role)) {
+            this.root.querySelector('#delete-save-error')!.textContent = 'Deleting failed. Check browser storage, then try again. Your save has not been removed.';
+            return;
+          }
+          this.closeOverlay();
+          this.renderLobbyDOM();
+          this.root.querySelector<HTMLInputElement>('#opening-hero-name')?.focus();
+        } },
+      ]);
+      this.root.querySelector('[data-menu-action="1"]')?.classList.add('btn-danger');
+    });
     selector.addEventListener('change', () => {
       this.selectedHero = selector.value as CharacterClassId;
       this.engine.setPreviewCharacter(this.selectedHero);
@@ -193,11 +210,13 @@ export class UIManager {
       }
       button.disabled = true;
       selector.disabled = true;
+      if (deleteButton) deleteButton.disabled = true;
       error.textContent = '';
       try { await this.launchHearthmere(role, chosenName, save ?? undefined); }
       catch {
         button.disabled = false;
         selector.disabled = false;
+        if (deleteButton) deleteButton.disabled = false;
         error.textContent = 'Hearthmere could not start. Try again.';
       }
     });

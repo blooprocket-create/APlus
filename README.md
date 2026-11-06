@@ -48,6 +48,8 @@ On phones and tablets, use landscape, move with the left thumbstick, and tap the
 
 Each hero’s progress is saved in the current browser. Defeat returns you to the waystation and preserves the progress you secured. The same campaign opens for all three classes.
 
+To start over, choose the hero on the hero selection screen and select **Delete save**. Confirm to permanently remove that hero’s local progress and recovery backup; other heroes’ saves are unchanged. Select **Keep save** or press Escape to cancel.
+
 ## Verification
 
 The Vitest suite includes full campaign progression, puzzle answers, chapter revisit safety, branching route connectivity, ending choices, cinematic timing and cleanup, and boss reward idempotency. It also covers persistence and account isolation, quest progression, procedural generation, management systems, combat telegraphs, evasion, enrage timing, sanctuary regeneration, healing charges, pause ownership, defeat/revival, portal locks, expedition rewards, journey restoration, and asynchronous saves. Rendering is stubbed in gameplay integration tests; visual checks still require a browser.
