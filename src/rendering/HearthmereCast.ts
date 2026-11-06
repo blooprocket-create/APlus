@@ -89,10 +89,119 @@ export class HearthmereResident {
   }
 }
 
+function bridgeSpray(age: THREE.IUniform<number>): THREE.Group {
+  const effect = new THREE.Group();
+  effect.name = 'Colossus bridge spray';
+  const positions: number[] = [], coords: number[] = [], indices: number[] = [];
+  for (const side of [-1, 1]) {
+    for (let plume = 0; plume < 7; plume++) {
+      const base = positions.length / 3;
+      const x = (plume - 3) * .58 + side * .23;
+      const height = .86 + .95 * (1 - Math.abs(plume - 3) / 4);
+      for (let row = 0; row <= 14; row++) {
+        const t = row / 14;
+        const width = Math.sin(Math.PI * t) ** .63 * (.18 + (plume % 3) * .07);
+        const y = height * Math.sin(Math.PI * t * .84);
+        for (const rim of [-1, 1]) {
+          positions.push(x + (plume - 3) * t * .35 + rim * width,
+            y + rim * width * .52, side * (2.12 + t * (1.65 + (plume % 2) * .6)));
+          coords.push(t, (rim + 1) / 2);
+        }
+        if (row) {
+          const a = base + (row - 1) * 2;
+          indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+        }
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry()
+    .setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    .setAttribute('uv', new THREE.Float32BufferAttribute(coords, 2))
+    .setIndex(indices);
+  const material = new THREE.ShaderMaterial({
+    uniforms: { age },
+    side: THREE.DoubleSide, transparent: true, depthWrite: false,
+    vertexShader: `
+      uniform float age;
+      varying vec2 ribbon;
+      void main() {
+        ribbon = uv;
+        float lift = smoothstep(.018,.19,age);
+        float fall = smoothstep(.25,.66,age);
+        vec3 p = position;
+        p.y *= lift * (1.0 - fall * .78);
+        p.z = sign(p.z) * (2.12 + (abs(p.z) - 2.12) * (.36 + lift * .7 + fall * .38));
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float age;
+      varying vec2 ribbon;
+      void main() {
+        float reach = smoothstep(.018,.24,age);
+        float crest = smoothstep(.48,.86,ribbon.y);
+        float broken = sin(ribbon.x * 38.0 - age * 19.0) * .05;
+        float edge = smoothstep(.06,.31,ribbon.y) * (1.0 - smoothstep(.90,1.0,ribbon.y + broken));
+        float fade = (1.0 - smoothstep(.22,.67,age)) * (1.0 - smoothstep(reach - .18, reach, ribbon.x));
+        vec3 ink = mix(vec3(.06,.31,.41),vec3(.78,.97,.94),crest);
+        gl_FragColor = vec4(ink,fade * edge * .90);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const spray = new THREE.Mesh(geometry, material);
+  spray.frustumCulled = false;
+  effect.add(spray);
+
+  const origins: number[] = [], velocities: number[] = [];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 30; i++) {
+      const x = Math.sin(i * 13.91 + side) * 2.12;
+      origins.push(x, .02, side * 2.19);
+      velocities.push(Math.cos(i * 3.8) * 1.9, 3.5 + (i % 8) * .61, side * (2.0 + (i % 5) * .73));
+    }
+  }
+  const droplets = new THREE.Points(new THREE.BufferGeometry()
+    .setAttribute('position', new THREE.Float32BufferAttribute(origins, 3))
+    .setAttribute('velocity', new THREE.Float32BufferAttribute(velocities, 3)), new THREE.ShaderMaterial({
+    uniforms: { age }, transparent: true, depthWrite: false,
+    vertexShader: `
+      uniform float age;
+      attribute vec3 velocity;
+      varying float alpha;
+      void main() {
+        float t = age - .026 - fract(velocity.x * 4.13) * .07;
+        vec3 p = position + velocity * max(0.0,t);
+        p.y -= 14.7 * t * t;
+        alpha = step(0.0,t) * smoothstep(.0,.18,p.y) * (1.0 - smoothstep(.24,.50,t));
+        vec4 view = modelViewMatrix * vec4(p,1.0);
+        gl_Position = projectionMatrix * view;
+        gl_PointSize = clamp((95.0 + velocity.y * 12.0) / max(1.0, -view.z), 2.0, 8.0);
+      }
+    `,
+    fragmentShader: `
+      varying float alpha;
+      void main() {
+        vec2 uv = gl_PointCoord * 2.0 - 1.0;
+        float drop = 1.0 - smoothstep(.52,.96,abs(uv.x + uv.y * .32) * 1.36 + abs(uv.y) * .66);
+        gl_FragColor = vec4(.65,.88,.90,drop * alpha * .83);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  }));
+  droplets.frustumCulled = false;
+  effect.add(droplets);
+  return effect;
+}
+
 export class HearthmereImpact {
   readonly root = new THREE.Group();
+  readonly wake = { value: new THREE.Vector3(0, 0, -1) };
   private readonly material: THREE.ShaderMaterial;
   private readonly front = new THREE.Group();
+  private readonly spray: THREE.Group;
   private readonly ink = new THREE.MeshBasicMaterial({
     color: 0x554047, transparent: true, side: THREE.DoubleSide, depthWrite: false,
   });
@@ -156,7 +265,9 @@ export class HearthmereImpact {
     });
     const particles = new THREE.Points(geometry, this.material);
     particles.frustumCulled = false;
-    this.root.add(particles, this.front);
+    this.spray = bridgeSpray(this.material.uniforms.age);
+    this.root.name = 'Colossus bridge impact';
+    this.root.add(particles, this.front, this.spray);
     for (const [layer, material] of [this.ink, this.flare].entries()) {
       const positions: number[] = [];
       for (let i = 0; i < 20; i++) {
@@ -177,8 +288,10 @@ export class HearthmereImpact {
     this.root.visible = false;
   }
 
-  release(x: number, z: number): void {
+  release(x: number, z: number, bridgeZ: number): void {
     this.root.position.set(x, 0.07, z);
+    this.spray.position.set(0, -.43, bridgeZ - z);
+    this.wake.value.set(x, bridgeZ, 0);
     this.material.uniforms.age.value = 0;
     this.front.scale.set(.44, 1, .36);
     this.ink.opacity = .94;
@@ -186,7 +299,16 @@ export class HearthmereImpact {
     this.root.visible = true;
   }
 
+  reset(): void {
+    this.root.visible = false;
+    this.wake.value.z = -1;
+  }
+
   update(dt: number): void {
+    if (this.wake.value.z >= 0) {
+      this.wake.value.z += dt;
+      if (this.wake.value.z > 1.08) this.wake.value.z = -1;
+    }
     if (!this.root.visible) return;
     const age = this.material.uniforms.age.value += dt;
     const shock = THREE.MathUtils.smoothstep(age, 0, .37);

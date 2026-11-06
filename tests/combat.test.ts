@@ -300,8 +300,12 @@ describe('gameplay integration', () => {
     expect(contact.x).toBeCloseTo(16.5, 1);
     expect(contact.z).toBeCloseTo(4, 1);
     expect(contact.y).toBeLessThan(1.5);
+    const impact = opening.group.getObjectByName('Colossus bridge impact')!;
+    expect(impact.position.x).toBeCloseTo(contact.x, 1);
+    expect(impact.position.z).toBeCloseTo(contact.z, 1);
     expect(opening.updateReveal(.25)).toBe(false);
     opening.resetEncounter();
+    expect(impact.visible).toBe(false);
     expect(opening.update(.95, { x: 16, z: 5 })).toMatchObject({ tell: true, strike: false, hit: false });
     expect(opening.update(.30, { x: 16, z: 5 })).toMatchObject({ tell: false, strike: true, hit: true });
     expect(opening.update(.30, { x: 16, z: 5 })).toMatchObject({ tell: false, strike: false, hit: false });

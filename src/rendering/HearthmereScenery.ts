@@ -471,6 +471,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     uniforms: {
       time,
       wakes: motion.wakes,
+      bridgeWake: { value: new THREE.Vector3(0, 0, -1) },
       deep: { value: new THREE.Color(0x254f71) },
       channel: { value: new THREE.Color(0x4386a0) },
       shallows: { value: new THREE.Color(0x80b7a2) },
@@ -487,6 +488,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
       varying vec2 vUv;
       uniform float time;
       uniform vec4 wakes[${RIVER_WAKES}];
+      uniform vec3 bridgeWake;
       uniform vec3 deep;
       uniform vec3 channel;
       uniform vec3 shallows;
@@ -543,6 +545,17 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
           footprint = max(footprint, (arc + echo * .37) * tail * wake.w);
         }
         color = mix(color, glint, min(1.0, footprint * .97));
+        if (bridgeWake.z >= 0.0) {
+          vec2 distanceFromStrike = world - bridgeWake.xy;
+          float age = bridgeWake.z;
+          float distance = length(distanceFromStrike * vec2(.87, 1.0));
+          float crest = 1.35 + 7.6 * age;
+          float breakup = sin(distanceFromStrike.x * 3.4 + distanceFromStrike.y * 1.9) * .13;
+          float front = 1.0 - smoothstep(.06,.29,abs(distance - crest + breakup));
+          float echo = 1.0 - smoothstep(.04,.19,abs(distance - crest + .68 + breakup));
+          float tail = 1.0 - smoothstep(.27,1.08,age);
+          color = mix(color, glint, min(1.0,(front + echo * .40) * tail * .91));
+        }
         float deckShade = 1.0 - smoothstep(1.3, 3.1, abs(riverZ - 4.4 + .35 * vUv.x));
         color *= 1.0 - deckShade * .41;
         gl_FragColor = vec4(color, 1.0);

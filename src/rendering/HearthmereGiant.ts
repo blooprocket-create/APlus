@@ -211,6 +211,10 @@ export class HearthmereGiant {
     this.pose(0);
   }
 
+  strikeContact(): THREE.Vector3 {
+    return this.root.localToWorld(CONTACT.clone());
+  }
+
   pose(dt: number, windup?: number, recovery = 0): void {
     this.clock += dt;
     const loaded = windup === undefined ? 0 : ease(windup, 0, .76);

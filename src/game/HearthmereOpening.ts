@@ -144,6 +144,7 @@ export class HearthmereOpening {
     const scenery = buildHearthmereScenery(this.group, BUILDINGS);
     this.sceneryCollision = scenery;
     this.river = scenery.river;
+    this.river.uniforms.bridgeWake = this.impact.wake;
     this.setSceneryFocus = scenery.setFocus;
     box(this.group, ember, 1.1, 0.45, 0.65, -8.5, 0.4, 7.5);
     const well = piece(this.group, loft([[0, 0.84, 0.84], [0.16, 0.89, 0.89], [0.72, 0.79, 0.79], [0.81, 0.84, 0.84]], 10, true),
@@ -303,7 +304,7 @@ export class HearthmereOpening {
     this.craneBeam.position.y = this.damaged.visible ? 4.55 : 5.5;
     this.revealImpact = phase === 'impact' ? 0 : null;
     this.giant.pose(0, phase === 'impact' ? 0 : undefined);
-    this.impact.root.visible = false;
+    this.impact.reset();
   }
 
   updateReveal(dt: number): boolean {
@@ -317,7 +318,7 @@ export class HearthmereOpening {
     const hit = before < REVEAL_CONTACT && this.revealImpact >= REVEAL_CONTACT;
     if (hit) {
       this.damaged.visible = true;
-      this.impact.release(16.5, BRIDGE_Z);
+      this.releaseBridgeImpact();
     }
     const collapse = THREE.MathUtils.smoothstep(this.revealImpact, REVEAL_CONTACT, REVEAL_CONTACT + .31);
     this.craneBeam.rotation.z = -.58 * collapse;
@@ -328,7 +329,7 @@ export class HearthmereOpening {
   resetEncounter(): void {
     this.strikeTime = 0;
     this.line = null;
-    this.impact.root.visible = false;
+    this.impact.reset();
     this.refresh();
   }
   get objective(): OpeningObjective {
@@ -487,7 +488,7 @@ export class HearthmereOpening {
       this.giant.pose(dt, this.strikeTime / STRIKE_WINDUP, (this.strikeTime - STRIKE_WINDUP) / STRIKE_RECOVERY);
       result.tell = before === 0;
       result.strike = before < STRIKE_WINDUP && !windup;
-      if (result.strike) this.impact.release(16.5, BRIDGE_Z);
+      if (result.strike) this.releaseBridgeImpact();
       result.hit = result.strike && player.x > ATTACK_START && player.x < ATTACK_END && Math.abs(player.z - BRIDGE_Z) <= 2;
       if (this.strikeTime >= STRIKE_PERIOD) this.strikeTime = 0;
     } else {
@@ -520,6 +521,11 @@ export class HearthmereOpening {
       this.mara.update(dt, walking);
     }
     return result;
+  }
+
+  private releaseBridgeImpact(): void {
+    const contact = this.giant.strikeContact();
+    this.impact.release(contact.x, contact.z, BRIDGE_Z);
   }
 
   private refresh(): void {
