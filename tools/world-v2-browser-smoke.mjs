@@ -157,6 +157,18 @@ async function main() {
       "((document.querySelector('#status')?.textContent ?? '').match(/Cell: (-?\\d+), (-?\\d+)/)?.[1] === '-1')"
     ), 'World V2 lab moved into negative-X neighbor cell', 10000);
     const labStatus = await cdp.eval("document.querySelector('#status')?.textContent?.trim()");
+    if (!labStatus.includes('baked preview tiles: 81') || !labStatus.includes('failures: 0')) {
+      throw new Error('Lab did not use the compiled atlas cleanly: ' + labStatus);
+    }
+    const assetTraffic = await cdp.eval(`({
+      atlas: performance.getEntriesByType('resource')
+        .some(entry => entry.name.includes('/world-v2/preview/atlas-index.json')),
+      cellCount: performance.getEntriesByType('resource')
+        .filter(entry => entry.name.includes('/world-v2/preview/cells/0/')).length,
+    })`);
+    if (!assetTraffic.atlas || assetTraffic.cellCount < 1) {
+      throw new Error('Lab did not fetch precompiled world artifacts: ' + JSON.stringify(assetTraffic));
+    }
     const labShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     writeFileSync(path.join(screenshots, 'world-v2-lab.png'), Buffer.from(labShot.data, 'base64'));
     console.log('World V2 lab browser smoke passed:', labStatus);
