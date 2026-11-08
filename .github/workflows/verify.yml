@@ -19,3 +19,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Inventory World V2 legacy imports
+        run: |
+          npm run audit:world
+          npm run audit:world -- --json > world-v2-dependencies.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: world-v2-dependencies
+          path: world-v2-dependencies.json
+          if-no-files-found: ignore
