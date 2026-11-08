@@ -12,10 +12,7 @@ import { getViewportProfile, toggleGameFullscreen } from '../platform/Viewport';
 import { icon, CLASS_ICONS } from './icons';
 import { drawMinimap } from './Minimap';
 import { GameEngine, HudTelemetry, ExpeditionReport } from '../game/GameEngine';
-import {
-  CANONICAL_HERO_NAMES,
-  getCompanionClassesForPlayer,
-} from '../game/QuestEngine';
+import { CANONICAL_HERO_NAMES, getCompanionClassesForPlayer } from '../game/CompanionRoster';
 import {
   COMPANION_STANCE_INFO,
   ensureCompanionConfigs,

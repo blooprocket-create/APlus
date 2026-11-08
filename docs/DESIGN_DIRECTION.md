@@ -172,10 +172,25 @@ When the interview is complete, consolidate the decisions into an implementation
 | D152 | "Use a dedicated utility button that stays available during exploration." | The mobile HUD provides a dedicated button for the selected hero's utility throughout exploration. Exact button placement, targeting, and availability feedback remain open. |
 | D153 | "lets keep it the iso camera we had." | Use the prototype's original isometric follow camera and movement for gameplay. The moat scene uses its authored shots, and boss lock-on assists targeting. This supersedes D11 and D143. |
 | D154 | "the game should look like an anime" | Use smooth sculpted silhouettes, shaped eyes and hair, deliberate cel shadows, ink contours, and painted scenery. Review how those details read at gameplay zoom and in close cinematic shots. |
+| D155 | "that procedural underlying architecture needs to be rewritten" / "Let's make the world primarily procedural" | Replace route-first geography with procedural-first open-world generation. Preserve fixed story destinations as constraints; roads are features, not walkable boundaries. |
+| D156 | "Let's use one canonical procedurally generated world shared by all Astral Chronicles playthroughs." | Publish consistent world geography and seed across player saves. Save-specific consequences do not reroll terrain. |
+| D157 | "Let's build Astral Chronicles with multiple continents and islands." | Design one world atlas with several landmasses and archipelagos. Exact geography and extent remain open. |
+| D158 | "Let's make Astral Chronicles' oceans fully explorable" | Oceans are navigable world space, not solely loading transitions. |
+| D159 | "with player-controlled ships and optional fast travel" | Ship travel is directly controlled; fast travel supplements physical exploration rather than replacing it. |
+| D160 | "Let's make ... ship handling responsive and action-RPG-style." | Fast, accessible steering and acceleration with believable weight; mandatory sailing simulation is not the selected direction. |
+| D161 | "Let's keep ... ship camera isometric, with a wider view when sailing." | Retain the original isometric camera language, expanding visible area on ships; supersedes the suggested third-person chase camera. |
+| D162 | "Let's allow ships to land anywhere physically accessible ... coastlines." | Landing is validated by terrain, depth and clearance, not restricted to designated docks or markers. |
+| D163 | "Let's make ... ships persistent, with recovery services at ports and shipyards." | Ship identities and positions survive absence, saves and fast travel; port/shipyard recovery is available. Fees and implementation remain open. |
+| D164 | "we can disrupt hearthmere structurally. as long as the assets and quests continue to work. they dont have to be in the same place" | Rebuild and relocate Hearthmere terrain, town structures, quest staging and cinematic shots as needed. Preserve asset/quest functionality and narrative continuity, not original coordinates. |
+| D165 | "dont worry about migrating saves" | World V2 does **not** need to migrate saves from the older Hearthmere/prototype build. Preserve quest/asset functionality, not old player progress or coordinates. Start the replacement world with a clean, versioned save namespace; do not delete existing browser saves as an unintended side effect. |
 
 D05 and D06 apply across story, characters, environments, combat, bosses, audio, and cinematics. Treat them as requirements when reviewing the existing story treatment. The current prototype's visuals, camera, and cutscene techniques do not determine the replacement game's quality ceiling or creative direction.
 
 Beautiful cinematics and anime spectacle are desired outcomes, not already verified capabilities. Concrete criteria will follow from the reference and presentation decisions below.
+
+## World Architecture V2 — confirmed direction (November 8, 2026)
+
+D155–D165 govern the new geography, ocean traversal and Hearthmere re-staging. D165 explicitly removes *legacy save migration* as a prerequisite for the world rebuild; versioned saving for **new World V2 progress** remains required. The technical proposal and phase gates are in [WORLD_V2_ARCHITECTURE.md](WORLD_V2_ARCHITECTURE.md); the source/code and preservation audit is in [WORLD_V2_PHASE0_AUDIT.md](WORLD_V2_PHASE0_AUDIT.md). All unselected parameters (landmass counts, generator algorithms, cell sizes, ship economics and exact Hearthmere layout) remain proposals, not additional confirmed decisions. These choices supersede conflicting prototype route and fixed-geometry assumptions while keeping D01, D24, D28, D31, D46–D49 and D153 intact.
 
 ## Proposals awaiting confirmation
 

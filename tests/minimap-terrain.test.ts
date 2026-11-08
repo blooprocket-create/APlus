@@ -25,9 +25,11 @@ function setup() {
   scene.add(environment, actor, light);
   const getRenderTarget = vi.fn(() => null);
   const setRenderTarget = vi.fn();
+  let expectedWorldRoot: THREE.Object3D = environment;
   const render = vi.fn((_scene: THREE.Scene, _camera: THREE.Camera) => {
     expect(actor.visible).toBe(false);
-    expect(environment.visible).toBe(true);
+    expect(expectedWorldRoot.visible).toBe(true);
+    expect(scene.children.filter(child => child.visible && !(child instanceof THREE.Light))).toEqual([expectedWorldRoot]);
     expect(light.visible).toBe(true);
     expect(scene.fog).not.toBeNull();
     expect((scene.fog as THREE.Fog).far).toBe(100000);
@@ -41,7 +43,8 @@ function setup() {
     shadowMap: { autoUpdate: true },
     getRenderTarget, setRenderTarget, render, readRenderTargetPixels,
   } as unknown as THREE.WebGLRenderer;
-  return { scene, fog, actor, light, environment, context, image, renderer, render, setRenderTarget };
+  return { scene, fog, actor, light, environment, context, image, renderer, render, setRenderTarget,
+    expectWorldRoot: (root: THREE.Object3D) => { expectedWorldRoot = root; } };
 }
 
 describe('top-down world capture', () => {
@@ -75,6 +78,7 @@ describe('top-down world capture', () => {
     expect(t.render).toHaveBeenCalledTimes(2);
     const secondZone = new THREE.Group();
     t.scene.add(secondZone);
+    t.expectWorldRoot(secondZone);
     expect(capture.snapshot(secondZone)).toBeUndefined();
     capture.update(t.renderer, t.scene, secondZone, { x: 12, z: 4 }, 1650);
     expect(t.render).toHaveBeenCalledTimes(3);

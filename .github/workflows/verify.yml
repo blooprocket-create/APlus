@@ -1,0 +1,39 @@
+name: Verify gameplay baseline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Chrome Hearthmere entrypoint smoke
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hearthmere-browser-smoke
+          path: test-artifacts/browser-smoke/*.png
+          if-no-files-found: ignore
+      - name: Inventory World V2 legacy imports
+        run: |
+          npm run audit:world
+          npm run audit:world -- --json > world-v2-dependencies.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: world-v2-dependencies
+          path: world-v2-dependencies.json
+          if-no-files-found: ignore
