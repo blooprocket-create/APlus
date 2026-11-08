@@ -4,7 +4,8 @@ import {
   CANONICAL_HERO_NAMES as legacyHeroNames,
   getCompanionClassesForPlayer as legacyCompanionClasses,
 } from '../src/game/QuestEngine';
-import { OPENING_LEADS, OPENING_STEPS } from '../src/game/HearthmereOpening';
+import { OPENING_LEADS } from '../src/game/HearthmereOpening';
+import { OPENING_STEPS } from '../src/game/HearthmereStory';
 
 describe('World V2 phase-0 preservation contracts', () => {
   it('keeps the three canonical roles independent of prototype quest definitions', () => {
