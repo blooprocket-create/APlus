@@ -1,4 +1,5 @@
 import { CharacterClassId, ZoneId } from '../types/game';
+import { CANONICAL_HERO_NAMES, getCompanionClassesForPlayer } from './CompanionRoster';
 import {
   CharacterQuestState,
   CompanionBanterLine,
@@ -9,29 +10,7 @@ import {
 export const PROTOTYPE_QUEST_ID = 'quest_riftscar_cycle';
 export const PROTOTYPE_QUEST_TITLE = 'Chronicles of the Eclipse Triad';
 
-export const CANONICAL_HERO_NAMES: Record<CharacterClassId, string> = {
-  warrior: 'Brynhildr',
-  mage: 'Celestia',
-  assassin: 'Akatsuki',
-};
-
-/**
- * Returns the two companion classes that accompany the player based on the player's chosen class.
- * - Pick Assassin -> Warrior + Mage are your companions
- * - Pick Mage     -> Warrior + Assassin are your companions
- * - Pick Warrior  -> Mage + Assassin are your companions
- */
-export function getCompanionClassesForPlayer(
-  playerClassId: CharacterClassId
-): [CharacterClassId, CharacterClassId] {
-  if (playerClassId === 'assassin') {
-    return ['warrior', 'mage'];
-  }
-  if (playerClassId === 'mage') {
-    return ['warrior', 'assassin'];
-  }
-  return ['mage', 'assassin'];
-}
+export { CANONICAL_HERO_NAMES, getCompanionClassesForPlayer } from './CompanionRoster';
 
 export function createDefaultQuestState(): CharacterQuestState {
   return {
