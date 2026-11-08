@@ -1,5 +1,4 @@
 import type { WorldAtlasManifest, StoryAnchorDeclaration } from './WorldAtlas';
-import { deriveSeed } from './WorldIdentity';
 
 /**
  * Phase 2 analytic geography prototype. Everything is a pure world-space
