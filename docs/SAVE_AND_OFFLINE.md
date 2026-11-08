@@ -32,6 +32,14 @@ Make downloaded game content playable without a continuous connection. Decide wh
 
 Generated speech or expressive vocalizations are accepted, but live generation is not required. Package or otherwise make required vocal presence and music available for offline content. Do not design every story scene around an unavoidable live synthesis call.
 
+## World V2 saving and geography compatibility (2026-11-08)
+
+The approved World V2 design uses **one canonical procedural atlas** across player saves, with multiple continents and islands, navigable ocean, and player-owned ships that remain at their world locations until moved or recovered through a port/shipyard. Save data must therefore distinguish **canonical world identity/version** from **player-specific changes** (quests, discovered items, unique actors, and ship locations).
+
+Hearthmere's geographical layout and coordinates are **explicitly allowed to change** as long as assets and quest/story function, character progress and recovery remain intact. The current `HearthmereSave` v1 schema stores raw X/Z positions for the player, moving group and enemies; V2 needs a tested **semantic story-anchor migration** that remaps these values safely without deleting the `current`/`previous` backup envelope prematurely. This is an engineering requirement, not a claim that migration exists.
+
+The normative technical proposal and current risk inventory are [World V2](WORLD_V2_ARCHITECTURE.md) and [Phase 0](WORLD_V2_PHASE0_AUDIT.md). Ship ownership schemas, cloud synchronization rules, recovery fees and offline world-download strategies remain undecided.
+
 ## Recovery and synchronization work still needed
 
 Specify local guest-to-account association, save versioning/migration, recovery triggers, backup retention, and conflict resolution when more than one device advances a hero offline. A proposed validation criterion is that reconnecting must not silently discard a newer timeline or merge incompatible story decisions. The actual resolution policy remains to be designed.
