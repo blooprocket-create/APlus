@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OPENING_STEPS, type OpeningStep, type OpeningPoint } from './HearthmereStory';
 import type { CharacterClassId } from '../types/game';
 import { buildHearthmereScenery } from '../rendering/HearthmereScenery';
 import { HearthmereImpact, HearthmereResident } from '../rendering/HearthmereCast';
@@ -29,12 +30,8 @@ const BUILDINGS = [
   { x: 32, z: 10.5, w: 4, d: 3.4, refuge: true as const },
 ];
 
-export const OPENING_STEPS = [
-  'arrival', 'market', 'mara', 'rowan', 'cart_test', 'shipment',
-  'square', 'yard_gate', 'load_cart', 'far_hold', 'escort', 'refuge', 'complete',
-] as const;
-export type OpeningStep = typeof OPENING_STEPS[number];
-export interface OpeningPoint { x: number; z: number }
+export { OPENING_STEPS } from './HearthmereStory';
+export type { OpeningStep, OpeningPoint } from './HearthmereStory';
 export interface OpeningObjective {
   beat: number;
   title: string;
