@@ -36,12 +36,12 @@ Generated speech or expressive vocalizations are accepted, but live generation i
 
 The approved World V2 design uses **one canonical procedural atlas** across player saves, with multiple continents and islands, navigable ocean, and player-owned ships that remain at their world locations until moved or recovered through a port/shipyard. Save data must therefore distinguish **canonical world identity/version** from **player-specific changes** (quests, discovered items, unique actors, and ship locations).
 
-Hearthmere's geographical layout and coordinates are **explicitly allowed to change** as long as assets and quest/story function, character progress and recovery remain intact. The current `HearthmereSave` v1 schema stores raw X/Z positions for the player, moving group and enemies; V2 needs a tested **semantic story-anchor migration** that remaps these values safely without deleting the `current`/`previous` backup envelope prematurely. This is an engineering requirement, not a claim that migration exists.
+Hearthmere's geographical layout and coordinates are **explicitly allowed to change**, retaining assets, quest/story function and new-world progression semantics. **D165 waives migration of old Hearthmere/prototype saves.** The existing `HearthmereSave` v1 schema stores raw X/Z positions but does not need to be converted. World V2 should introduce a distinct, versioned save namespace with fresh save/resume and recovery behavior. Existing v1 keys should not be deleted as an accidental side effect; they are not used for starting the new world.
 
 The normative technical proposal and current risk inventory are [World V2](WORLD_V2_ARCHITECTURE.md) and [Phase 0](WORLD_V2_PHASE0_AUDIT.md). Ship ownership schemas, cloud synchronization rules, recovery fees and offline world-download strategies remain undecided.
 
 ## Recovery and synchronization work still needed
 
-Specify local guest-to-account association, save versioning/migration, recovery triggers, backup retention, and conflict resolution when more than one device advances a hero offline. A proposed validation criterion is that reconnecting must not silently discard a newer timeline or merge incompatible story decisions. The actual resolution policy remains to be designed.
+Specify local guest-to-account association, **new World V2 save versioning** (not prototype migration), recovery triggers, backup retention, and conflict resolution when more than one device advances a hero offline. A proposed validation criterion is that reconnecting must not silently discard a newer timeline or merge incompatible story decisions. The actual resolution policy remains to be designed.
 
 Validate normal quitting, abrupt interruptions, stale versions, interrupted writes, downloads, reconnection, and recovery on physical target devices. No technical provider, persistence library, authentication product, or network architecture is selected by this brief.
