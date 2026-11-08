@@ -141,6 +141,25 @@ async function main() {
       }
       console.log('Browser smoke passed:', JSON.stringify(status));
     }
+    // Phase 1: verify the separate lab actually renders and crosses a cell
+    // boundary, not merely that a TypeScript heightfield unit test passes.
+    await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-lab.html' });
+    await poll(async () => await cdp.eval(
+      "document.querySelector('#status')?.textContent?.includes('Resident cells:')"
+    ), 'World V2 streaming lab rendered status', 30000);
+    await poll(async () => await cdp.eval(
+      "Number((document.querySelector('#status')?.textContent ?? '').match(/Resident cells: (\\d+)/)?.[1] ?? 0) > 0"
+    ), 'World V2 lab loaded its first cell', 30000);
+    await cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65 });
+    await delay(1400);
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65 });
+    await poll(async () => await cdp.eval(
+      "((document.querySelector('#status')?.textContent ?? '').match(/Cell: (-?\\d+), (-?\\d+)/)?.[1] === '-1')"
+    ), 'World V2 lab moved into negative-X neighbor cell', 10000);
+    const labStatus = await cdp.eval("document.querySelector('#status')?.textContent?.trim()");
+    const labShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(path.join(screenshots, 'world-v2-lab.png'), Buffer.from(labShot.data, 'base64'));
+    console.log('World V2 lab browser smoke passed:', labStatus);
     if (cdp.exceptions.length) throw new Error('Browser exceptions: ' + JSON.stringify(cdp.exceptions));
     console.log('Phase 0 Chrome smoke: 3/3 heroes entered the actual playable HUD; screenshots saved.');
     ws.close();
