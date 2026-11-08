@@ -1285,7 +1285,8 @@ export class UIManager {
     this.hudRefs.stepRuins.classList.toggle('active', t.zoneId === 'sunken_ruins');
     this.hudRefs.stepSanctum.classList.toggle('active', t.zoneId === 'abyssal_sanctum');
 
-    if (t.map.path.length > 0) {
+    // Route progress is gameplay telemetry; it is not derived from mini-map drawing data.
+    if (t.pathSeed !== null) {
       this.hudRefs.pathProgressWrap.style.display = 'block';
       this.hudRefs.pathProgressFill.style.width = `${Math.round(t.pathProgress * 100)}%`;
     } else {

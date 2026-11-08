@@ -4,7 +4,7 @@ import { dressGuardian } from '../rendering/GuardianRegalia';
 import { BossFinisher } from '../rendering/BossFinisher';
 import { FinisherFrame } from './FinisherTimeline';
 import { MoatSlice, SLICE_CAMP, SliceActors } from './MoatSlice';
-import { HearthmereOpening, HEARTHMERE_COVER, HEARTHMERE_REFUGE, HEARTHMERE_WAYSTATION, OPENING_PATH } from './HearthmereOpening';
+import { HearthmereOpening, HEARTHMERE_COVER, HEARTHMERE_REFUGE, HEARTHMERE_WAYSTATION } from './HearthmereOpening';
 import { type HearthmereSave, writeHearthmereSave } from '../persistence/HearthmereSave';
 import { heroSyllables, type HeroExpression, type HeroSyllable } from './HeroSpeech';
 import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
@@ -25,6 +25,7 @@ import { CharacterAnimationState, CharacterRig } from '../rendering/CharacterMes
 import { heroAttackAdvance, heroAttackRetreat, heroReleaseProgress } from '../rendering/HeroMotion';
 import { buildEnemyMesh, EnemyKind, EnemyMeshBundle } from '../rendering/EnemyMeshBuilder';
 import { EnvironmentBuilder, SAFE_ZONE_RADIUS } from '../rendering/EnvironmentBuilder';
+import { MinimapTerrainCapture } from '../rendering/MinimapTerrainCapture';
 import { buildDeathmark } from '../rendering/Deathmark';
 import { buildGravitySingularity } from '../rendering/GravitySingularity';
 import { IsometricCameraController } from '../rendering/IsometricCamera';
@@ -237,6 +238,7 @@ export class GameEngine {
   private scene: THREE.Scene;
   private cameraController: IsometricCameraController;
   private environment: EnvironmentBuilder;
+  private minimapTerrain: MinimapTerrainCapture | null = null;
   private vfx: VfxSystem;
   public readonly input: InputManager;
   private persistence: PersistenceManager;
@@ -598,6 +600,11 @@ export class GameEngine {
     this.cameraController = new IsometricCameraController();
     this.environment = new EnvironmentBuilder();
     this.environment.buildPreviewScene(this.scene);
+    // Gameplay tests use a headless document with no createElement. The minimap
+    // remains a presentation feature and must not be required for simulation.
+    if (typeof document.createElement === 'function') {
+      try { this.minimapTerrain = new MinimapTerrainCapture(); } catch { /* Fall back to plain HUD markers. */ }
+    }
 
     this.vfx = new VfxSystem(this.scene, damageLayer);
     this.input = new InputManager();
@@ -1856,6 +1863,9 @@ export class GameEngine {
     this.vfx.update(this.isPaused ? 0 : dt, this.cameraController.camera);
     this.opening?.setSceneryFocus(this.cameraController.camera,
       this.mode === 'playing' && !this.pauseReasons.has('cutscene') ? this.playerPos : null);
+    if (this.mode === 'playing' && !this.isPaused && document.visibilityState !== 'hidden') {
+      this.minimapTerrain?.update(this.renderer, this.scene, this.environment.minimapWorldRoot, this.playerPos, now);
+    }
     this.renderer.render(this.scene, this.cameraController.camera);
 
     requestAnimationFrame(this.loop);
@@ -4012,8 +4022,7 @@ export class GameEngine {
         enemies: this.enemies.filter(e => e.bundle.root.position.distanceTo(this.playerPos) < 28).map(e => ({ x: e.bundle.root.position.x, z: e.bundle.root.position.z, boss: e.kind === 'boss_knight' })),
         portals: this.activePortals.map(p => p.position),
         npcs: this.opening ? [this.opening.objective.target] : [...this.activeNpcs.map(n => n.position), ...this.chronicleSites.filter(site => site.kind !== 'field' && !ensureCampaign(char).discoveries.includes(site.id) && (site.kind === 'echo' || site.objectiveIndex === ensureCampaign(char).objectiveIndex)).map(site => site.position), ...(field ? [fieldTarget(field, ensureCampaign(char).fieldProgress![field.id], this.playerPos, this.fieldThreats())] : [])],
-        path: this.opening ? OPENING_PATH : this.currentPathLayout?.waypoints ?? [],
-        connections: this.currentPathLayout?.connections,
+        terrain: this.minimapTerrain?.snapshot(this.environment.minimapWorldRoot),
       },
       boss: boss ? { name: boss.name, hp: boss.hp, maxHp: boss.maxHp, enraged: boss.enraged } : null,
       flaskCharges: this.flaskCharges,
