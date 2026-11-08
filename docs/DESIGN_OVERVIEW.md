@@ -16,9 +16,9 @@ Minimum **60 fps on iPhone 14 Pro** is a requirement to verify on physical hardw
 
 ## World Architecture V2 — confirmed direction
 
-The latest decisions (D155–D164) establish **procedural-first geographical generation, one canonical shared world, multiple continents/islands, fully explorable oceans, player-controlled ships with accessible action-RPG handling, optional fast travel, a wider isometric sailing camera, physically accessible free landings, and persistent ships with port/shipyard recovery**. Major story locations remain fixed in the published world, but **Hearthmere's current town layout and source coordinates may be completely rebuilt** if its working assets, quests, story outcomes, saves and cinematic functionality are preserved.
+The latest decisions (D155–D165) establish **procedural-first geographical generation, one canonical shared world, multiple continents/islands, fully explorable oceans, player-controlled ships with accessible action-RPG handling, optional fast travel, a wider isometric sailing camera, physically accessible free landings, and persistent ships with port/shipyard recovery**. Major story locations remain fixed in the published world, but **Hearthmere's current town layout and source coordinates may be completely rebuilt** if its working assets, quests, story outcomes and cinematic functionality are preserved. Legacy saves need not migrate (D165); World V2 gets a fresh save namespace.
 
-The implementation authority is [World Architecture V2](WORLD_V2_ARCHITECTURE.md). The [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) distinguishes current active Hearthmere code from old, still-reachable prototype systems and lists the migration gates. Proposed terrain, streaming, save, ship and world-builder interfaces are **not yet implemented**; exact landmass geography and scale remain undecided.
+The implementation authority is [World Architecture V2](WORLD_V2_ARCHITECTURE.md). The [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) distinguishes current active Hearthmere code from old, still-reachable prototype systems and lists the legacy-retirement and new-world save gates. Proposed terrain, streaming, save, ship and world-builder interfaces are **not yet implemented**; exact landmass geography and scale remain undecided.
 
 ## Emotional and narrative identity
 
@@ -172,6 +172,6 @@ The user's latest explicit direction governs. [The decision record](DESIGN_DIREC
 | [Narrative and cinematics](NARRATIVE_PRESENTATION.md) | Emotional direction, branching requirements, visual performance, vocals, music, and scene pacing. |
 | [Saving and offline](SAVE_AND_OFFLINE.md) | Guest/cloud saves, evolving timelines, recovery, offline content, and unresolved synchronization. |
 | [World Architecture V2](WORLD_V2_ARCHITECTURE.md) | Approved world/maritime direction, proposed contracts, phase gates and quality requirements. |
-| [World V2 Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) | Actual entrypoint, source classification, preservation/migration risks and verification checklist. |
+| [World V2 Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) | Actual entrypoint, source classification, preservation/legacy risks and verification checklist. |
 
 Hearthmere is the sole player-facing campaign. It runs through the refuge, with a local resume per hero. The Hearthmere Outskirts prototype serves as an internal reference for the connected road fight and moat puzzle. The lead-in needs pacing development, and art, vocal performances, and device targets still need production validation. The production roadmap sequences the remaining campaign and delivery work.
