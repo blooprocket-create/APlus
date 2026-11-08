@@ -744,8 +744,12 @@ export class GameEngine {
     this.comboStep = 0;
     this.input.resetAll();
     this.activeCharacter = structuredClone(character);
-    ensureCampaign(this.activeCharacter);
-    this.activeCharacter.questState = normalizeQuestState(this.activeCharacter.questState);
+    // Hearthmere and the internal moat slice do not use the retired Long Dawn
+    // campaign or Riftscar quest state. Keep normalization in legacy entrypoints.
+    if (!this.opening && !this.slice) {
+      ensureCampaign(this.activeCharacter);
+      this.activeCharacter.questState = normalizeQuestState(this.activeCharacter.questState);
+    }
     ensureSkillRunes(this.activeCharacter);
     ensureCompanionConfigs(this.activeCharacter);
     if (!this.activeCharacter.seenCutscenes) {
