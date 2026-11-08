@@ -190,6 +190,9 @@ async function main() {
     await poll(async () => await cdp.eval(
       "(document.querySelector('#status')?.textContent ?? '').includes('ocean')"
     ), 'Phase 2 island-to-sea traversal', 20000);
+    await poll(async () => await cdp.eval(
+      "document.querySelector('#geo-overview')?.naturalWidth > 0"
+    ), 'precompiled full atlas overview image', 15000);
     const geoStatus = await cdp.eval("document.querySelector('#status')?.textContent?.trim()");
     const geographyTraffic = await cdp.eval(`({
       atlas: performance.getEntriesByType('resource')
