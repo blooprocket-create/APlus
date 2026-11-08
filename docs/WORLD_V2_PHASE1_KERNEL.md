@@ -1,6 +1,6 @@
 # World V2 Phase 1 — kernel implementation and QA
 
-**Status:** Implementation in review (PR #4). The system is deliberately not connected to the current production Hearthmere opening.  
+**Status:** **First Phase 1 kernel increment verified** in [PR #4](https://github.com/blooprocket-create/APlus/pull/4). The system is deliberately not connected to the current production Hearthmere opening.  
 **Parent:** [World Architecture V2](WORLD_V2_ARCHITECTURE.md) and [Phase 0 closure](WORLD_V2_PHASE0_AUDIT.md).  
 **Scope:** Canonical identity, atlas metadata, semantic story anchors, safe cell addressing, basic streaming/residency, and provisional traversable terrain. **Not** Phase 2 continent/coastline geography, cinematic re-staging or maritime gameplay.
 
@@ -50,7 +50,7 @@ The lab's visuals are only a placeholder surface with debug markers. They intent
 
 `tests/worldV2Kernel.test.ts` checks pinned hash identity; unambiguous namespace seeds; negative/seam coordinate mapping; render-origin round-trip; manifest sorting/order-independent hash; stable old island seeds after append; anchor validation; repeatable world-space heightfield generation; exact E/W and N/S seams; warmed/active residency; move/cancel/unload lifecycle; and traversal across multiple cells.
 
-**Phase 1 entry gate:** world kernel and lab build and test; existing Hearthmere engine tests and three-role Chrome smoke remain green; dependency audit preserves pure-module boundaries. Browser QA of the actual lab and physical device profiling are needed before using the architecture as the default game world.
+**Verified entry gate:** [GitHub Actions run 42534133670](https://github.com/blooprocket-create/APlus/actions/runs/42534133670) passed TypeScript/Vite production build, **141/141 Vitest tests (18 files)**, full dependency audit (zero unresolved imports or protected-boundary violations), **three-role Hearthmere Chrome launch**, and a **real Chrome test that moved across the lab's negative-X cell boundary** (X ≈ −25, loaded cells 25, failures 0). The CI run uploads per-hero and lab screenshots. The PR's Vercel preview also reached READY status. This is evidence for the prototype kernel only, **not** final world geography or an iPhone FPS benchmark.
 
 **Phase 1 final integration gate:** a development-mode live adapter can be exercised end-to-end; terrain height/collision and AI nav will be handled as those services become real. Do not claim full seamless 3D physics/cinematic compatibility from a heightfield demonstration.
 
