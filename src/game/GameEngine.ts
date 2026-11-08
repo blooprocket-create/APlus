@@ -4,7 +4,7 @@ import { dressGuardian } from '../rendering/GuardianRegalia';
 import { BossFinisher } from '../rendering/BossFinisher';
 import { FinisherFrame } from './FinisherTimeline';
 import { MoatSlice, SLICE_CAMP, SliceActors } from './MoatSlice';
-import { HearthmereOpening, HEARTHMERE_COVER, HEARTHMERE_REFUGE, HEARTHMERE_WAYSTATION, OPENING_PATH } from './HearthmereOpening';
+import { HearthmereOpening, HEARTHMERE_COVER, HEARTHMERE_REFUGE, HEARTHMERE_WAYSTATION } from './HearthmereOpening';
 import { type HearthmereSave, writeHearthmereSave } from '../persistence/HearthmereSave';
 import { heroSyllables, type HeroExpression, type HeroSyllable } from './HeroSpeech';
 import { CHRONICLE_CHAPTERS, REGION_NAMES } from '../data/chronicle';
