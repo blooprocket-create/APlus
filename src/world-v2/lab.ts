@@ -177,7 +177,7 @@ function tick(now: number) {
 
   const at = Math.floor(now / 200);
   if (at !== Math.floor((now - dt * 1000) / 200)) {
-    status.textContent = `Player world X/Z: ${player.x.toFixed(2)} / ${player.z.toFixed(2)}
+    status!.textContent = `Player world X/Z: ${player.x.toFixed(2)} / ${player.z.toFixed(2)}
 Cell: ${Math.floor(player.x / atlas.cellSize)}, ${Math.floor(player.z / atlas.cellSize)}
 Resident cells: ${streamer.loaded().length} · failures: ${loadingErrors}
 Atlas hash: ${atlas.contentHash} · provisional geometry only`;
