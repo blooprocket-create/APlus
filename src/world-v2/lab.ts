@@ -121,7 +121,7 @@ window.addEventListener('keydown', event => {
 window.addEventListener('keyup', event => movement.delete(event.key.toLowerCase()));
 window.addEventListener('blur', () => movement.clear());
 
-const player: WorldPosition & { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+const player = { x: 0, y: 0, z: 0 };
 let previous = performance.now();
 let lastStream = -Infinity;
 let active = true;
