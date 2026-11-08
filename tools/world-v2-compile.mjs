@@ -172,6 +172,53 @@ async function main() {
         }
       }
     }
+    if (geographyMode) {
+      // Lightweight precompiled world-wide locator, NOT a replacement for
+      // streamed terrain/LOD. Sampling happens offline, never in the browser.
+      const minX = -1780, maxX = 3700, minZ = -1090, maxZ = 1320;
+      const width = 760, height = 340, columns = 230, rows = 100;
+      const fill = ['#173f61', '#277692', '#dac898', '#8bb575',
+        '#468465', '#878984', '#e6f0f2', '#bea773'];
+      const parts = [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 340" role="img" aria-label="Staging atlas of two continents and three islands">',
+        '<rect width="760" height="340" fill="#173f61"/>',
+      ];
+      const px = x => (x - minX) / (maxX - minX) * width;
+      const py = z => (z - minZ) / (maxZ - minZ) * height;
+      for (let row = 0; row < rows; row++) for (let col = 0; col < columns; col++) {
+        const x = minX + (col + 0.5) / columns * (maxX - minX);
+        const z = minZ + (row + 0.5) / rows * (maxZ - minZ);
+        const s = stageGeography.sample(x, z);
+        let color = fill[s.biome];
+        if (s.waterKind === 2) color = '#55b7c7';
+        else if (s.road > 55) color = '#d1bba0';
+        parts.push(`<rect x="${(col * width / columns).toFixed(2)}" y="${(row * height / rows).toFixed(2)}" width="${(width / columns + 0.02).toFixed(2)}" height="${(height / rows + 0.02).toFixed(2)}" fill="${color}"/>`);
+      }
+      for (const river of stageGeography.rivers) {
+        const points = river.points.map(p => `${px(p.x).toFixed(1)},${py(p.z).toFixed(1)}`).join(' ');
+        parts.push(`<polyline points="${points}" fill="none" stroke="#66d0d5" stroke-width="1.3" stroke-linecap="round"/>`);
+      }
+      const anchorById = new Map(atlas.anchors.map(a => [a.id, a]));
+      const used = new Set();
+      for (const anchor of atlas.anchors) for (const next of anchor.connectsTo ?? []) {
+        const key = [anchor.id, next].sort().join(':');
+        if (used.has(key)) continue;
+        used.add(key);
+        const target = anchorById.get(next);
+        if (!target) continue;
+        parts.push(`<path d="M${px(anchor.position.x).toFixed(2)} ${py(anchor.position.z).toFixed(2)} L${px(target.position.x).toFixed(2)} ${py(target.position.z).toFixed(2)}" fill="none" stroke="#f2db9a" stroke-width="2.2"/>`);
+      }
+      for (const anchor of atlas.anchors) {
+        parts.push(`<circle cx="${px(anchor.position.x).toFixed(2)}" cy="${py(anchor.position.z).toFixed(2)}" r="2.5" fill="#f8d575" stroke="#344044" stroke-width="0.8"/>`);
+      }
+      for (const land of stageGeography.definition.landmasses) {
+        parts.push(`<text x="${px(land.cx).toFixed(2)}" y="${py(land.cz).toFixed(2)}" fill="#fbfbf2" font-size="12" font-family="system-ui,sans-serif" font-weight="650" text-anchor="middle" stroke="#1b3033" stroke-width="2" paint-order="stroke">${land.id}</text>`);
+      }
+      parts.push('<text x="13" y="21" fill="#faf0cf" font-size="14" font-family="system-ui,sans-serif" font-weight="700">WORLD V2 • STAGING GEOGRAPHY</text>');
+      parts.push('<text x="13" y="333" fill="#d3eced" font-size="11" font-family="system-ui,sans-serif">Procedural demonstration only • not final geography or approved story coordinates</text>');
+      parts.push('</svg>');
+      generated.set('atlas-overview.svg', parts.join('') + '\n');
+    }
     generated.set('atlas-index.json', JSON.stringify(index, null, 2) + '\n');
     generated.set('validation-report.json', JSON.stringify({
       schemaVersion: 1,
