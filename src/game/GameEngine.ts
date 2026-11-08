@@ -55,12 +55,8 @@ import {
   clampToProceduralPath,
   generateStompingGroundsPath,
 } from './ProceduralPathGenerator';
-import {
-  CANONICAL_HERO_NAMES,
-  getCompanionClassesForPlayer,
-  normalizeQuestState,
-  QuestEngine,
-} from './QuestEngine';
+import { CANONICAL_HERO_NAMES, getCompanionClassesForPlayer } from './CompanionRoster';
+import { normalizeQuestState, QuestEngine } from './QuestEngine';
 
 export interface CompanionEntity {
   classId: CharacterClassId;
