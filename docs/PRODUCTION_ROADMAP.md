@@ -8,6 +8,20 @@ The player-facing game starts in Hearthmere and currently runs through refuge, w
 
 Build on the opening in the existing TypeScript and Three.js project. Reuse working input, combat, rendering, and persistence where they meet the new requirements. Add each production milestone to the same campaign.
 
+## World Architecture V2 takes engineering priority (November 8, 2026)
+
+The user approved a **procedural-first, one-seed canonical, multi-continent/island world with fully explorable oceans**, ship control, free physically valid coastal landings, optional fast travel, persistent vessels and port recovery. **Hearthmere may be spatially redesigned** as dramatically as needed; the preservation constraints apply to quests, assets, character/companion functionality, story outcomes, cinematics and saves, not to previous X/Z positions. See [World Architecture V2](WORLD_V2_ARCHITECTURE.md) for locked decisions versus proposed systems and [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) for the actual legacy inventory.
+
+**Priority sequence before the earlier content-production gates:**
+1. **Phase 0:** Audit current/legacy dependencies, protect the Hearthmere and save contract, incrementally extract shared code, establish CI and capture save/gameplay baselines. Do not bulk-delete prototype modules.
+2. **Phase 1:** Publish pure canonical atlas/anchor/cell interfaces and a deterministic placeholder multi-cell test; build validation and debug tooling before decorative detail.
+3. **Phase 2:** Generate continent/island geography, rivers, biome and roads from constraints; pre-bake streamed world data. Story sites must be valid and accessible.
+4. **Phase 3:** Rebuild Hearthmere on V2, moving story staging/actors freely while maintaining opening beat IDs and assets, with all three hero and save migration acceptance runs.
+5. **Phase 4:** Add persistent world deltas, free ocean/ship traversal, save-compatible boarding/disembarkation and port recovery.
+6. **Phase 5:** Validate mobile performance, map representation and scalable authoring; only then use the same pipeline for other continents.
+
+**Gate:** Build/test CI green, compatible old-save fixtures, and a manual three-role Hearthmere smoke run before removing legacy runtime modules. The 60 FPS iPhone 14 Pro target must be verified on hardware rather than assumed from a desktop build. A V2 engineering PR should remain small, runnable and reversible; it must not attempt the entire world conversion in one commit.
+
 ## What to give the agents
 
 | Handoff | What the agent needs in concrete terms | First use |
@@ -55,4 +69,4 @@ For example, the reservoir ticket would identify the exact warning trigger, the 
 
 ## First implementation handoff
 
-Use the [Hearthmere opening build brief](HEARTHMERE_OPENING_BUILD.md) for the first assignment. It supplies the town layout, playable sequence, companion roles, giant attack rules, scene beats, and persistence checks. Its provisional staging is ready to test in a blockout. The full world and save specification can build on what this milestone proves.
+The **immediate** assignment is [World V2 Phase 0](WORLD_V2_PHASE0_AUDIT.md): complete the pending dependency closure, existing-save fixtures, tests and device smoke baseline. Then implement the world kernel defined by [World Architecture V2](WORLD_V2_ARCHITECTURE.md). The [Hearthmere opening build brief](HEARTHMERE_OPENING_BUILD.md) remains an important **narrative/behavior** handoff, but its old spatial blockout is not a World V2 constraint.
