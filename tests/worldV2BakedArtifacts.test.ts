@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { previewAtlas } from '../src/world-v2/WorldPreviewAtlas';
+import { previewAtlas, WORLD_V2_PREVIEW_DEFINITION } from '../src/world-v2/WorldPreviewAtlas';
+import { buildAtlas } from '../src/world-v2/WorldAtlas';
 import {
   decodeCompiledCell, encodeCompiledCell, validateCompiledAtlasIndex,
   type CompiledAtlasIndex,
@@ -33,6 +34,22 @@ async function bakedFixture() {
 }
 
 describe('World V2 Phase 1: offline baked catalog', () => {
+  it('keeps existing cell bytes identical when a new island is declared', () => {
+    const before = buildPlaceholderTerrainCell(previewAtlas, { x: -1, z: 2 });
+    const expanded = buildAtlas({
+      ...WORLD_V2_PREVIEW_DEFINITION,
+      landmasses: [
+        ...WORLD_V2_PREVIEW_DEFINITION.landmasses,
+        { id: 'new-isle', kind: 'island',
+          envelope: { minX: 2000, maxX: 2400, minZ: 500, maxZ: 900 } },
+      ],
+    });
+    expect(expanded.contentHash).not.toBe(previewAtlas.contentHash);
+    const after = buildPlaceholderTerrainCell(expanded, { x: -1, z: 2 });
+    expect(JSON.stringify(encodeCompiledCell(previewAtlas, before)))
+      .toBe(JSON.stringify(encodeCompiledCell(expanded, after)));
+  });
+
   it('round-trips cell geometry without changing float32 values', async () => {
     const { cell, raw, cellRef, index } = await bakedFixture();
     expect(validateCompiledAtlasIndex(index)).toEqual(index);
@@ -52,7 +69,7 @@ describe('World V2 Phase 1: offline baked catalog', () => {
       .toThrow(/path/);
     expect(() => decodeCompiledCell({ ...JSON.parse(raw), heights: [Infinity] },
       index.atlas, cellRef, 16)).toThrow(/heightfield/);
-    expect(() => decodeCompiledCell({ ...JSON.parse(raw), atlasHash: 'older-world' },
+    expect(() => decodeCompiledCell({ ...JSON.parse(raw), generationHash: 'older-world' },
       index.atlas, cellRef, 16)).toThrow(/mismatch/);
     expect(() => decodeCompiledCell({ ...JSON.parse(raw), coordinate: { x: 1, z: 0 } },
       index.atlas, cellRef, 16)).toThrow(/Unexpected/);
