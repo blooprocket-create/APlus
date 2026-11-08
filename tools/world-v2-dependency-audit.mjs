@@ -26,10 +26,16 @@ const imports = new Map();
 const graph = new Map();
 const unresolved = [];
 const external = new Set();
+const assetImports = [];
 
 function resolveLocal(source, specifier) {
   if (!specifier.startsWith('.')) { external.add(specifier); return null; }
   const candidate = path.resolve(path.dirname(source), specifier);
+  // Vite also imports CSS and JSON; these are assets, not missing TS modules.
+  if (existsSync(candidate) && /\.(?:css|json|svg|png|jpe?g|webp|woff2?|glsl)$/.test(candidate)) {
+    assetImports.push({ importer: key(source), asset: key(candidate) });
+    return null;
+  }
   for (const absolute of [
     candidate, candidate + '.ts', candidate + '.tsx',
     candidate.replace(/\.js$/, '.ts'), candidate.replace(/\.js$/, '.tsx'),
@@ -138,6 +144,7 @@ const report = {
   sourceFiles: files.length, staticallyReachableFiles: reachable.size,
   notStaticallyReachableFiles: [...imports.keys()].filter(k => !reachable.has(k)),
   externalImports: [...external].sort(),
+  assetImports,
   unresolved, violations,
   legacy: legacyFiles.map(describe),
   mixed: mixedFiles.map(describe),
