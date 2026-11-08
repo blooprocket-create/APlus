@@ -38,6 +38,7 @@ function setup() {
     pixels[(320 - 1) * 320 * 4] = 77;
   });
   const renderer = {
+    shadowMap: { autoUpdate: true },
     getRenderTarget, setRenderTarget, render, readRenderTargetPixels,
   } as unknown as THREE.WebGLRenderer;
   return { scene, fog, actor, light, environment, context, image, renderer, render, setRenderTarget };
@@ -52,6 +53,7 @@ describe('top-down world capture', () => {
     expect(t.actor.visible).toBe(true);
     expect(t.scene.fog).toBe(t.fog);
     expect(t.fog.far).toBe(20);
+    expect(t.renderer.shadowMap.autoUpdate).toBe(true);
     expect(t.setRenderTarget).toHaveBeenLastCalledWith(null);
     expect(t.image.data[0]).toBe(77); // WebGL's bottom-left origin was flipped.
     expect(t.context.putImageData).toHaveBeenCalledOnce();
