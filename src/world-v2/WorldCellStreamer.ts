@@ -87,6 +87,8 @@ interface CellRecord<Resource> {
 export interface CellStreamerOptions extends StreamingPlanOptions {
   readonly maxConcurrentLoads: number;
   readonly maxLoadsPerUpdate: number;
+  /** Paged/finite published catalogs can reject cells not yet part of a release. */
+  readonly isAvailable?: (address: WorldCellCoordinate) => boolean;
 }
 
 /**
@@ -112,7 +114,8 @@ export class WorldCellStreamer<Resource> {
 
   update(player: { x: number; z: number }, heading: { x: number; z: number } = { x: 0, z: 0 }): void {
     if (this.disposed) throw new Error('Streamer has been disposed');
-    const plan = planCells(player, heading, this.options);
+    const plan = planCells(player, heading, this.options)
+      .filter(item => this.options.isAvailable?.(item.address) ?? true);
     const next = new Map(plan.map(item => [item.id, item]));
     for (const [id, record] of this.records) {
       if (!next.has(id)) {
