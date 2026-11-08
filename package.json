@@ -8,7 +8,8 @@
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
-    "test": "vitest run"
+    "test": "vitest run",
+    "audit:world": "node tools/world-v2-dependency-audit.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"
