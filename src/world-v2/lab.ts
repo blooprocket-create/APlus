@@ -1,29 +1,15 @@
 import * as THREE from 'three';
-import { buildAtlas, StoryAnchorRegistry } from './WorldAtlas';
-import { createPlaceholderHeightSampler, buildPlaceholderTerrainCell, type TerrainCell } from './WorldTerrain';
-import { renderOriginFor, type WorldPosition } from './WorldCoordinates';
-import { WorldCellStreamer } from './WorldCellStreamer';
+import { sampleCellHeight, type TerrainCell } from './WorldTerrain';
+import { renderOriginFor, worldToCell, type WorldPosition } from './WorldCoordinates';
+import { HttpWorldArtifactTransport, WorldV2ArtifactSource, WorldV2GameplayBridge } from './WorldV2GameplayBridge';
 
 /**
  * Standalone QA-only sandbox: does NOT use Hearthmere's old path generator,
  * move the existing opening, or define the final canonical atlas.
  */
-const atlas = buildAtlas({
-  worldId: 'astral-lab', worldSeed: 'temporary-v2-lab-001',
-  atlasVersion: 'lab-v1', generatorVersion: 'kernel-v1', cellSize: 64,
-  landmasses: [
-    { id: 'lab-mainland', kind: 'continent', envelope: { minX: -512, maxX: 512, minZ: -512, maxZ: 512 } },
-    { id: 'lab-island', kind: 'island', envelope: { minX: 1024, maxX: 1536, minZ: 256, maxZ: 768 } },
-  ],
-  anchors: [
-    { id: 'lab.arrival', landmassId: 'lab-mainland',
-      position: { x: 0, y: 0, z: 0 }, clearanceRadius: 12, connectsTo: ['lab.refuge'] },
-    { id: 'lab.refuge', landmassId: 'lab-mainland',
-      position: { x: 230, y: 0, z: -80 }, clearanceRadius: 18 },
-  ],
-});
-const anchors = new StoryAnchorRegistry(atlas.anchors);
-const height = createPlaceholderHeightSampler(atlas.worldSeed);
+const source = await WorldV2ArtifactSource.open(new HttpWorldArtifactTransport());
+const atlas = source.catalog.atlas;
+const anchors = source.anchors;
 const canvas = document.querySelector<HTMLCanvasElement>('#lab');
 const status = document.querySelector<HTMLElement>('#status');
 if (!canvas || !status) throw new Error('World V2 lab UI is missing');
@@ -54,14 +40,9 @@ for (const anchor of anchors.list()) {
 }
 type SurfaceResource = { readonly cell: TerrainCell; readonly mesh: THREE.Mesh };
 let loadingErrors = 0;
-const streamer = new WorldCellStreamer<SurfaceResource>({
-  worldId: atlas.worldId, cellSize: atlas.cellSize,
-  activeRadius: 1, warmRadius: 2, lookAheadDistance: 80,
-  maxConcurrentLoads: 4, maxLoadsPerUpdate: 4,
-}, {
+const gameplay = new WorldV2GameplayBridge<SurfaceResource>(source, {
   load: async (coordinate, signal) => {
-    if (signal.aborted) throw new Error('Cancelled before generation');
-    const cell = buildPlaceholderTerrainCell(atlas, coordinate);
+    const cell = await source.loadTerrainCell(coordinate, signal);
     const geometry = new THREE.PlaneGeometry(cell.cellSize, cell.cellSize, cell.segments, cell.segments);
     const position = geometry.getAttribute('position') as THREE.BufferAttribute;
     const colors: number[] = [];
@@ -99,7 +80,18 @@ const streamer = new WorldCellStreamer<SurfaceResource>({
     });
   },
   onError: (error) => { loadingErrors++; console.error('World V2 cell load failed', error); },
+}, {
+  activeRadius: 1, warmRadius: 2, lookAheadDistance: 80,
+  maxConcurrentLoads: 4, maxLoadsPerUpdate: 4,
 });
+const streamer = gameplay.streamer;
+function height(x: number, z: number): number {
+  const cell = worldToCell({ x, z }, atlas.cellSize);
+  const resident = streamer.loaded().find(entry =>
+    entry.resource.cell.coordinate.x === cell.x && entry.resource.cell.coordinate.z === cell.z);
+  if (!resident) return 0; // No fake collision outside the finite baked preview.
+  return sampleCellHeight(resident.resource.cell, x, z);
+}
 
 const movement = new Set<string>();
 for (const [direction, key] of [
@@ -155,7 +147,7 @@ function tick(now: number) {
   player.y = height(player.x, player.z);
 
   if (now - lastStream > 120) {
-    streamer.update(player, { x: dx, z: dz });
+    gameplay.update(player, { x: dx, z: dz });
     lastStream = now;
   }
   const origin = renderOriginFor(player, atlas.cellSize);
@@ -180,13 +172,13 @@ function tick(now: number) {
     status!.textContent = `Player world X/Z: ${player.x.toFixed(2)} / ${player.z.toFixed(2)}
 Cell: ${Math.floor(player.x / atlas.cellSize)}, ${Math.floor(player.z / atlas.cellSize)}
 Resident cells: ${streamer.loaded().length} · failures: ${loadingErrors}
-Atlas hash: ${atlas.contentHash} · provisional geometry only`;
+Atlas hash: ${atlas.contentHash} · baked preview tiles: ${source.catalog.cells.length}`;
   }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
 window.addEventListener('pagehide', () => {
   active = false;
-  streamer.dispose();
+  gameplay.dispose();
   renderer.dispose();
 });
