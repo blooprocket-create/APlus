@@ -92,7 +92,7 @@ GameEngine.startGameplayWithCharacter(no openingSave)
 - `src/game/GroundMeshCollider.ts` projects mesh faces into X/Z, and `sweepGroundMovement` sets the moved actor's Y coordinate to zero. V2 needs true height and slope interfaces.
 - `GameEngine` implements alternate logic for opening, moat slice, corridor layouts and fixed-radius safe towns. The new movement and companion navigation contracts must replace these branching assumptions in stages.
 - `ChronicleWorld` placements such as `waypoints[11]` bind bosses to array indices; quests should instead resolve a named place through a location service.
-- `HearthmereSave.ts` imports `OPENING_STEPS` from the scene-owning `HearthmereOpening.ts`, coupling save schema validation to a rendering/gameplay module. Extract pure step types before converting save versions.
+- Before Phase 0 extraction, `HearthmereSave.ts` imported `OPENING_STEPS` from scene-owning `HearthmereOpening.ts`. This dependency is **now removed**: the pure `HearthmereStory.ts` module owns step IDs and v1 coordinate types. A future versioned save migrator still needs semantic anchors.
 
 **Do not** interpret `OPENING_PATH` as the new world's atlas. It represents one scripted flow in the old town and should be replaced with semantic objectives and navigation between them.
 
@@ -136,6 +136,7 @@ The user's permission to disrupt Hearthmere **does not** authorize deleting ques
 ## 6. Phase 0 changes made on the preparation branch
 
 - Created `src/game/CompanionRoster.ts`, extracting canonical hero-role names and deterministic companion selection from the old quest engine.
+- Created `src/game/HearthmereStory.ts` to own opening step IDs and v1 point types without importing Three.js; `HearthmereSave.ts` and the preservation tests now import that pure contract. `HearthmereOpening.ts` maintains compatibility exports.
 - Updated `GameEngine.ts`, `UIManager.ts` and `CutsceneDirector.ts` to import these neutral shared rules directly rather than through `QuestEngine.ts`.
 - Left compatibility re-exports in `QuestEngine.ts` so older tests and consumers continue working.
 - Added `tests/worldV2Phase0.test.ts` for canonical roles, legacy import compatibility and Hearthmere's core story milestone order.
@@ -169,7 +170,8 @@ These are **non-destructive** source changes. They do not rebuild the world or m
 - [ ] Capture representative v1 saves at arrival, mid-quest, during escort, and refuge for all three heroes.
 - [ ] Perform manual browser opening/defeat/resume/skip smoke checks and record results.
 - [ ] Finish import/reachability inventory for every legacy module and classify safe retirement candidates with zero active imports.
-- [ ] Extract pure opening-step/save types out of scene module and create the first versioned anchor-resolver boundary with tests.
+- [x] Extract pure opening step IDs and v1 position types from the scene module; preserve compatibility exports.
+- [ ] Create the first stable semantic anchor-resolver boundary and versioned v1→V2 save migrator with fixtures.
 - [ ] Measure current desktop and iPhone 14 Pro baseline before adding streaming or shipping assets.
 
 **Gate:** Phase 0 is **in progress**, not complete, until the unchecked items are verified. No legacy source deletions and no automatic player-save reset are approved. Phase 1 can be designed in parallel but must not be merged over a failing Phase 0 regression baseline.
@@ -178,7 +180,7 @@ These are **non-destructive** source changes. They do not rebuild the world or m
 
 1. **P0-01 baseline verification:** Run CI; triage failures without changing gameplay; record artifact links and test evidence.
 2. **P0-02 save samples:** Produce anonymized v1 snapshot fixtures for three heroes and interrupted/defeat states. Add read/round-trip tests with error handling.
-3. **P0-03 pure story DTO:** Move opening step/identity/quest types out of Three.js scene modules. Avoid importing renderer modules in persistence schemas.
+3. **P0-03 pure story DTO (started):** Pure step/position types and shared companion identity are extracted. Next separate remaining opening quest data and introduce the anchor-resolver/versioned migration boundary.
 4. **P0-04 dependency closure:** Enumerate imports/exports and remaining UI/API routes to the old campaigns; produce per-file retirement gate and compatibility strategy.
 5. **P0-05 device/reference run:** Record current three-role Hearthmere completion, cutscene skip, save/resume and iPhone 14 Pro frame timings.
 6. **P1-01 world kernel:** Start canonical atlas ID/seed/version/anchor interfaces with pure deterministic tests; no destructive world or maritime content change.
