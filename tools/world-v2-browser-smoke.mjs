@@ -172,6 +172,39 @@ async function main() {
     const labShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     writeFileSync(path.join(screenshots, 'world-v2-lab.png'), Buffer.from(labShot.data, 'base64'));
     console.log('World V2 lab browser smoke passed:', labStatus);
+
+    // Phase 2: exercise the actual OFFLINE-BAKED geographical profile in
+    // Chrome, including island-to-ocean transitions and no cell fetch errors.
+    await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-geography.html' });
+    await poll(async () => await cdp.eval(
+      "(document.querySelector('#status')?.textContent ?? '').includes('baked geography tiles:')"
+    ), 'Phase 2 geography lab rendered', 35000);
+    await poll(async () => await cdp.eval(
+      "Number((document.querySelector('#status')?.textContent ?? '').match(/Resident cells: (\\d+)/)?.[1] ?? 0) > 0"
+    ), 'Phase 2 geography tiles loaded', 35000);
+    await cdp.eval("document.querySelector('#geo-jump-island').click()");
+    await poll(async () => await cdp.eval(
+      "((document.querySelector('#status')?.textContent ?? '').match(/Cell: (-?\\d+), (-?\\d+)/)?.slice(1).join(',') === '21,8')"
+    ), 'Phase 2 jump to island', 20000);
+    await cdp.eval("document.querySelector('#geo-jump-sea').click()");
+    await poll(async () => await cdp.eval(
+      "(document.querySelector('#status')?.textContent ?? '').includes('ocean')"
+    ), 'Phase 2 island-to-sea traversal', 20000);
+    const geoStatus = await cdp.eval("document.querySelector('#status')?.textContent?.trim()");
+    const geographyTraffic = await cdp.eval(`({
+      atlas: performance.getEntriesByType('resource')
+        .some(entry => entry.name.includes('/world-v2/geography/atlas-index.json')),
+      cells: performance.getEntriesByType('resource')
+        .filter(entry => entry.name.includes('/world-v2/geography/cells/0/')).length,
+    })`);
+    if (!geographyTraffic.atlas || geographyTraffic.cells < 1 ||
+      !geoStatus.includes('Geography: 5 landmasses') ||
+      !geoStatus.includes('failures: 0')) {
+      throw new Error('Geographic bake not loaded cleanly: ' + JSON.stringify({ geoStatus, geographyTraffic }));
+    }
+    const geoShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(path.join(screenshots, 'world-v2-geography.png'), Buffer.from(geoShot.data, 'base64'));
+    console.log('Phase 2 geography browser smoke passed:', geoStatus);
     if (cdp.exceptions.length) throw new Error('Browser exceptions: ' + JSON.stringify(cdp.exceptions));
     console.log('Phase 0 Chrome smoke: 3/3 heroes entered the actual playable HUD; screenshots saved.');
     ws.close();
