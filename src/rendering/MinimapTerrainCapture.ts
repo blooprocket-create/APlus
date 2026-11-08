@@ -62,7 +62,9 @@ export class MinimapTerrainCapture {
     this.camera.updateProjectionMatrix();
 
     const oldTarget = renderer.getRenderTarget();
-    const oldFog = scene.fog;
+    const fog = scene.fog;
+    const oldDensity = fog instanceof THREE.FogExp2 ? fog.density : null;
+    const oldFar = fog instanceof THREE.Fog ? fog.far : null;
     const hidden: THREE.Object3D[] = [];
     // The scene contains the hero, fiends, projectiles and VFX as independent
     // children. Capture only the authored/generated environment and lighting;
@@ -73,7 +75,10 @@ export class MinimapTerrainCapture {
         hidden.push(child);
       }
     }
-    scene.fog = null; // The high camera must not turn all terrain into fog.
+    // Preserve the original fog shader variant: toggling fog on/off every
+    // capture would trigger shader recompilation in the live renderer.
+    if (fog instanceof THREE.FogExp2) fog.density = 0.00001;
+    if (fog instanceof THREE.Fog) fog.far = 100000;
     try {
       renderer.setRenderTarget(this.target);
       renderer.render(scene, this.camera);
@@ -95,7 +100,8 @@ export class MinimapTerrainCapture {
       this.center = null;
     } finally {
       renderer.setRenderTarget(oldTarget);
-      scene.fog = oldFog;
+      if (fog instanceof THREE.FogExp2 && oldDensity !== null) fog.density = oldDensity;
+      if (fog instanceof THREE.Fog && oldFar !== null) fog.far = oldFar;
       for (const child of hidden) child.visible = true;
     }
   }
