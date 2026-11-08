@@ -26,9 +26,9 @@ The next engineering program is [World Architecture V2](docs/WORLD_V2_ARCHITECTU
 
 ### World V2 streaming lab (Phase 1)
 
-The replacement-world foundation has a separate **development/QA scene** available at [`/world-v2-lab.html`](world-v2-lab.html). Move with WASD/arrow keys (Shift to go faster) or the touch D-pad. It demonstrates deterministic terrain-cell seams, global coordinates, origin rebasing, and active/warm cell streaming in an isometric view. This is **provisional geometry, not the published continents or redesigned Hearthmere**; the normal game remains at `/index.html`.
+The completed Phase 1 world platform has a separate **development/QA scene** available at [`/world-v2-lab.html`](world-v2-lab.html). Move with WASD/arrow keys (Shift to go faster) or the touch D-pad. It streams an **offline-baked 81-cell heightfield** from versioned, SHA-256-checked HTTP artifacts and demonstrates deterministic terrain seams, global coordinates, origin rebasing, and active/warm cell streaming in an isometric view. This is **provisional geometry, not the published continents or redesigned Hearthmere**; the normal game remains at `/index.html`.
 
-Read [World V2 Phase 1 kernel](docs/WORLD_V2_PHASE1_KERNEL.md) for code boundaries, QA results and the integration handoff.
+Read [World V2 Phase 1 completion](docs/WORLD_V2_PHASE1_KERNEL.md) for compiler commands, source contracts, QA evidence and the Phase 2 integration handoff. `npm run build` generates the world preview automatically; `npm run world:bake:verify` rechecks its byte-level reproducibility.
 
 ## Run
 
