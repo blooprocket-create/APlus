@@ -18,6 +18,7 @@ These are user decisions, not inferred implementation details:
 8. Persist owned ships at their actual world locations, with **recovery services at ports and shipyards**. Fast travel does not implicitly relocate a ship.
 9. **Hearthmere may be structurally and spatially rebuilt.** Existing asset and quest/story functionality must survive, but streets, bridges, terrain, placements, enemy arenas, path, and cinematic staging may be extensively redesigned. Prior local X/Z coordinates are not canonical anchors.
 10. Keep the established story, cast, isometric gameplay identity, strong anime/cel-shaded art direction, and mobile-browser-first delivery. The **60 FPS iPhone 14 Pro** performance requirement remains a target to measure, not a demonstrated result.
+11. **No migration of prior Hearthmere/prototype saves is required (D165).** World V2 may establish a clean save namespace for the rebuilt adventure. Do not destructively erase unrelated old browser storage; preserve new World V2 save/resume behavior once implemented.
 
 The generated world is not required to preserve player-specific legacy world seeds. Those belong to the old prototype. Core geography should be consistent across saves; state can diverge through story decisions.
 
@@ -40,7 +41,7 @@ Procedural-first means the system determines most geography and environmental pl
 | Spawn / Population | Stable spawn IDs, procedural distribution, simulation activation | Character equipment and narrative choices |
 | Quest & Cinematic Runtime | Stable beats, actions, trigger semantics, camera staging, persistent story flags | Owning terrain mesh coordinates |
 | Player / Ship Runtime | Character and vessel controls, movement, buoyancy approximation, boarding, disembarking | World generation |
-| Save/World State | Quest state, discovered items, unique actors, ship IDs and locations, migration | Serialization of entire generated meshes |
+| Save/World State | Quest state, discovered items, unique actors, ship IDs and locations, versioned V2 saves | Serialization of entire generated meshes |
 | Map/Minimap | Presentation of authoritative world data and discovered markers | Its own invented route geometry |
 
 **Dependency direction:** world definition → generated data → runtime spatial services → gameplay and presentation. Quests resolve location IDs through an anchor service. Navigation and physics consume terrain/collision services. No UI or quest module should import the procedural path generator to determine where the player can walk.
@@ -74,7 +75,7 @@ type WorldEntityId = string; // never derived from array index or load order
 - Publish data/versioned cell assets from a development-side world build, then **stream precomputed content** to browsers. Client-side procedural detail is permitted only when it is deterministic and inexpensive.
 - Each authored story anchor has an ID, acceptable terrain/grade envelope, access requirements, cinematic staging footprint, collision clearance, and relationship to other anchors. Its final coordinates may differ from those in the current Hearthmere prototype but are **fixed once the atlas version is published**.
 - Determinism applies to source data, placement, IDs, and collision, not just visible art. Avoid random-number streams dependent on loading order.
-- World manifest changes require validation and explicit save migration; never regenerate the live continent in place with a silent seed change.
+- Published world manifest changes require validation and a deliberate **World V2 compatibility/version policy**; never regenerate an already-published continent in place with a silent seed change. This does not require importing old prototype saves.
 - Keep a reproducible world-build command, seed fixture, artifact checksums, and a QA preview capable of jumping to any cell or anchor.
 
 ## 5. Procedural build pipeline (proposed order)
@@ -102,7 +103,7 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 
 **Maps:** The present mini-map renders a top-down view of the actual nearby 3D scene (PR #2, now merged). This is an interim display solution; evaluate atlas-derived map tiles/overlays to avoid frequent GPU readbacks on mobile and keep shorelines, roads and discoveries consistent with authoritative geography.
 
-## 7. Hearthmere migration contract
+## 7. Hearthmere re-staging contract
 
 **Preserve behavior, not positions.** Existing scene files, casts, rigs, animations, VFX, dialogue, opening milestones, rescue/escort, retreat/defeat and saving are reusable inputs. Town, bridge, roadway, relief, shelter, giant staging, sightlines and camera shots may all move.
 
@@ -110,7 +111,7 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 
 **Continuity gate:** arrival → Mara/Rowan interactions → shipment → crisis and giant encounter → civilian rescue/escort → refuge must remain functional for all three heroes. The giant survives; the town is occupied afterward. Relevant persistent decisions and subsequent liberation/defense setup must not be lost. Existing assets can be retargeted; visual/cinematic improvements are encouraged.
 
-**Save migration:** Hearthmere currently has per-class v1 local envelopes with `current`/`previous` snapshots containing step, position, moving group and enemy positions. Before switching world coordinate systems, make a versioned, idempotent migrator using `step` + semantic anchors to remap current position and moving actors to safe valid destinations. Preserve old snapshots/backups until successfully migrated; never silently wipe or teleport into missing terrain. Migration/recovery failure must be surfaced, and supported legacy saves remain test fixtures.
+**Fresh World V2 saves (D165):** We are **not migrating legacy Hearthmere saves** or preserving their X/Z positions. Implement a new, versioned save namespace when World V2 enters production, with its own reliable checkpoint/backup behavior. Existing v1 snapshots may remain untouched in local storage but are not a compatibility requirement. Keep current save/resume working **until the replacement is ready**; never silently overwrite the old keys as a side effect of the rebuild.
 
 ## 8. Phase plan and hard gates
 
@@ -120,7 +121,7 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 | **1 — Canonical world kernel** | Seed/versioned atlas, global coordinates, story-anchor registry, streaming interfaces, seam-safe placeholder terrain | Same cells/anchors across cold loads, seamless multi-cell traversal, no landmark rerolls |
 | **2 — Geography builder** | Continent and island masks, terrain, climate, water, navigation, constrained placement, bake pipeline | Reproducible multi-landmass atlas and guaranteed access to authored story sites |
 | **3 — Hearthmere re-staging** | Rebuild town and surroundings on V2; rebind NPCs, objectives, combat and cinematics by anchor | All three opening roles reach refuge and later story continuity remains valid; travel is continuous |
-| **4 — Persistence + maritime traversal** | World-state deltas, save migration, ownership, ships, free coastal landing, recovery, fast travel | Land → ship → island → land → ship → reload and recover without duplication or lost state |
+| **4 — Persistence + maritime traversal** | New V2 save schema, world-state deltas, ownership, ships, free coastal landing, recovery, fast travel | Land → ship → island → land → ship → reload and recover without duplication or lost V2 state |
 | **5 — Performance + authoring** | Mobile stress testing, LODs, instance batching, editor/debug tools and continent expansion workflow | Measured device gates, deterministic world-build checks and repeatable new-region creation |
 
 **Phase 0 findings and remaining work are in [WORLD_V2_PHASE0_AUDIT.md](WORLD_V2_PHASE0_AUDIT.md).** Do not use the old procedural path tests as the definition of the new world's expected topology. Retain them as compatibility tests until retired modules are safely isolated.
@@ -131,15 +132,15 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 - Deterministic source-world snapshots and stable-ID/hash checks, including build-order independence and adding a new landmass.
 - Terrain/collision and pathfinding seam tests; safe character and companion movement over elevation, water boundaries, bridges and steep coasts.
 - Fixed story-anchor and cinematic-clearance validation on the canonical world; no quest logic tied to waypoint array indices.
-- A multi-role Hearthmere opening acceptance run, including cinematic skip, defeat, interruption, and old-save migration.
+- A multi-role Hearthmere opening acceptance run, including cinematic skip, defeat, interruption, and **new World V2 save/resume**. No legacy-save migration test is required.
 - Maritime tests for free-landing validity, ship state unload/reload, remote recovery atomicity and fast-travel nonrelocation.
 - On-device iPhone 14 Pro profiling for sustained 60 FPS during urban traversal, combat, seam crossing and sailing. Record frame-time distribution, memory, jank, renderer and network metrics; do not claim this target has passed before real measurements.
 - Document accepted changes, debug artifacts, fixtures, rollback path and any unresolved performance/creative questions in each PR.
 
 ## 10. Next handoff
 
-**Immediate:** Complete Phase 0 isolation and verify the existing opening baseline without imposing geographic preservation.  
+**Immediate:** Finalize Phase 0 inventory, baseline checks and current-entrypoint isolation with **legacy save migration out of scope**.  
 **Next code task:** Define the minimal World V2 atlas/anchor/cell interfaces and a headless deterministic geography builder; do **not** add visual biomes, ships, six continents or an engine-wide rewrite in one PR.  
-**No destructive cleanup** until the new entrypoint uses the replacement and legacy save migration tests pass.
+**No destructive cleanup** until the replacement entrypoint and scenario tests pass. Retirement of old modules requires removing live imports and preserving Hearthmere assets/quest behavior, **not** old-save migration.
 
 References: [GameEngine](../src/game/GameEngine.ts), [HearthmereOpening](../src/game/HearthmereOpening.ts), [HearthmereScenery](../src/rendering/HearthmereScenery.ts), [HearthmereSave](../src/persistence/HearthmereSave.ts), [ProceduralPathGenerator](../src/game/ProceduralPathGenerator.ts), [ChronicleWorld](../src/game/ChronicleWorld.ts).
