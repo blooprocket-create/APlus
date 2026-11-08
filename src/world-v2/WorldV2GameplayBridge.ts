@@ -69,12 +69,20 @@ export class WorldV2ArtifactSource {
   }
 }
 
+/** Engine-facing, generic resource-agnostic seam; no dependency on THREE or legacy routes. */
+export interface WorldV2GameplayPort {
+  update(position: Pick<WorldPosition, 'x' | 'z'>, heading: { x: number; z: number }): void;
+  resolveAnchor(id: string): StoryAnchorDeclaration;
+  renderOrigin(position: WorldPosition): WorldPosition;
+  dispose(): void;
+}
+
 /**
  * Narrow runtime bridge intended for GameEngine integration.
  * Scene rendering is delegated to a loader; quests and saving never depend
  * on cell meshes, and world coordinates are never overwritten by render-local.
  */
-export class WorldV2GameplayBridge<Resource> {
+export class WorldV2GameplayBridge<Resource> implements WorldV2GameplayPort {
   readonly anchors: StoryAnchorRegistry;
   readonly streamer: WorldCellStreamer<Resource>;
   readonly worldId: string;
