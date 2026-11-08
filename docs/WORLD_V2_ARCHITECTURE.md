@@ -124,7 +124,7 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 | **4 — Persistence + maritime traversal** | New V2 save schema, world-state deltas, ownership, ships, free coastal landing, recovery, fast travel | Land → ship → island → land → ship → reload and recover without duplication or lost V2 state |
 | **5 — Performance + authoring** | Mobile stress testing, LODs, instance batching, editor/debug tools and continent expansion workflow | Measured device gates, deterministic world-build checks and repeatable new-region creation |
 
-**Phase 0 findings and remaining work are in [WORLD_V2_PHASE0_AUDIT.md](WORLD_V2_PHASE0_AUDIT.md).** Do not use the old procedural path tests as the definition of the new world's expected topology. Retain them as compatibility tests until retired modules are safely isolated.
+**Phase 0 engineering audit is complete:** see [WORLD_V2_PHASE0_AUDIT.md](WORLD_V2_PHASE0_AUDIT.md) and the [source dependency inventory](WORLD_V2_DEPENDENCY_INVENTORY.md). Hardware performance and full visual re-staging checks belong to later phases. Do not use the old procedural path tests as the definition of the new world's expected topology. Retain them as compatibility tests until retired modules are safely isolated.
 
 ## 9. Engineering quality and verification gates
 
@@ -139,7 +139,7 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 
 ## 10. Next handoff
 
-**Immediate:** Finalize Phase 0 inventory, baseline checks and current-entrypoint isolation with **legacy save migration out of scope**.  
+**Immediate:** Begin Phase 1 canonical atlas/world-cell/anchor kernel and maintain the verified Phase 0 tests and browser smoke. **Legacy save migration is out of scope**.  
 **Next code task:** Define the minimal World V2 atlas/anchor/cell interfaces and a headless deterministic geography builder; do **not** add visual biomes, ships, six continents or an engine-wide rewrite in one PR.  
 **No destructive cleanup** until the replacement entrypoint and scenario tests pass. Retirement of old modules requires removing live imports and preserving Hearthmere assets/quest behavior, **not** old-save migration.
 
