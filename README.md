@@ -20,6 +20,10 @@ The [exploration and puzzle brief](docs/EXPLORATION_PUZZLES.md) collects the thr
 
 The [combat and progression brief](docs/COMBAT_PROGRESSION.md) collects the action foundation, class skill trees, awakening, difficulty modes, and defeat direction.
 
+## World Architecture V2
+
+The next engineering program is [World Architecture V2](docs/WORLD_V2_ARCHITECTURE.md): a deterministic canonical procedural world with multiple continents and islands, freely navigable oceans, persistent ships and an open-world Hearthmere rebuilt around story anchors rather than old coordinates. The [Phase 0 legacy audit](docs/WORLD_V2_PHASE0_AUDIT.md) documents active assets/quests, legacy systems and safe migration prerequisites. The new architecture is **planned**, not yet playable.
+
 ## Run
 
 ```sh
