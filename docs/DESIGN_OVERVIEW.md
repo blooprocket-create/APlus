@@ -152,7 +152,7 @@ The major direction is established; the next work should produce concrete design
 3. The twelve ability-tree designs, three awakened kits, and hero/gear/form visual briefs.
 4. A technical delivery/persistence/performance plan and a staged implementation handoff with acceptance criteria.
 
-The branching campaign and opening drafts remain story authorities, but the latest technical implementation priority is **World Architecture V2, beginning with Phase 0 audit and non-destructive isolation**. The planned Hearthmere restructuring supersedes any expectation that existing opening-world coordinates must remain fixed. The full campaign and exact landscape are not yet implemented.
+The branching campaign and opening drafts remain story authorities, but the latest technical implementation priority is **World Architecture V2 Phase 1**, following a completed Phase 0 engineering audit and non-destructive extraction. The planned Hearthmere restructuring supersedes any expectation that existing opening-world coordinates must remain fixed. The full campaign and exact landscape are not yet implemented.
 
 ## Document map and authority
 
