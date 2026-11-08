@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { previewAtlas } from '../src/world-v2/WorldPreviewAtlas';
 import {
@@ -8,10 +7,11 @@ import {
 import { WorldV2ArtifactSource, WorldV2GameplayBridge, type WorldArtifactTransport } from '../src/world-v2/WorldV2GameplayBridge';
 import { buildPlaceholderTerrainCell, sampleCellHeight } from '../src/world-v2/WorldTerrain';
 
-function bakedFixture() {
+async function bakedFixture() {
   const cell = buildPlaceholderTerrainCell(previewAtlas, { x: 0, z: 0 });
   const raw = JSON.stringify(encodeCompiledCell(previewAtlas, cell)) + '\n';
-  const sha256 = createHash('sha256').update(raw).digest('hex');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  const sha256 = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
   const cellRef = { id: cell.id, coordinate: { x: 0, z: 0 },
     path: 'cells/0/0/0.json', sha256 };
   const index: CompiledAtlasIndex = {
@@ -33,8 +33,8 @@ function bakedFixture() {
 }
 
 describe('World V2 Phase 1: offline baked catalog', () => {
-  it('round-trips cell geometry without changing float32 values', () => {
-    const { cell, raw, cellRef, index } = bakedFixture();
+  it('round-trips cell geometry without changing float32 values', async () => {
+    const { cell, raw, cellRef, index } = await bakedFixture();
     expect(validateCompiledAtlasIndex(index)).toEqual(index);
     const decoded = decodeCompiledCell(JSON.parse(raw), index.atlas, cellRef, 16);
     expect(decoded.heights).toEqual(cell.heights);
@@ -42,8 +42,8 @@ describe('World V2 Phase 1: offline baked catalog', () => {
     expect(decoded.id).toEqual(cell.id);
   });
 
-  it('rejects stale world versions, invalid values, duplicates and unexpected paths', () => {
-    const { index, raw, cellRef } = bakedFixture();
+  it('rejects stale world versions, invalid values, duplicates and unexpected paths', async () => {
+    const { index, raw, cellRef } = await bakedFixture();
     expect(() => validateCompiledAtlasIndex({ ...index, atlas: { ...index.atlas, worldSeed: 'tampered' } }))
       .toThrow(/hash or normalized/);
     expect(() => validateCompiledAtlasIndex({ ...index, cells: [cellRef, cellRef] }))
@@ -59,7 +59,7 @@ describe('World V2 Phase 1: offline baked catalog', () => {
   });
 
   it('loads only correctly signed, published cells and refuses mutated bytes', async () => {
-    const { transport, files } = bakedFixture();
+    const { transport, files } = await bakedFixture();
     const source = await WorldV2ArtifactSource.open(transport);
     expect(source.catalog.atlas.contentHash).toBe(previewAtlas.contentHash);
     expect(source.hasCell({ x: 0, z: 0 })).toBe(true);
@@ -77,7 +77,7 @@ describe('World V2 Phase 1: offline baked catalog', () => {
   });
 
   it('declines cancelled reads and blocks path traversal in HTTP adapter', async () => {
-    const { transport } = bakedFixture();
+    const { transport } = await bakedFixture();
     const source = await WorldV2ArtifactSource.open(transport);
     const cancelled = new AbortController();
     cancelled.abort();
@@ -96,7 +96,7 @@ describe('World V2 Phase 1: offline baked catalog', () => {
   });
 
   it('the gameplay bridge streams only catalog cells, resolves anchors and frees resources', async () => {
-    const { transport } = bakedFixture();
+    const { transport } = await bakedFixture();
     const source = await WorldV2ArtifactSource.open(transport);
     const unloaded: string[] = [];
     const bridge = new WorldV2GameplayBridge(source, {
