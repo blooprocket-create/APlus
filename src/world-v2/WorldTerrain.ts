@@ -90,3 +90,26 @@ export function terrainHeightAtVertex(cell: TerrainCell, column: number, row: nu
   }
   return cell.heights[row * (cell.segments + 1) + column];
 }
+
+/**
+ * Query height from a *resident baked* terrain tile using bilinear sampling.
+ * This is a Phase 1 walking-preview query, not final character collision/slope.
+ */
+export function sampleCellHeight(cell: TerrainCell, worldX: number, worldZ: number): number {
+  if (!Number.isFinite(worldX) || !Number.isFinite(worldZ)) {
+    throw new RangeError('Terrain query coordinates must be finite');
+  }
+  const x = (worldX - cell.corner.x) / cell.cellSize * cell.segments;
+  const z = (worldZ - cell.corner.z) / cell.cellSize * cell.segments;
+  if (x < 0 || z < 0 || x > cell.segments || z > cell.segments) {
+    throw new RangeError('Terrain query falls outside resident tile');
+  }
+  const ax = Math.min(cell.segments - 1, Math.floor(x));
+  const az = Math.min(cell.segments - 1, Math.floor(z));
+  const tx = x - ax, tz = z - az;
+  const a = terrainHeightAtVertex(cell, ax, az);
+  const b = terrainHeightAtVertex(cell, ax + 1, az);
+  const d = terrainHeightAtVertex(cell, ax, az + 1);
+  const e = terrainHeightAtVertex(cell, ax + 1, az + 1);
+  return (a + (b - a) * tx) * (1 - tz) + (d + (e - d) * tx) * tz;
+}
