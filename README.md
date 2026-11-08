@@ -22,7 +22,7 @@ The [combat and progression brief](docs/COMBAT_PROGRESSION.md) collects the acti
 
 ## World Architecture V2
 
-The next engineering program is [World Architecture V2](docs/WORLD_V2_ARCHITECTURE.md): a deterministic canonical procedural world with multiple continents and islands, freely navigable oceans, persistent ships and an open-world Hearthmere rebuilt around story anchors rather than old coordinates. The [Phase 0 legacy audit](docs/WORLD_V2_PHASE0_AUDIT.md) documents active assets/quests, legacy systems and safe migration prerequisites. The new architecture is **planned**, not yet playable.
+The next engineering program is [World Architecture V2](docs/WORLD_V2_ARCHITECTURE.md): a deterministic canonical procedural world with multiple continents and islands, freely navigable oceans, persistent ships and an open-world Hearthmere rebuilt around story anchors rather than old coordinates. The [Phase 0 legacy audit](docs/WORLD_V2_PHASE0_AUDIT.md) and [dependency inventory](docs/WORLD_V2_DEPENDENCY_INVENTORY.md) documents active assets/quests, legacy systems and retirement boundaries and no-legacy-migration policy. The new architecture is **planned**, not yet playable; the Phase 0 engineering baseline is complete (127 passing tests and real Chrome HUD entry for all three heroes).
 
 ## Run
 
