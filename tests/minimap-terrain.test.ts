@@ -25,11 +25,12 @@ function setup() {
   scene.add(environment, actor, light);
   const getRenderTarget = vi.fn(() => null);
   const setRenderTarget = vi.fn();
-  const render = vi.fn(() => {
+  const render = vi.fn((_scene: THREE.Scene, _camera: THREE.Camera) => {
     expect(actor.visible).toBe(false);
     expect(environment.visible).toBe(true);
     expect(light.visible).toBe(true);
-    expect(scene.fog).toBeNull();
+    expect(scene.fog).not.toBeNull();
+    expect((scene.fog as THREE.Fog).far).toBe(100000);
   });
   const readRenderTargetPixels = vi.fn((
     _target: unknown, _x: number, _y: number, _width: number, _height: number, pixels: Uint8Array,
@@ -50,6 +51,7 @@ describe('top-down world capture', () => {
     expect(t.render).toHaveBeenCalledOnce();
     expect(t.actor.visible).toBe(true);
     expect(t.scene.fog).toBe(t.fog);
+    expect(t.fog.far).toBe(20);
     expect(t.setRenderTarget).toHaveBeenLastCalledWith(null);
     expect(t.image.data[0]).toBe(77); // WebGL's bottom-left origin was flipped.
     expect(t.context.putImageData).toHaveBeenCalledOnce();
