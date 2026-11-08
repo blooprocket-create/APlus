@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-08  
 **Scope:** Current default-branch runtime entrypoint, Hearthmere opening, older quest/world systems, persistence and relevant tests; a targeted source dependency review, **not** a proof of whole-repository dead-code reachability.  
-**Status:** Initial audit, preservation contract, and one non-destructive extraction completed on the World V2 preparation branch. Full baseline CI results, save fixture capture and browser/device QA are still pending.  
+**Status:** Targeted audit, preservation contract, non-destructive identity/story-schema extraction and automated baseline verification completed on the preparation branch. Synthetic v1 fixtures are checked. Actual browser save samples, comprehensive import closure and physical-device QA remain pending.  
 **Governing architecture:** [WORLD_V2_ARCHITECTURE.md](WORLD_V2_ARCHITECTURE.md).
 
 ## Executive finding
@@ -140,6 +140,8 @@ The user's permission to disrupt Hearthmere **does not** authorize deleting ques
 - Updated `GameEngine.ts`, `UIManager.ts` and `CutsceneDirector.ts` to import these neutral shared rules directly rather than through `QuestEngine.ts`.
 - Left compatibility re-exports in `QuestEngine.ts` so older tests and consumers continue working.
 - Added `tests/worldV2Phase0.test.ts` for canonical roles, legacy import compatibility and Hearthmere's core story milestone order.
+- Added `tests/worldV2LegacySaves.test.ts` with **synthetic** arrival, Rowan, escort and refuge v1 snapshot round-trips for all three roles and class-isolated backups. These are not snapshots captured from real players' browsers.
+- Corrected an assertion in the existing `minimap-terrain.test.ts` test helper: on a world-root change, the old environment is intentionally hidden and the **new** root must be visible. Previously this caused one false failure even though the capture code restored renderer state.
 - Added `.github/workflows/verify.yml` to run `npm ci`, `npm run build` and `npm test` on pull requests and main.
 
 These are **non-destructive** source changes. They do not rebuild the world or migrate saves. The starter test contract checks narrative/identity, not landscape coordinates.
@@ -148,7 +150,7 @@ These are **non-destructive** source changes. They do not rebuild the world or m
 
 | Baseline surface | Existing evidence | Additional gate before Phase 1/3 |
 | --- | --- | --- |
-| Hearthmere save safety | `tests/hearthmereSave.test.ts`: backup recovery, failed writes, per-hero isolation | Real v1 snapshot fixtures across all steps; v1→V2 migration |
+| Hearthmere save safety | `tests/hearthmereSave.test.ts`: backup recovery, failed writes, per-hero isolation. `tests/worldV2LegacySaves.test.ts`: synthetic v1 snapshots for 3 roles × 4 milestones and backup keys | Real v1 browser snapshots and v1→V2 migration |
 | Hearthmere gameplay | `tests/combat.test.ts`: giant, collision, escape/defeat and combat integration | Full three-role scripted opening after anchor migration; no hardcoded position asserts |
 | Hero animation/fiends | `tests/heroMotion.test.ts`, `tests/fiendMotion.test.ts`, combat tests | Terrain height/grounding, large-vessel animations as added |
 | Controls/mobile | `tests/mobile.test.ts`, `tests/mobile-preview.html` | Physical iOS Safari/Android Chrome; 60 FPS under active streaming/sailing |
@@ -156,7 +158,7 @@ These are **non-destructive** source changes. They do not rebuild the world or m
 | Minimap | `tests/minimap.test.ts`, `tests/minimap-terrain.test.ts` | Visual landmark correctness and GPU readback profiling on devices |
 | Cinematic/camera | Cutscene and gameplay tests; browser-only choreography still relevant | Moving actors/anchors, skip, cell pinning and resume through cinematic handoffs |
 
-**Validation status at the time of this audit:** Earlier mini-map branch passed a Vercel TypeScript/Vite production build, but its full Vitest suite was not observed running. This preparation PR adds independent CI. **Do not claim the current branch has passed CI or real-device QA until there is run evidence.**
+**Verified automated baseline:** [GitHub Actions run 42531764335](https://github.com/blooprocket-create/APlus/actions/runs/42531764335) on commit `da102262` completed successfully: **17 test files, 127 tests passed**, including all three headless opening-role rescue/reveal tests, v1 save tests and the repaired mini-map zone-switch test. Vercel's TypeScript and Vite production build also passed for the preceding branch head. The Vite build warns about JS chunks exceeding 500 kB (roughly 534 kB and 712 kB in one observed build); bundle weight and mobile delivery deserve measurement, not premature claims of 60 FPS. Later documentation-only commits should be covered by another CI run. **Manual browser/device QA and actual save migration are not verified.**
 
 ## 8. Phase 0 completion checklist
 
@@ -166,8 +168,9 @@ These are **non-destructive** source changes. They do not rebuild the world or m
 - [x] Specify World V2 decisions, migration and acceptance requirements.
 - [x] Extract one shared dependency from legacy quest code, keeping compatibility.
 - [x] Add a narrative preservation contract test and an automated CI definition.
-- [ ] Confirm `npm run build` and `npm test` pass on the preparation branch.
-- [ ] Capture representative v1 saves at arrival, mid-quest, during escort, and refuge for all three heroes.
+- [x] Confirm `npm run build` and `npm test` pass via GitHub Actions (17 files / 127 tests, run 42531764335).
+- [x] Add **synthetic** v1 round-trip fixtures for arrival, mid-quest, escort and refuge across all three roles.
+- [ ] Capture and inspect **real browser** v1 saves at those checkpoints and retain migration fixtures.
 - [ ] Perform manual browser opening/defeat/resume/skip smoke checks and record results.
 - [ ] Finish import/reachability inventory for every legacy module and classify safe retirement candidates with zero active imports.
 - [x] Extract pure opening step IDs and v1 position types from the scene module; preserve compatibility exports.
@@ -178,8 +181,8 @@ These are **non-destructive** source changes. They do not rebuild the world or m
 
 ## 9. First follow-up tickets
 
-1. **P0-01 baseline verification:** Run CI; triage failures without changing gameplay; record artifact links and test evidence.
-2. **P0-02 save samples:** Produce anonymized v1 snapshot fixtures for three heroes and interrupted/defeat states. Add read/round-trip tests with error handling.
+1. **P0-01 baseline verification (done):** CI passed on [run 42531764335](https://github.com/blooprocket-create/APlus/actions/runs/42531764335) after correcting a stale mini-map test assumption. Continue checking CI on subsequent changes.
+2. **P0-02 save samples (partially done):** Synthetic three-role/milestone fixture tests are passing; still capture **actual browser snapshots** and interruption/defeat cases for migration.
 3. **P0-03 pure story DTO (started):** Pure step/position types and shared companion identity are extracted. Next separate remaining opening quest data and introduce the anchor-resolver/versioned migration boundary.
 4. **P0-04 dependency closure:** Enumerate imports/exports and remaining UI/API routes to the old campaigns; produce per-file retirement gate and compatibility strategy.
 5. **P0-05 device/reference run:** Record current three-role Hearthmere completion, cutscene skip, save/resume and iPhone 14 Pro frame timings.
