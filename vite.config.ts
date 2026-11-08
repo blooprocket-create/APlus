@@ -13,6 +13,7 @@ export default defineConfig({
       input: {
         game: 'index.html',
         worldV2Lab: 'world-v2-lab.html',
+        worldV2Geography: 'world-v2-geography.html',
       },
       output: {
         manualChunks: {
