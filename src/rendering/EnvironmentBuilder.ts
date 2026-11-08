@@ -89,6 +89,11 @@ export class EnvironmentBuilder {
     return { portals: [], npcs: [] };
   }
 
+  /** Actual rendered zone (including terrain, roads, buildings and foliage). */
+  public get minimapWorldRoot(): THREE.Group | null {
+    return this.zoneGroup;
+  }
+
   public get biomeWalkable(): ((point: { x: number; z: number }) => boolean) | undefined {
     return this.biome?.walkable;
   }
