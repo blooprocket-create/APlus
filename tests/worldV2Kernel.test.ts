@@ -179,7 +179,7 @@ describe('World V2: cell residency and lifetime', () => {
     const freed: string[] = [];
     const streamer = new WorldCellStreamer({ ...opts, activeRadius: 0, warmRadius: 0,
       lookAheadDistance: 0, maxConcurrentLoads: 2, maxLoadsPerUpdate: 1 }, {
-      load: () => new Promise(resolve => { resolvers.push(resolve); }),
+      load: () => new Promise<string>(resolve => { resolvers.push(resolve); }),
       unload: resource => { freed.push(resource); },
     });
     streamer.update({ x: 0, z: 0 });
