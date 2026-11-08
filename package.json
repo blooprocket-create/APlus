@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
-    "audit:world": "node tools/world-v2-dependency-audit.mjs"
+    "audit:world": "node tools/world-v2-dependency-audit.mjs",
+    "test:browser": "node tools/world-v2-browser-smoke.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"
