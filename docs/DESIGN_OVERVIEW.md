@@ -14,6 +14,12 @@ Build on the existing combat feel toward fast, expressive action. The references
 
 Minimum **60 fps on iPhone 14 Pro** is a requirement to verify on physical hardware, including demanding play. Support Apple and Android browsers; exact versions, Android reference hardware, and minimum device coverage still need technical definition. No new performance claim is established by this document.
 
+## World Architecture V2 — confirmed direction
+
+The latest decisions (D155–D164) establish **procedural-first geographical generation, one canonical shared world, multiple continents/islands, fully explorable oceans, player-controlled ships with accessible action-RPG handling, optional fast travel, a wider isometric sailing camera, physically accessible free landings, and persistent ships with port/shipyard recovery**. Major story locations remain fixed in the published world, but **Hearthmere's current town layout and source coordinates may be completely rebuilt** if its working assets, quests, story outcomes, saves and cinematic functionality are preserved.
+
+The implementation authority is [World Architecture V2](WORLD_V2_ARCHITECTURE.md). The [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) distinguishes current active Hearthmere code from old, still-reachable prototype systems and lists the migration gates. Proposed terrain, streaming, save, ship and world-builder interfaces are **not yet implemented**; exact landmass geography and scale remain undecided.
+
 ## Emotional and narrative identity
 
 The world is harsh and tense, with rare warmth. Three strangers are forced together by the opening crisis and gradually become a close found family. All three survive every narrative route, and their bond remains intact even in the darkest endings: they face the consequences together (D98). Supporting people and places can be permanently lost, including in choices with no perfect answer.
@@ -146,7 +152,7 @@ The major direction is established; the next work should produce concrete design
 3. The twelve ability-tree designs, three awakened kits, and hero/gear/form visual briefs.
 4. A technical delivery/persistence/performance plan and a staged implementation handoff with acceptance criteria.
 
-The user selected the branching campaign as the next focus. Its draft and opening development are now written; continue targeted review and scene/region development. The user is back on a computer and permits multiple questions; use clickable groups of two or three related substantive questions. Direct-chat lettered choices were used while they were on a phone. No implementation agent has been dispatched.
+The branching campaign and opening drafts remain story authorities, but the latest technical implementation priority is **World Architecture V2, beginning with Phase 0 audit and non-destructive isolation**. The planned Hearthmere restructuring supersedes any expectation that existing opening-world coordinates must remain fixed. The full campaign and exact landscape are not yet implemented.
 
 ## Document map and authority
 
@@ -165,5 +171,7 @@ The user's latest explicit direction governs. [The decision record](DESIGN_DIREC
 | [Crafting and economy](CRAFTING_DESIGN.md) | Nine professions, recipes, trade, and gear direction. |
 | [Narrative and cinematics](NARRATIVE_PRESENTATION.md) | Emotional direction, branching requirements, visual performance, vocals, music, and scene pacing. |
 | [Saving and offline](SAVE_AND_OFFLINE.md) | Guest/cloud saves, evolving timelines, recovery, offline content, and unresolved synchronization. |
+| [World Architecture V2](WORLD_V2_ARCHITECTURE.md) | Approved world/maritime direction, proposed contracts, phase gates and quality requirements. |
+| [World V2 Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) | Actual entrypoint, source classification, preservation/migration risks and verification checklist. |
 
 Hearthmere is the sole player-facing campaign. It runs through the refuge, with a local resume per hero. The Hearthmere Outskirts prototype serves as an internal reference for the connected road fight and moat puzzle. The lead-in needs pacing development, and art, vocal performances, and device targets still need production validation. The production roadmap sequences the remaining campaign and delivery work.
