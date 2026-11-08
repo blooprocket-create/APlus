@@ -62,6 +62,9 @@ export class MinimapTerrainCapture {
     this.camera.updateProjectionMatrix();
 
     const oldTarget = renderer.getRenderTarget();
+    const oldShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+    // Reuse the last main-scene shadow map rather than rebuilding it for this low-res pass.
+    renderer.shadowMap.autoUpdate = false;
     const fog = scene.fog;
     const oldDensity = fog instanceof THREE.FogExp2 ? fog.density : null;
     const oldFar = fog instanceof THREE.Fog ? fog.far : null;
@@ -100,6 +103,7 @@ export class MinimapTerrainCapture {
       this.center = null;
     } finally {
       renderer.setRenderTarget(oldTarget);
+      renderer.shadowMap.autoUpdate = oldShadowAutoUpdate;
       if (fog instanceof THREE.FogExp2 && oldDensity !== null) fog.density = oldDensity;
       if (fog instanceof THREE.Fog && oldFar !== null) fog.far = oldFar;
       for (const child of hidden) child.visible = true;
