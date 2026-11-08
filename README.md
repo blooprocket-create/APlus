@@ -30,6 +30,12 @@ The completed Phase 1 world platform has a separate **development/QA scene** ava
 
 Read [World V2 Phase 1 completion](docs/WORLD_V2_PHASE1_KERNEL.md) for compiler commands, source contracts, QA evidence and the Phase 2 integration handoff. `npm run build` generates the world preview automatically; `npm run world:bake:verify` rechecks its byte-level reproducibility.
 
+### World V2 geography lab (Phase 2 staging)
+
+Explore the [3D geography lab](/world-v2-geography.html) to see **two staged continents, three islands, coastlines, ocean depths, forest/highland/beach biomes, river channels, and Hearthmere's proposed story pads and roads**. Use the buttons to jump to mainland, island and open-ocean sample regions. A fully **offline-baked atlas overview** shows all five landmasses in the top-right.
+
+This map is **for inspection and iteration, not yet approved canonical geography**; its five landmasses, names, sizes and Hearthmere coordinates are intentionally provisional. The existing normal game continues untouched. The compiler now writes 302 staged geographical cell files and validates their seams and constraints. See [Phase 2 geography implementation](docs/WORLD_V2_PHASE2_GEOGRAPHY.md). To reproduce: `npm run world:geo:bake`, then `npm run world:geo:verify` and `npm run world:geo:verify -- --reverse`.
+
 ## Run
 
 ```sh
