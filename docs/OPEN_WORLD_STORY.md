@@ -223,6 +223,6 @@ First review the premise, antagonist, party arcs, and ending together. This draf
 
 Once the story direction is settled, draw the continuous basin and author Hearthmere, its approaches, and a small surrounding exploration loop. Prove that moving, fighting, discovering, returning, and seeing a persistent change are enjoyable there. Then write the opening local stories against that playable geography.
 
-Replacing the existing systems will require a separate implementation pass: continuous terrain and stable world coordinates; persistent world entities; story facts independent of chapter indices; retirement of both old campaign entry points; and an explicit save migration that preserves heroes, equipment, and progression without importing obsolete quest flags. Decide migration behavior before altering stored journeys.
+Replacing the existing systems will require a separate implementation pass: continuous terrain and stable world coordinates; persistent world entities; story facts independent of chapter indices; retirement of both old campaign entry points; and a clean World V2 save format without old-save migration that preserves heroes, equipment, and progression without importing obsolete quest flags. Decide migration behavior before altering stored journeys.
 
 No runtime behavior, saves, portals, or existing quest data are changed by this document.
