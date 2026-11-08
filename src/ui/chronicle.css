@@ -140,7 +140,7 @@ kbd { font: 10px 'Segoe UI', sans-serif; border: 1px solid #82918c50; border-rad
 .path-progress-fill { background: #d7bb86; }
 .hud-top-right { position: relative; width: 180px; gap: 12px; }
 .minimap-wrap { position: relative; width: 158px; padding-top: 10px; }
-#hud-minimap { display: block; width: 158px; height: 158px; border: 1px solid #bbccb14a; padding: 4px; border-radius: 50%; box-shadow: 0 0 0 4px #0b191d99, 0 10px 30px #0004; }
+#hud-minimap { display: block; box-sizing: border-box; width: 158px; height: 158px; border: 1px solid #bbccb14a; padding: 0; border-radius: 50%; background: #0c171c; box-shadow: 0 0 0 4px #0b191d99, 0 10px 30px #0004; }
 .map-north { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); color: #dfc691; font: 10px Georgia, serif; z-index: 1; background: #101e23; padding: 0 4px; }
 .map-legend { display: flex; justify-content: center; align-items: center; gap: 5px; margin-top: 11px; font-size: 6px; letter-spacing: .12em; color: #9baea1; }
 .map-legend i { width: 4px; height: 4px; border-radius: 50%; background: #ed7685; }
