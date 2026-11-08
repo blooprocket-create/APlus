@@ -1,6 +1,7 @@
 import { assertCellSize, cellToWorldCorner, type WorldCellCoordinate } from './WorldCoordinates';
 import { deriveSeed, worldCellId } from './WorldIdentity';
 import type { WorldAtlasManifest } from './WorldAtlas';
+import type { GeographyWorld } from './WorldGeography';
 
 /**
  * TEMPORARY smooth placeholder surface only. Not a final continent, biome,
@@ -50,6 +51,13 @@ export interface TerrainCell {
   readonly cellSize: number;
   /** Row-major (z then x), including both edges (segments+1)^2. */
   readonly heights: Float32Array;
+  /** Optional Phase 2 geography vertex attributes, aligned with heights. */
+  readonly geography?: {
+    readonly waterLevels: Float32Array;
+    readonly waterKinds: Uint8Array;
+    readonly biomes: Uint8Array;
+    readonly roads: Uint8Array;
+  };
 }
 
 /**
@@ -112,4 +120,56 @@ export function sampleCellHeight(cell: TerrainCell, worldX: number, worldZ: numb
   const d = terrainHeightAtVertex(cell, ax, az + 1);
   const e = terrainHeightAtVertex(cell, ax + 1, az + 1);
   return (a + (b - a) * tx) * (1 - tz) + (d + (e - d) * tx) * tz;
+}
+
+/** Builds exactly shared world-space samples; no hardcoded path constraints. */
+export function buildGeographyTerrainCell(
+  world: GeographyWorld,
+  coordinate: WorldCellCoordinate,
+  segments = PLACEHOLDER_SEGMENTS,
+): TerrainCell {
+  const atlas = world.atlas;
+  assertCellSize(atlas.cellSize);
+  if (!Number.isSafeInteger(segments) || segments < 1 || segments > 256) {
+    throw new RangeError('segments must be an integer between 1 and 256');
+  }
+  const corner = cellToWorldCorner(coordinate, atlas.cellSize);
+  const vertices = (segments + 1) ** 2;
+  const heights = new Float32Array(vertices);
+  const waterLevels = new Float32Array(vertices);
+  const waterKinds = new Uint8Array(vertices);
+  const biomes = new Uint8Array(vertices);
+  const roads = new Uint8Array(vertices);
+  for (let row = 0; row <= segments; row++) for (let column = 0; column <= segments; column++) {
+    const wx = (coordinate.x + column / segments) * atlas.cellSize;
+    const wz = (coordinate.z + row / segments) * atlas.cellSize;
+    const sample = world.sample(wx, wz);
+    const i = row * (segments + 1) + column;
+    heights[i] = sample.height;
+    waterLevels[i] = sample.waterLevel;
+    waterKinds[i] = sample.waterKind;
+    biomes[i] = sample.biome;
+    roads[i] = sample.road;
+  }
+  return {
+    id: worldCellId(atlas.worldId, { ...coordinate, lod: 0 }),
+    coordinate: { ...coordinate }, corner, segments, cellSize: atlas.cellSize,
+    heights, geography: { waterLevels, waterKinds, biomes, roads },
+  };
+}
+
+/** Surface and water classification at a vertex, safe for player/boat code. */
+export function terrainVertexSurface(cell: TerrainCell, column: number, row: number): {
+  ground: number; waterLevel: number | null; waterKind: number; biome: number; road: number;
+} {
+  const ground = terrainHeightAtVertex(cell, column, row);
+  const i = row * (cell.segments + 1) + column;
+  const geography = cell.geography;
+  return {
+    ground,
+    waterLevel: geography && geography.waterKinds[i] !== 0 ? geography.waterLevels[i] : null,
+    waterKind: geography?.waterKinds[i] ?? 0,
+    biome: geography?.biomes[i] ?? 3,
+    road: geography?.roads[i] ?? 0,
+  };
 }
