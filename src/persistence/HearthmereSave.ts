@@ -1,4 +1,4 @@
-import { OPENING_STEPS, type OpeningPoint, type OpeningStep } from '../game/HearthmereOpening';
+import { OPENING_STEPS, type OpeningPoint, type OpeningStep } from '../game/HearthmereStory';
 import type { CharacterClassId } from '../types/game';
 
 export interface HearthmereSave {
