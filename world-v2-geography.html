@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Astral Chronicles — World V2 Geography Lab</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #112a32; color: #f0f4f2; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    #lab { display: block; width: 100%; height: 100%; touch-action: none; }
+    #heads-up { position: fixed; top: 14px; left: 14px; max-width: min(440px,calc(100vw - 28px)); background: #10242fdd; border: 1px solid #fff3; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.45; pointer-events: none; }
+    #heads-up strong { display: block; font-size: 17px; }
+    #heads-up p { margin: 5px 0 8px; opacity: .85; }
+    #status { font-family: ui-monospace, monospace; white-space: pre-line; font-size: 12px; }
+    #arrows { position: fixed; right: 14px; bottom: max(14px,env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(2, 48px); gap: 4px; }
+    #arrows button { background: #153f52d9; border: 1px solid #98d1db77; color: white; border-radius: 9px; font-size: 20px; touch-action: none; }
+    #arrows button:active { background: #2a7e94; }
+    @media (min-width: 760px) { #arrows { display: none; } }
+    #waypoints { position: fixed; left: 14px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100vw - 190px); }
+    #waypoints button { border: 1px solid #c5e4ea90; border-radius: 8px; background: #173b44dd; color: white; padding: 9px 12px; cursor: pointer; }
+    #waypoints button:focus-visible { outline: 2px solid #fff4a9; }
+    @media (max-width: 760px) { #heads-up { font-size: 11px; padding: 9px; } #waypoints { bottom: max(140px,env(safe-area-inset-bottom)); max-width: 100%; } #waypoints button { padding: 7px 9px; } }
+  </style>
+</head>
+<body>
+  <canvas id="lab" aria-label="World V2 prototype terrain exploration canvas"></canvas>
+  <div id="heads-up">
+    <strong>World V2 — Geography Lab</strong>
+    <p>WASD / arrow keys to explore coastlines, rivers and landmass biomes. Shift to move faster. This is <b>staged procedural geography</b>, not the approved final atlas or the actual Hearthmere quest scene.</p>
+    <div id="status">Loading compiled geography…</div>
+  </div>
+  <nav id="waypoints" aria-label="Preview location jumps">
+    <button id="geo-jump-hearthmere" data-jump="heart">Hearthmere stage</button>
+    <button id="geo-jump-coast" data-jump="coast">Coast</button>
+    <button id="geo-jump-island" data-jump="island">Island</button>
+    <button id="geo-jump-continent" data-jump="continent">Other continent</button>
+    <button id="geo-jump-sea" data-jump="sea">Open sea</button>
+  </nav>
+  <div id="arrows" aria-label="Touch movement controls">
+    <span></span><button data-direction="up" aria-label="Move north">▲</button><span></span>
+    <button data-direction="left" aria-label="Move west">◀</button>
+    <button data-direction="down" aria-label="Move south">▼</button>
+    <button data-direction="right" aria-label="Move east">▶</button>
+  </div>
+  <script type="module" src="/src/world-v2/geography-lab.ts"></script>
+</body>
+</html>
