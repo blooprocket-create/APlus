@@ -19,6 +19,14 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Chrome Hearthmere entrypoint smoke
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hearthmere-browser-smoke
+          path: test-artifacts/browser-smoke/*.png
+          if-no-files-found: ignore
       - name: Inventory World V2 legacy imports
         run: |
           npm run audit:world
