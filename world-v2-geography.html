@@ -17,6 +17,9 @@
     #arrows button { background: #153f52d9; border: 1px solid #98d1db77; color: white; border-radius: 9px; font-size: 20px; touch-action: none; }
     #arrows button:active { background: #2a7e94; }
     @media (min-width: 760px) { #arrows { display: none; } }
+    #geo-overview { position: fixed; top: 15px; right: 14px; width: min(37vw, 440px); border: 1px solid #d3e9e866; border-radius: 12px; box-shadow: 0 6px 28px #0c1d2655; pointer-events: none; }
+    @media (max-width: 850px) { #geo-overview { width: min(46vw, 240px); top: auto; bottom: 16px; left: 14px; opacity: .8; } }
+    @media (max-width: 600px) { #geo-overview { display: none; } }
     #waypoints { position: fixed; left: 14px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100vw - 190px); }
     #waypoints button { border: 1px solid #c5e4ea90; border-radius: 8px; background: #173b44dd; color: white; padding: 9px 12px; cursor: pointer; }
     #waypoints button:focus-visible { outline: 2px solid #fff4a9; }
@@ -30,6 +33,7 @@
     <p>WASD / arrow keys to explore coastlines, rivers and landmass biomes. Shift to move faster. This is <b>staged procedural geography</b>, not the approved final atlas or the actual Hearthmere quest scene.</p>
     <div id="status">Loading compiled geography…</div>
   </div>
+  <img id="geo-overview" src="/world-v2/geography/atlas-overview.svg" alt="Staging overview with two continents, three islands, rivers and Hearthmere's proposed location" />
   <nav id="waypoints" aria-label="Preview location jumps">
     <button id="geo-jump-hearthmere" data-jump="heart">Hearthmere stage</button>
     <button id="geo-jump-coast" data-jump="coast">Coast</button>
