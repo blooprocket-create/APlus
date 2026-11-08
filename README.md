@@ -24,6 +24,12 @@ The [combat and progression brief](docs/COMBAT_PROGRESSION.md) collects the acti
 
 The next engineering program is [World Architecture V2](docs/WORLD_V2_ARCHITECTURE.md): a deterministic canonical procedural world with multiple continents and islands, freely navigable oceans, persistent ships and an open-world Hearthmere rebuilt around story anchors rather than old coordinates. The [Phase 0 legacy audit](docs/WORLD_V2_PHASE0_AUDIT.md) and [dependency inventory](docs/WORLD_V2_DEPENDENCY_INVENTORY.md) documents active assets/quests, legacy systems and retirement boundaries and no-legacy-migration policy. The new architecture is **planned**, not yet playable; the Phase 0 engineering baseline is complete (127 passing tests and real Chrome HUD entry for all three heroes).
 
+### World V2 streaming lab (Phase 1)
+
+The replacement-world foundation has a separate **development/QA scene** available at [`/world-v2-lab.html`](world-v2-lab.html). Move with WASD/arrow keys (Shift to go faster) or the touch D-pad. It demonstrates deterministic terrain-cell seams, global coordinates, origin rebasing, and active/warm cell streaming in an isometric view. This is **provisional geometry, not the published continents or redesigned Hearthmere**; the normal game remains at `/index.html`.
+
+Read [World V2 Phase 1 kernel](docs/WORLD_V2_PHASE1_KERNEL.md) for code boundaries, QA results and the integration handoff.
+
 ## Run
 
 ```sh
