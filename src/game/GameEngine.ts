@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { WorldV2GameplayPort } from '../world-v2/WorldV2GameplayBridge';
 import { getViewportProfile } from '../platform/Viewport';
 import { dressGuardian } from '../rendering/GuardianRegalia';
 import { BossFinisher } from '../rendering/BossFinisher';
@@ -234,6 +235,10 @@ export class GameEngine {
   private scene: THREE.Scene;
   private cameraController: IsometricCameraController;
   private environment: EnvironmentBuilder;
+  /** Optional V2 residency/anchor port. Never enabled for legacy Hearthmere. */
+  private worldV2Port: WorldV2GameplayPort | null = null;
+  private worldV2LastTick = -Infinity;
+  private worldV2PreviousPosition: { x: number; z: number } | null = null;
   private minimapTerrain: MinimapTerrainCapture | null = null;
   private vfx: VfxSystem;
   public readonly input: InputManager;
@@ -325,6 +330,19 @@ export class GameEngine {
   private nearbyChronicleSite: ChronicleSite | null = null;
   private fieldPlan: FieldPlan | null = null;
   private travelInProgress = false;
+
+  /**
+   * Phase 1 opt-in seam. A future World V2 game mode attaches its runtime here;
+   * legacy opening, quests, collision and saves retain their existing behavior.
+   * The caller owns setup; the engine owns detachment between sessions.
+   */
+  public attachWorldV2Port(port: WorldV2GameplayPort | null): void {
+    if (port === this.worldV2Port) return;
+    this.worldV2Port?.dispose();
+    this.worldV2Port = port;
+    this.worldV2LastTick = -Infinity;
+    this.worldV2PreviousPosition = null;
+  }
 
   public get isFinishing(): boolean { return this.finisher !== null; }
   public get isSlice(): boolean { return this.slice !== null; }
@@ -1720,6 +1738,7 @@ export class GameEngine {
   }
 
   private clearGameplayEntities(): void {
+    this.attachWorldV2Port(null);
     if (this.playerRig) {
       this.removeSceneObject(this.playerRig.root);
       this.playerRig = null;
@@ -1858,6 +1877,18 @@ export class GameEngine {
       } else {
         this.updateGameplay(dt);
       }
+    }
+
+    // Streaming sees authoritative global X/Z and the actual movement heading.
+    // No V2 port is attached during the current Hearthmere opening.
+    if (this.worldV2Port && this.mode === 'playing' && !this.isPaused &&
+      now - this.worldV2LastTick >= 120) {
+      const { x, z } = this.playerPos;
+      const prior = this.worldV2PreviousPosition;
+      this.worldV2Port.update({ x, z },
+        prior ? { x: x - prior.x, z: z - prior.z } : { x: 0, z: 0 });
+      this.worldV2PreviousPosition = { x, z };
+      this.worldV2LastTick = now;
     }
 
     this.vfx.update(this.isPaused ? 0 : dt, this.cameraController.camera);

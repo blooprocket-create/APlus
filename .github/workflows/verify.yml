@@ -18,6 +18,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Verify deterministic atlas and cell artifacts
+        run: |
+          npm run world:bake:verify
+          npm run world:bake:verify -- --reverse
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: world-v2-preview-bake
+          path: |
+            public/world-v2/preview/atlas-index.json
+            public/world-v2/preview/validation-report.json
+          if-no-files-found: ignore
       - run: npm test
       - name: Chrome Hearthmere entrypoint smoke
         run: npm run test:browser

@@ -14,7 +14,7 @@ The user approved a **procedural-first, one-seed canonical, multi-continent/isla
 
 **Priority sequence before the earlier content-production gates:**
 1. **Phase 0 — completed engineering audit:** Document current/legacy dependencies, preserve Hearthmere story/assets, extract shared code, and establish passing CI, three-role Chrome smoke and dependency inventory. Do not bulk-delete prototype modules.
-2. **Phase 1:** Publish pure canonical atlas/anchor/cell interfaces and a deterministic placeholder multi-cell test; build validation and debug tooling before decorative detail.
+2. **Phase 1 — engineering foundation complete:** Versioned deterministic atlas and semantic anchors, double-precision global coordinates, seam-safe cell streaming, reproducible offline preview bake, checksummed HTTP loading, an isolated browser QA lab and opt-in GameEngine bridge. No production geography or Hearthmere conversion implied. [Phase 1 evidence](WORLD_V2_PHASE1_KERNEL.md).
 3. **Phase 2:** Generate continent/island geography, rivers, biome and roads from constraints; pre-bake streamed world data. Story sites must be valid and accessible.
 4. **Phase 3:** Rebuild Hearthmere on V2, moving story staging/actors freely while maintaining opening beat IDs and assets, with all three hero opening and **new V2 save/resume** acceptance runs.
 5. **Phase 4:** Add persistent world deltas, free ocean/ship traversal, save-compatible boarding/disembarkation and port recovery.
@@ -69,4 +69,4 @@ For example, the reservoir ticket would identify the exact warning trigger, the 
 
 ## First implementation handoff
 
-The **immediate** assignment is **World V2 Phase 1**: implement a pure canonical atlas/world-cell/anchor kernel defined by [World Architecture V2](WORLD_V2_ARCHITECTURE.md). The [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) is complete for engineering preflight and documents remaining *later-phase* visual/device requirements. The [Hearthmere opening build brief](HEARTHMERE_OPENING_BUILD.md) remains an important **narrative/behavior** handoff, but its old spatial blockout is not a World V2 constraint.
+The **immediate** assignment is **World V2 Phase 2**: implement constrained canonical continental/island geography, ocean/shorelines, drainage, climate, terrain elevation and collision/navigation data on the completed [Phase 1 platform](WORLD_V2_PHASE1_KERNEL.md). The [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) is complete for engineering preflight and documents remaining *later-phase* visual/device requirements. The [Hearthmere opening build brief](HEARTHMERE_OPENING_BUILD.md) remains an important **narrative/behavior** handoff, but its old spatial blockout is not a World V2 constraint.

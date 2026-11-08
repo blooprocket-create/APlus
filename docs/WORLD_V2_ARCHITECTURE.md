@@ -1,6 +1,6 @@
 # Astral Chronicles — World Architecture V2
 
-**Status:** Product direction locked 2026-11-08; the **first Phase 1 kernel increment is implemented and tested** ([Phase 1 kernel handoff](WORLD_V2_PHASE1_KERNEL.md)). Geography, real-world integration and performance budgets remain proposed until later validation.  
+**Status:** Product direction locked 2026-11-08; **Phase 1's deterministic atlas/cell platform, offline preview compiler, checksummed browser streaming lab and opt-in GameEngine port are implemented** ([Phase 1 completion](WORLD_V2_PHASE1_KERNEL.md)). Real continental geography, Hearthmere integration, shipping gameplay and physical-device performance remain later phases.  
 **Authority:** The latest user-confirmed direction, then [DESIGN_DIRECTION.md](DESIGN_DIRECTION.md), this specification, [DESIGN_OVERVIEW.md](DESIGN_OVERVIEW.md), and the relevant story/quest briefs.  
 **Execution:** [Phase 0 audit and preservation register](WORLD_V2_PHASE0_AUDIT.md) → [production roadmap](PRODUCTION_ROADMAP.md).
 
@@ -118,7 +118,7 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 | Phase | Scope | Exit gate |
 | --- | --- | --- |
 | **0 — Legacy audit and isolation** | Inventory current/legacy systems, preservation register, save contracts, test matrix; extract shared functionality from retired modules without changing experience | Clear dependency and risk map, baseline tests/build automated, no known lost Hearthmere stories or assets |
-| **1 — Canonical world kernel (in progress)** | Seed/versioned atlas, global coordinates, story-anchor registry, streaming interfaces, seam-safe placeholder terrain | Headless identity/seam tests and a separate Chrome-tested multi-cell QA lab pass; production GameEngine adapter and published atlas remain to be built |
+| **1 — Canonical world kernel (engineering complete)** | Seed/versioned atlas, global coordinates, semantic anchors, cancellable cell streaming, repeatable offline preview bake and GameEngine opt-in port | Deterministic manifest and tile data, 2,448 validated seam vertices, byte-stable reverse-order bake, browser HTTP-baked-cell traversal, regression and engine-port tests; **real world geography is Phase 2** |
 | **2 — Geography builder** | Continent and island masks, terrain, climate, water, navigation, constrained placement, bake pipeline | Reproducible multi-landmass atlas and guaranteed access to authored story sites |
 | **3 — Hearthmere re-staging** | Rebuild town and surroundings on V2; rebind NPCs, objectives, combat and cinematics by anchor | All three opening roles reach refuge and later story continuity remains valid; travel is continuous |
 | **4 — Persistence + maritime traversal** | New V2 save schema, world-state deltas, ownership, ships, free coastal landing, recovery, fast travel | Land → ship → island → land → ship → reload and recover without duplication or lost V2 state |
@@ -139,7 +139,7 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 
 ## 10. Next handoff
 
-**Immediate:** Continue Phase 1 by defining the production adapter and offline atlas/bake pipeline around the verified pure kernel and streaming lab. **Legacy save migration is out of scope**.  
+**Immediate:** Begin **Phase 2 geography** on the Phase 1 foundation: deterministic continental and island outlines, elevation, hydrology, climate/biomes, shoreline access and authored story-anchor constraints. Keep the existing Hearthmere experience running until Phase 3. **Legacy save migration is out of scope**.  
 **Next code task:** Define the minimal World V2 atlas/anchor/cell interfaces and a headless deterministic geography builder; do **not** add visual biomes, ships, six continents or an engine-wide rewrite in one PR.  
 **No destructive cleanup** until the replacement entrypoint and scenario tests pass. Retirement of old modules requires removing live imports and preserving Hearthmere assets/quest behavior, **not** old-save migration.
 
