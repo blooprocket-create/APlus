@@ -1,6 +1,6 @@
 import { buildAtlas, type WorldAtlasManifest } from './WorldAtlas';
 import { cellToWorldCorner, type WorldCellCoordinate } from './WorldCoordinates';
-import { worldCellId } from './WorldIdentity';
+import { deriveSeed, worldCellId } from './WorldIdentity';
 import type { TerrainCell } from './WorldTerrain';
 
 /**
@@ -9,7 +9,8 @@ import type { TerrainCell } from './WorldTerrain';
  */
 export interface CompiledCell {
   readonly schemaVersion: 1;
-  readonly atlasHash: string;
+  /** Region-independent generation profile so new islands do not invalidate existing cells. */
+  readonly generationHash: string;
   readonly id: string;
   readonly coordinate: WorldCellCoordinate;
   readonly cellSize: number;
@@ -38,12 +39,21 @@ function validRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+export function cellGenerationHash(
+  atlas: Pick<WorldAtlasManifest, 'worldSeed' | 'worldId' | 'cellSize' | 'generatorVersion'>,
+  segments: number,
+): string {
+  return deriveSeed(atlas.worldSeed, 'cell-bake-v1', atlas.worldId,
+    atlas.generatorVersion, String(atlas.cellSize), String(segments))
+    .toString(16).padStart(8, '0');
+}
+
 export function encodeCompiledCell(atlas: WorldAtlasManifest, cell: TerrainCell): CompiledCell {
   if (cell.id !== worldCellId(atlas.worldId, { ...cell.coordinate, lod: 0 }) ||
     cell.cellSize !== atlas.cellSize) fail('Cell identity or size does not match atlas');
   return {
     schemaVersion: 1,
-    atlasHash: atlas.contentHash,
+    generationHash: cellGenerationHash(atlas, cell.segments),
     id: cell.id, coordinate: { ...cell.coordinate },
     cellSize: cell.cellSize, segments: cell.segments,
     heights: Array.from(cell.heights),
@@ -60,7 +70,7 @@ export function decodeCompiledCell(
   const x = coordinate.x, z = coordinate.z;
   if (!Number.isSafeInteger(x) || !Number.isSafeInteger(z) ||
     x !== cellRef.coordinate.x || z !== cellRef.coordinate.z) return fail('Unexpected cell coordinates');
-  if (value.schemaVersion !== 1 || value.atlasHash !== atlas.contentHash ||
+  if (value.schemaVersion !== 1 || value.generationHash !== cellGenerationHash(atlas, segments) ||
     value.cellSize !== atlas.cellSize || value.segments !== segments ||
     value.id !== cellRef.id || value.id !== worldCellId(atlas.worldId, { x: x as number, z: z as number, lod: 0 })) {
     return fail('Cell schema, atlas version, dimensions or ID mismatch');
