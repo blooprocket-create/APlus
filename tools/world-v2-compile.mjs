@@ -24,7 +24,10 @@ const reverse = args.includes('--reverse');
 const outArgIndex = args.indexOf('--out');
 const out = path.resolve(root, outArgIndex >= 0 ? args[outArgIndex + 1] : 'public/world-v2/preview');
 if (outArgIndex >= 0 && !args[outArgIndex + 1]) throw new Error('--out requires a destination');
-if (out === root || out === path.parse(out).root) throw new Error('Unsafe output folder');
+const allowedRoot = path.join(root, 'public/world-v2');
+if (!out.startsWith(allowedRoot + path.sep)) {
+  throw new Error('Bake output must be a subdirectory of public/world-v2');
+}
 const tmp = mkdtempSync(path.join(tmpdir(), 'astral-world-v2-'));
 const sourceDir = path.join(root, 'src/world-v2');
 const modules = [
@@ -79,8 +82,10 @@ async function main() {
     if (reverse) coords.reverse();
     const generated = new Map();
     const refs = [];
+    const terrainByCoord = new Map();
     for (const address of coords) {
       const cell = buildPlaceholderTerrainCell(previewAtlas, address);
+      terrainByCoord.set(`${address.x}:${address.z}`, cell);
       const artifact = encodeCompiledCell(previewAtlas, cell);
       const relative = `cells/0/${address.x}/${address.z}.json`;
       const json = JSON.stringify(artifact) + '\n';
@@ -91,11 +96,40 @@ async function main() {
       });
     }
     refs.sort((a, b) => a.coordinate.z - b.coordinate.z || a.coordinate.x - b.coordinate.x);
+    // Fail the offline build if any adjacent cell boundary fails a strict
+    // float32 seam check. No geometry should be published with visible cracks.
+    let checkedSeamVertices = 0;
+    for (const cell of terrainByCoord.values()) {
+      const n = cell.segments;
+      for (const [other, east] of [
+        [terrainByCoord.get(`${cell.coordinate.x + 1}:${cell.coordinate.z}`), true],
+        [terrainByCoord.get(`${cell.coordinate.x}:${cell.coordinate.z + 1}`), false],
+      ]) {
+        if (!other) continue;
+        for (let i = 0; i <= n; i++) {
+          const first = east ? cell.heights[i * (n + 1) + n] : cell.heights[n * (n + 1) + i];
+          const second = east ? other.heights[i * (n + 1)] : other.heights[i];
+          if (first !== second) throw new Error(`Terrain seam mismatch at ${cell.id} ${east ? 'east' : 'south'} row ${i}`);
+          checkedSeamVertices++;
+        }
+      }
+    }
+    if (checkedSeamVertices === 0) throw new Error('No terrain seams validated');
     const index = validateCompiledAtlasIndex({
       schemaVersion: 1, profile: 'placeholder-preview-v1',
       atlas: previewAtlas, segments: 16, cells: refs,
     });
     generated.set('atlas-index.json', JSON.stringify(index, null, 2) + '\n');
+    generated.set('validation-report.json', JSON.stringify({
+      schemaVersion: 1,
+      profile: 'placeholder-preview-v1',
+      worldId: previewAtlas.worldId,
+      atlasHash: previewAtlas.contentHash,
+      cellCount: refs.length,
+      checkedSeamVertices,
+      maxSeamMismatch: 0,
+      generatorVersion: previewAtlas.generatorVersion,
+    }, null, 2) + '\n');
     const paths = [...generated.keys()].sort();
     if (verify) {
       const present = collect(out);
@@ -114,7 +148,7 @@ async function main() {
         writeFileSync(fullPath, generated.get(filename));
       }
     }
-    console.log(`World V2 ${verify ? 'verify' : 'bake'} PASS: ${refs.length} cells, atlas ${previewAtlas.contentHash}, ${paths.length} artifacts, output ${path.relative(root, out)}`);
+    console.log(`World V2 ${verify ? 'verify' : 'bake'} PASS: ${refs.length} cells, atlas ${previewAtlas.contentHash}, ${paths.length} artifacts, ${checkedSeamVertices} seam vertices, output ${path.relative(root, out)}`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
