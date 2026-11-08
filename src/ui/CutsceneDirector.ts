@@ -1,8 +1,5 @@
 import { CHARACTER_CLASSES } from '../data/classes';
-import {
-  CANONICAL_HERO_NAMES,
-  getCompanionClassesForPlayer,
-} from '../game/QuestEngine';
+import { CANONICAL_HERO_NAMES, getCompanionClassesForPlayer } from '../game/CompanionRoster';
 import { CharacterClassId, CharacterSaveData, CutsceneId } from '../types/game';
 import { OPENING_LEADS } from '../game/HearthmereOpening';
 import type { HeroExpression } from '../game/HeroSpeech';
