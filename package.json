@@ -6,10 +6,12 @@
   "description": "Mobile-first 3D Anime Action RPG with per-account 3-character persistence",
   "scripts": {
     "dev": "vite --host",
-    "prebuild": "node tools/world-v2-compile.mjs",
+    "prebuild": "node tools/world-v2-compile.mjs && node tools/world-v2-compile.mjs --geography",
     "build": "tsc --noEmit && vite build",
     "world:bake": "node tools/world-v2-compile.mjs",
     "world:bake:verify": "node tools/world-v2-compile.mjs --verify",
+    "world:geo:bake": "node tools/world-v2-compile.mjs --geography",
+    "world:geo:verify": "node tools/world-v2-compile.mjs --geography --verify",
     "preview": "vite preview --host",
     "test": "vitest run",
     "audit:world": "node tools/world-v2-dependency-audit.mjs",

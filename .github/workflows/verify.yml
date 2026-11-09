@@ -22,6 +22,8 @@ jobs:
         run: |
           npm run world:bake:verify
           npm run world:bake:verify -- --reverse
+          npm run world:geo:verify
+          npm run world:geo:verify -- --reverse
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -29,6 +31,8 @@ jobs:
           path: |
             public/world-v2/preview/atlas-index.json
             public/world-v2/preview/validation-report.json
+            public/world-v2/geography/atlas-index.json
+            public/world-v2/geography/validation-report.json
           if-no-files-found: ignore
       - run: npm test
       - name: Chrome Hearthmere entrypoint smoke

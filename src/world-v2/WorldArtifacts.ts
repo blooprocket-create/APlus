@@ -2,6 +2,7 @@ import { buildAtlas, type WorldAtlasManifest } from './WorldAtlas';
 import { cellToWorldCorner, type WorldCellCoordinate } from './WorldCoordinates';
 import { deriveSeed, worldCellId } from './WorldIdentity';
 import type { TerrainCell } from './WorldTerrain';
+import { createGeography, type GeographyDefinition } from './WorldGeography';
 
 /**
  * Versioned immutable cell-bake contract. Maps are CONTENT, not save data.
@@ -16,6 +17,12 @@ export interface CompiledCell {
   readonly cellSize: number;
   readonly segments: number;
   readonly heights: readonly number[];
+  readonly geography?: {
+    readonly waterLevels: readonly number[];
+    readonly waterKinds: readonly number[];
+    readonly biomes: readonly number[];
+    readonly roads: readonly number[];
+  };
 }
 
 export interface CompiledCellReference {
@@ -28,10 +35,11 @@ export interface CompiledCellReference {
 
 export interface CompiledAtlasIndex {
   readonly schemaVersion: 1;
-  readonly profile: 'placeholder-preview-v1';
+  readonly profile: 'placeholder-preview-v1' | 'geography-stage-v1';
   readonly atlas: WorldAtlasManifest;
   readonly segments: number;
   readonly cells: readonly CompiledCellReference[];
+  readonly geography?: GeographyDefinition;
 }
 
 function fail(message: string): never { throw new Error('World V2 artifact: ' + message); }
@@ -57,6 +65,12 @@ export function encodeCompiledCell(atlas: WorldAtlasManifest, cell: TerrainCell)
     id: cell.id, coordinate: { ...cell.coordinate },
     cellSize: cell.cellSize, segments: cell.segments,
     heights: Array.from(cell.heights),
+    ...(cell.geography ? { geography: {
+      waterLevels: Array.from(cell.geography.waterLevels),
+      waterKinds: Array.from(cell.geography.waterKinds),
+      biomes: Array.from(cell.geography.biomes),
+      roads: Array.from(cell.geography.roads),
+    } } : {}),
   };
 }
 
@@ -80,16 +94,39 @@ export function decodeCompiledCell(
   }
   const typed = new Float32Array(heights);
   if (typed.some((h, i) => h !== heights[i])) return fail('Heightfield has non-float32 values');
+  let geography: TerrainCell['geography'];
+  if (value.geography !== undefined) {
+    if (!validRecord(value.geography)) return fail('Invalid geographic terrain attributes');
+    const attrs = value.geography;
+    const count = (segments + 1) ** 2;
+    const validFloats = (items: unknown): items is number[] =>
+      Array.isArray(items) && items.length === count &&
+      items.every(v => typeof v === 'number' && Number.isFinite(v) && Math.fround(v) === v);
+    const validBytes = (items: unknown, max: number): items is number[] =>
+      Array.isArray(items) && items.length === count &&
+      items.every(v => Number.isInteger(v) && v >= 0 && v <= max);
+    if (!validFloats(attrs.waterLevels) || !validBytes(attrs.waterKinds, 2) ||
+      !validBytes(attrs.biomes, 7) || !validBytes(attrs.roads, 255)) {
+      return fail('Bad geographic array size, non-float32 elevations or out-of-range classifications');
+    }
+    geography = {
+      waterLevels: new Float32Array(attrs.waterLevels),
+      waterKinds: new Uint8Array(attrs.waterKinds),
+      biomes: new Uint8Array(attrs.biomes),
+      roads: new Uint8Array(attrs.roads),
+    };
+  }
   const address = { x: x as number, z: z as number };
   return {
     id: cellRef.id, coordinate: address, corner: cellToWorldCorner(address, atlas.cellSize),
-    segments, cellSize: atlas.cellSize, heights: typed,
+    segments, cellSize: atlas.cellSize, heights: typed, ...(geography ? { geography } : {}),
   };
 }
 
 export function validateCompiledAtlasIndex(value: unknown): CompiledAtlasIndex {
   if (!validRecord(value) || value.schemaVersion !== 1 ||
-    value.profile !== 'placeholder-preview-v1' || !validRecord(value.atlas) ||
+    !['placeholder-preview-v1', 'geography-stage-v1'].includes(String(value.profile)) ||
+    !validRecord(value.atlas) ||
     !Array.isArray(value.cells)) return fail('Invalid world catalog header');
   const index = value as unknown as CompiledAtlasIndex;
   // Canonical normalization enforces valid anchors, landmasses, seeds, hash,
@@ -98,6 +135,15 @@ export function validateCompiledAtlasIndex(value: unknown): CompiledAtlasIndex {
   try { rebuilt = buildAtlas(index.atlas); }
   catch (error) { return fail('Atlas rejected: ' + String(error)); }
   if (JSON.stringify(rebuilt) !== JSON.stringify(index.atlas)) return fail('Atlas hash or normalized data differs');
+  if (index.profile === 'geography-stage-v1') {
+    if (!index.geography) return fail('Geography catalog missing geography definition');
+    let normalized;
+    try { normalized = createGeography(index.atlas, index.geography).definition; }
+    catch (error) { return fail('Geography constraints rejected: ' + String(error)); }
+    if (JSON.stringify(normalized) !== JSON.stringify(index.geography)) {
+      return fail('Geography definition not canonical or has mismatched landmasses');
+    }
+  } else if (index.geography !== undefined) return fail('Placeholder catalog cannot include geographic shapes');
   if (!Number.isSafeInteger(index.segments) || index.segments < 1 || index.segments > 256 ||
     index.cells.length < 1 || index.cells.length > 100000) return fail('Invalid cell catalog size');
   const found = new Set<string>();

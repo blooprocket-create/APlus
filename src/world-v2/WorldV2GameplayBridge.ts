@@ -65,7 +65,11 @@ export class WorldV2ArtifactSource {
     if (signal.aborted) throw new Error('World V2 cell load was cancelled');
     await verifySha256(raw, ref.sha256);
     if (signal.aborted) throw new Error('World V2 cell load was cancelled');
-    return decodeCompiledCell(JSON.parse(raw) as unknown, this.catalog.atlas, ref, this.catalog.segments);
+    const cell = decodeCompiledCell(JSON.parse(raw) as unknown, this.catalog.atlas, ref, this.catalog.segments);
+    if (this.catalog.profile === 'geography-stage-v1' && !cell.geography) {
+      throw new Error('World V2 geographic cell is missing water/biome/road classifications');
+    }
+    return cell;
   }
 }
 
