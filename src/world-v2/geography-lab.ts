@@ -399,6 +399,41 @@ function tick(now: number) {
     attackComboStep: 0, attackSwingProgress: 0,
     isDashing: false, hitFlashTimer: 0,
   });
+  if (storySession) {
+    storySession.update();
+    if (storyLeadMarker) {
+      const lead = storySession.placement.lead;
+      const terrain = surfaceAt(tileStore, lead.x, lead.z);
+      storyLeadMarker.visible = storySession.step === 'arrival' &&
+        storySession.role !== null && !!terrain?.walkable;
+      storyLeadMarker.position.set(lead.x - origin.x, (terrain?.y ?? 0) + .07, lead.z - origin.z);
+    }
+    // Staging formation only: real companion combat AI belongs to the GameEngine
+    // port in Phase 3.2/3.3. Do not mistake this visual follow for completed AI.
+    for (const [index, companion] of storyCompanions.entries()) {
+      const tx = player.x + (index === 0 ? -2.2 : 2.2);
+      const tz = player.z + 2.4;
+      const dx = tx - companion.world.x, dz = tz - companion.world.z;
+      const distance = Math.hypot(dx, dz);
+      const fraction = distance ? Math.min(1, (dt * 7.5) / distance) : 0;
+      const next = traverseTerrain(tileStore, companion.world, dx * fraction, dz * fraction);
+      if (next.moved) {
+        companion.world = next.position;
+      } else {
+        const terrain = surfaceAt(tileStore, companion.world.x, companion.world.z);
+        if (terrain) companion.world = { ...companion.world, y: terrain.y };
+      }
+      companion.rig.root.position.set(
+        companion.world.x - origin.x, companion.world.y + .15,
+        companion.world.z - origin.z,
+      );
+      companion.rig.updateAnimation(dt, {
+        isMoving: next.moved, moveSpeedRatio: next.moved ? 1 : 0,
+        attackComboStep: 0, attackSwingProgress: 0,
+        isDashing: false, hitFlashTimer: 0,
+      });
+    }
+  }
   for (const { mesh, pos } of anchorMeshes) {
     mesh.position.set(pos.x - origin.x, height(pos.x, pos.z) + 2.5, pos.z - origin.z);
   }
@@ -460,6 +495,14 @@ Atlas hash: ${atlas.contentHash} · baked geography tiles: ${source.catalog.cell
  */
 declare global {
   interface Window {
+    __worldV2Phase3QA?: {
+      snapshot: () => {
+        role: CharacterClassId | null; step: import('../game/HearthmereStory').OpeningStep;
+        interactionAvailable: boolean; groundReady: boolean; leadDistance: number;
+        lastDialogue: string; stage: string; companions: readonly CharacterClassId[];
+        playerX: number; playerZ: number; residentCells: number; loadingErrors: number;
+      };
+    };
     __worldV2FunctionalQA?: {
       snapshot: () => {
         camera: string; cameraDistance: number; cameraFov: number;
@@ -479,6 +522,18 @@ declare global {
       };
     };
   }
+}
+if (storySession && new URLSearchParams(location.search).get('functionalQA') === '1') {
+  window.__worldV2Phase3QA = {
+    snapshot() {
+      return {
+        ...storySession.snapshot(),
+        companions: storyCompanions.map(actor => actor.rig.classId),
+        playerX: player.x, playerZ: player.z,
+        residentCells: streamer.loaded().length, loadingErrors,
+      };
+    },
+  };
 }
 if (new URLSearchParams(location.search).get('functionalQA') === '1') {
   window.__worldV2FunctionalQA = {
