@@ -3,6 +3,9 @@ import { sampleCellHeight, type TerrainCell } from './WorldTerrain';
 import { createGeography, BIOME_LABELS } from './WorldGeography';
 import { renderOriginFor, worldToCell, type WorldPosition } from './WorldCoordinates';
 import { HttpWorldArtifactTransport, WorldV2ArtifactSource, WorldV2GameplayBridge } from './WorldV2GameplayBridge';
+import { createOceanPreview } from './WorldOceanPreview';
+import { createSceneryMeshes } from './WorldSceneryRender';
+import { planCells } from './WorldCellStreamer';
 
 /**
  * Standalone QA-only sandbox: does NOT use Hearthmere's old path generator,
@@ -19,11 +22,16 @@ const canvas = document.querySelector<HTMLCanvasElement>('#lab');
 const status = document.querySelector<HTMLElement>('#status');
 if (!canvas || !status) throw new Error('World V2 lab UI is missing');
 
+const reviewMode = new URLSearchParams(location.search).get('visualReview') === '1';
+const debugGrid = new URLSearchParams(location.search).get('debugGrid') === '1';
+if (reviewMode) document.documentElement.classList.add('visual-review');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.setClearColor(0x9dc6c9);
+renderer.setClearColor(0x91c6d2);
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x9dc6c9, 95, 230);
+scene.fog = new THREE.Fog(0x91c6d2, 160, 400);
+const ocean = createOceanPreview();
+scene.add(ocean.mesh);
 scene.add(new THREE.HemisphereLight(0xf7f5e6, 0x37544a, 2.4));
 const sun = new THREE.DirectionalLight(0xfff1d1, 2);
 sun.position.set(28, 62, 17);
@@ -34,16 +42,18 @@ const playerMesh = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: 0xf2a64a, roughness: 0.7 }),
 );
 scene.add(playerMesh);
+playerMesh.visible = !reviewMode;
 const anchorMeshes: Array<{ mesh: THREE.Mesh; pos: WorldPosition }> = [];
 for (const anchor of anchors.list()) {
   const marker = new THREE.Mesh(
     new THREE.CylinderGeometry(1.6, 1.6, 5, 12),
     new THREE.MeshBasicMaterial({ color: anchor.id.includes('hearthmere') ? 0xf8d37a : 0xe2aed4 }),
   );
+  marker.visible = !reviewMode;
   scene.add(marker);
   anchorMeshes.push({ mesh: marker, pos: anchor.position });
 }
-type SurfaceResource = { readonly cell: TerrainCell; readonly mesh: THREE.Group };
+type SurfaceResource = { readonly cell: TerrainCell; readonly mesh: THREE.Group; readonly sceneryCount: number };
 const biomeColors = [0x163e5e, 0x368aa7, 0xe6d5a1, 0xa3c87d,
   0x3f9465, 0x777f71, 0xe8f5fa, 0xd7bc75];
 const riverMeshes: Array<{ mesh: THREE.Mesh; originX: number; originZ: number }> = [];
@@ -84,26 +94,19 @@ const gameplay = new WorldV2GameplayBridge<SurfaceResource>(source, {
     mesh.receiveShadow = false;
     const group = new THREE.Group();
     group.add(mesh);
-    // Continuous sea plane: land terrain occludes it naturally. At the coast,
-    // the independently sampled ground crosses sea-level without portal edges.
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(cell.cellSize, cell.cellSize),
-      new THREE.MeshBasicMaterial({
-        color: 0x2c95b4, transparent: true, opacity: 0.81,
-        depthWrite: false, side: THREE.DoubleSide,
-      }));
-    sea.rotation.x = -Math.PI / 2;
-    sea.position.y = 0.055;
-    group.add(sea);
-    const border = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.PlaneGeometry(cell.cellSize, cell.cellSize), 1),
-      new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.15, transparent: true }),
-    );
-    // Edge outline is only visual; it carries no collision or movement rule.
-    border.rotation.x = -Math.PI / 2;
-    border.position.y = 0.06;
-    group.add(border);
+    const scenery = createSceneryMeshes(cell, atlas.worldSeed);
+    group.add(scenery.group);
+    if (debugGrid) {
+      const border = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.PlaneGeometry(cell.cellSize, cell.cellSize), 1),
+        new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.18, transparent: true }),
+      );
+      border.rotation.x = -Math.PI / 2;
+      border.position.y = 0.06;
+      group.add(border);
+    }
     scene.add(group);
-    return { cell, mesh: group };
+    return { cell, mesh: group, sceneryCount: scenery.count };
   },
   unload: resource => {
     scene.remove(resource.mesh);
@@ -166,10 +169,15 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-jump]')
 let previous = performance.now();
 let lastStream = -Infinity;
 let active = true;
+let framesRendered = 0;
+let reviewAngle = 0;
+let reviewZoom = 1;
+const streamOptions = { worldId: atlas.worldId, cellSize: atlas.cellSize,
+  activeRadius: 1, warmRadius: 2, lookAheadDistance: 0 };
 function resize() {
   const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
   renderer.setSize(w, h, false);
-  const halfH = 44;
+  const halfH = 44 * reviewZoom;
   camera.left = -halfH * (w / h);
   camera.right = halfH * (w / h);
   camera.top = halfH; camera.bottom = -halfH;
@@ -215,9 +223,13 @@ function tick(now: number) {
       cell.corner.z + cell.cellSize / 2 - origin.z,
     );
   }
-  camera.position.set(local.x + 35, local.y + 54, local.z + 48);
+  const camX = 35 * Math.cos(reviewAngle) - 48 * Math.sin(reviewAngle);
+  const camZ = 35 * Math.sin(reviewAngle) + 48 * Math.cos(reviewAngle);
+  camera.position.set(local.x + camX, local.y + 54, local.z + camZ);
   camera.lookAt(local.x, local.y, local.z);
+  ocean.update(player.x, player.z, local.x, local.z, reviewMode ? 0 : now * 0.001);
   renderer.render(scene, camera);
+  framesRendered++;
 
   const at = Math.floor(now / 200);
   if (at !== Math.floor((now - dt * 1000) / 200)) {
@@ -241,10 +253,66 @@ Atlas hash: ${atlas.contentHash} · baked geography tiles: ${source.catalog.cell
   }
   requestAnimationFrame(tick);
 }
+/**
+ * Stable screenshot harness contract. Screenshots are only accepted when
+ * every catalogued desired cell is resident, the shot has rendered several
+ * frames, and no streaming error has been observed. No gameplay saves touched.
+ */
+declare global {
+  interface Window {
+    __worldV2Review?: {
+      setView: (view: { x: number; z: number; zoom?: number; angle?: number }) => void;
+      snapshot: () => {
+        ready: boolean; frame: number; expected: number; resident: number;
+        loadingErrors: number; scenery: number; worldX: number; worldZ: number;
+        atlasHash: string; currentBiome: string; water: string; cellId: string;
+      };
+    };
+  }
+}
+if (reviewMode) {
+  window.__worldV2Review = {
+    setView(view) {
+      if (![view.x, view.z].every(Number.isFinite)) throw new RangeError('Invalid review camera position');
+      movement.clear();
+      player.x = view.x;
+      player.z = view.z;
+      reviewAngle = Number.isFinite(view.angle) ? (view.angle ?? 0) : 0;
+      reviewZoom = Number.isFinite(view.zoom) ? Math.max(0.5, Math.min(3.5, view.zoom ?? 1)) : 1;
+      resize();
+      lastStream = -Infinity;
+      gameplay.update(player, { x: 0, z: 0 });
+    },
+    snapshot() {
+      const resident = streamer.loaded();
+      const expected = planCells(player, { x: 0, z: 0 }, streamOptions)
+        .filter(item => source.hasCell(item.address)).length;
+      const address = worldToCell(player, atlas.cellSize);
+      const home = resident.find(entry =>
+        entry.resource.cell.coordinate.x === address.x &&
+        entry.resource.cell.coordinate.z === address.z);
+      const biome = geoWorld.sample(player.x, player.z);
+      const scenery = resident.reduce((sum, entry) => sum + entry.resource.sceneryCount, 0);
+      return {
+        ready: expected > 0 && resident.length >= expected &&
+          home !== undefined && loadingErrors === 0 && framesRendered > 5,
+        frame: framesRendered, expected, resident: resident.length,
+        loadingErrors, scenery, worldX: player.x, worldZ: player.z,
+        atlasHash: atlas.contentHash,
+        currentBiome: BIOME_LABELS[biome.biome],
+        water: biome.waterKind === 0 ? 'land' : biome.waterKind === 1 ? 'ocean' : 'river',
+        cellId: home?.id ?? 'unloaded',
+      };
+    },
+  };
+}
 requestAnimationFrame(tick);
 window.addEventListener('pagehide', () => {
   active = false;
   gameplay.dispose();
+  scene.remove(ocean.mesh);
+  ocean.mesh.geometry.dispose();
+  ocean.mesh.material.dispose();
   for (const river of riverMeshes) {
     scene.remove(river.mesh);
     river.mesh.geometry.dispose();
