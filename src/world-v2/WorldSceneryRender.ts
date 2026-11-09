@@ -55,7 +55,6 @@ function makePaintedTemplate(
       [.65,.43,.39,-.16],[.72,.12,.12,-.21],
     ];
     for (const [x,y,z,size,tint] of crowns) {
-      const axis = new THREE.Vector3(x, y, z).sub(new THREE.Vector3(0, 2.3, 0));
       const bough = beam(temporary, color(0x70513e),
         new THREE.Vector3(0,2.3,0), new THREE.Vector3(x,y,z), .19);
       bough.castShadow = bough.receiveShadow = true;
