@@ -1,5 +1,5 @@
 import { worldToCell, type WorldCellCoordinate, type WorldPosition } from './WorldCoordinates';
-import type { TerrainCell } from './WorldTerrain';
+import { sampleCellTriangle, type TerrainCell } from './WorldTerrain';
 
 /** The exact two-triangle plane used by the Three.js PlaneGeometry grid.
  * Calling this for collision avoids the former bilinear-vs-render mismatch.
@@ -29,7 +29,6 @@ export interface TraversalRules {
 export const DEFAULT_TRAVERSAL_RULES: TraversalRules = Object.freeze({
   maxSlopeDegrees: 40, maxRisePerUnit: 0.73, maxStepUp: 0.9, allowRiver: false,
 });
-const epsilon = 1e-5;
 export type TraversalBlock = 'missing-terrain' | 'sea' | 'river' | 'steep' | 'step';
 export interface TraversalResult {
   readonly position: WorldPosition;
@@ -44,25 +43,7 @@ export interface TraversalResult {
 export function sampleGroundTriangle(cell: TerrainCell, x: number, z: number): {
   height: number; dx: number; dz: number;
 } {
-  if (!Number.isFinite(x) || !Number.isFinite(z)) throw new RangeError('Non-finite surface position');
-  const sx = (x - cell.corner.x) / cell.cellSize * cell.segments;
-  const sz = (z - cell.corner.z) / cell.cellSize * cell.segments;
-  if (sx < -epsilon || sz < -epsilon || sx > cell.segments + epsilon || sz > cell.segments + epsilon) {
-    throw new RangeError('Surface position outside terrain cell');
-  }
-  const gx = Math.max(0, Math.min(cell.segments - 1, Math.floor(Math.min(sx, cell.segments - epsilon))));
-  const gz = Math.max(0, Math.min(cell.segments - 1, Math.floor(Math.min(sz, cell.segments - epsilon))));
-  const tx = Math.max(0, Math.min(1, sx - gx)), tz = Math.max(0, Math.min(1, sz - gz));
-  const n = cell.segments + 1;
-  const h00 = cell.heights[gz * n + gx], h10 = cell.heights[gz * n + gx + 1];
-  const h01 = cell.heights[(gz + 1) * n + gx], h11 = cell.heights[(gz + 1) * n + gx + 1];
-  const step = cell.cellSize / cell.segments;
-  if (tx + tz <= 1) {
-    return { height: h00 + tx * (h10 - h00) + tz * (h01 - h00),
-      dx: (h10 - h00) / step, dz: (h01 - h00) / step };
-  }
-  return { height: h11 + (1 - tx) * (h01 - h11) + (1 - tz) * (h10 - h11),
-    dx: (h11 - h01) / step, dz: (h11 - h10) / step };
+  return sampleCellTriangle(cell, x, z);
 }
 
 export function sampleTerrainSurface(
