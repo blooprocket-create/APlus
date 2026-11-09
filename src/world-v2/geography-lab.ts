@@ -285,8 +285,10 @@ if (reviewMode) {
     },
     snapshot() {
       const resident = streamer.loaded();
-      const expected = planCells(player, { x: 0, z: 0 }, streamOptions)
-        .filter(item => source.hasCell(item.address)).length;
+      const desired = planCells(player, { x: 0, z: 0 }, streamOptions)
+        .filter(item => source.hasCell(item.address));
+      const residentIds = new Set(resident.map(item => item.id));
+      const expected = desired.length;
       const address = worldToCell(player, atlas.cellSize);
       const home = resident.find(entry =>
         entry.resource.cell.coordinate.x === address.x &&
@@ -294,7 +296,7 @@ if (reviewMode) {
       const biome = geoWorld.sample(player.x, player.z);
       const scenery = resident.reduce((sum, entry) => sum + entry.resource.sceneryCount, 0);
       return {
-        ready: expected > 0 && resident.length >= expected &&
+        ready: expected > 0 && desired.every(item => residentIds.has(item.id)) &&
           home !== undefined && loadingErrors === 0 && framesRendered > 5,
         frame: framesRendered, expected, resident: resident.length,
         loadingErrors, scenery, worldX: player.x, worldZ: player.z,
