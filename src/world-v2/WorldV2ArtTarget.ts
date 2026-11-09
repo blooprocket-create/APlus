@@ -68,6 +68,7 @@ export function createWorldV2ArtTarget(
     }
   }
 
+  // Path-side moss and soft soil colors continue the scene's painted grammar.
   // A few reflective patches break the path's repetitive dry surface. They are
   // cheap presentation-only meshes with feathered, uneven boundaries.
   const wet = new THREE.MeshBasicMaterial({
@@ -190,11 +191,114 @@ export function createWorldV2ArtTarget(
     }
   }
 
+
+  // PASS 4: hand-biased lush understory; one draw per foliage family rather
+  // than hundreds of individual flower meshes. All roots sample V2 terrain.
+  const makeFlowerStem = (): THREE.BufferGeometry => {
+    const positions:number[] = [], cols:number[] = [];
+    const pushTri = (a:number[],b:number[],c:number[],hex:number) => {
+      const cc=new THREE.Color(hex);
+      for(const v of [a,b,c]) {positions.push(v[0],v[1],v[2]);cols.push(cc.r,cc.g,cc.b);}
+    };
+    // Low glossy leaves, tapered stems and a slightly tilted five-petal crown.
+    for(let k=0;k<3;k++){
+      const a=k*Math.PI*2/3;
+      const sx=Math.cos(a), sz=Math.sin(a);
+      pushTri([0,.09,0],[sx*.25,.22,sz*.25],[sx*.46,.12,sz*.46],0x446f54);
+      pushTri([0,.10,0],[sx*.46,.12,sz*.46],[sx*.12,.36,sz*.12],0x678f64);
+    }
+    for(let k=0;k<5;k++){
+      const a=k*Math.PI*2/5;
+      const x=Math.cos(a),z=Math.sin(a);
+      pushTri([0,.58,0],[x*.16,.65,z*.16],[x*.26,.53,z*.26],0xe1a9c9);
+      pushTri([0,.58,0],[x*.26,.53,z*.26],[x*.11,.45,z*.11],0xf6cdd8);
+    }
+    pushTri([-.07,.585,0],[.07,.585,0],[0,.67,.07],0xffe5a9);
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geometry.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));
+    geometry.computeVertexNormals();return geometry;
+  };
+  const flowerGeometry=makeFlowerStem();
+  const flowerMaterial=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide});
+  const flowerCount=680, flowers=new THREE.InstancedMesh(
+    flowerGeometry,flowerMaterial,flowerCount);
+  flowers.name='Hearthmere painterly roadside flowers';
+  flowers.frustumCulled=false;
+  const flowerDummy=new THREE.Object3D();
+  const flowerPalette=[0xd9acda,0xf2bdc8,0xffdbbb,0xb7a7e1,0xe6b2ce];
+  for(let i=0;i<flowerCount;i++){
+    // Clustered gardens: road stays readable while the town edge blossoms.
+    const z=-24+rng()*39;
+    const lane=2.4*Math.sin(z*.14)-.5;
+    const side=rng()<.5?-1:1;
+    const distance=3.1+Math.pow(rng(),1.65)*14.4;
+    const x=lane+distance*side+(rng()-.5)*1.7;
+    flowerDummy.position.set(x,at(x,z)+.018,z);
+    flowerDummy.rotation.set(0,rng()*Math.PI*2,(rng()-.5)*.16);
+    const scale=.52+rng()*.90;
+    flowerDummy.scale.set(scale,scale*(.65+rng()*.6),scale);
+    flowerDummy.updateMatrix(); flowers.setMatrixAt(i,flowerDummy.matrix);
+    flowers.setColorAt(i,new THREE.Color(flowerPalette[Math.floor(rng()*flowerPalette.length)])
+      .lerp(new THREE.Color(0xffffff),.16));
+  }
+  flowers.instanceMatrix.needsUpdate=true;
+  if(flowers.instanceColor) flowers.instanceColor.needsUpdate=true;
+  root.add(flowers);
+
+  // A second fine-leaf family softens tree canopies with non-spherical tips.
+  // Flat geometry forms a painted leaf silhouette at the scale of gameplay.
+  const leafGeometry=new THREE.BufferGeometry();
+  const leafVertices:number[]=[];
+  for(let k=0;k<3;k++){
+    const a=k*Math.PI*2/3;
+    const x=Math.cos(a),z=Math.sin(a);
+    leafVertices.push(0,0,0,x*.42,.15,z*.42,x*.75,.01,z*.75);
+    leafVertices.push(0,0,0,x*.75,.01,z*.75,x*.32,-.12,z*.32);
+  }
+  leafGeometry.setAttribute('position',new THREE.Float32BufferAttribute(leafVertices,3));
+  leafGeometry.computeVertexNormals();
+  const leafMaterial=new THREE.MeshLambertMaterial({
+    color:0xf1d1d7,side:THREE.DoubleSide,
+  });
+  const leafCount=850;
+  const leaves=new THREE.InstancedMesh(leafGeometry,leafMaterial,leafCount);
+  leaves.name='Fine layered blossom silhouettes';
+  leaves.frustumCulled=false;
+  for(let i=0;i<leafCount;i++){
+    const tree=i%4;
+    const centers=[[-15.3,1.2,1.12],[12.6,.2,.98],[-14.5,-17,1.23],[15.7,-17.5,1.35]];
+    const [cx,cz,scale]=centers[tree];
+    const a=rng()*Math.PI*2,spread=2.1*Math.sqrt(rng());
+    const x=cx+Math.cos(a)*spread*scale,z=cz+Math.sin(a)*spread*scale;
+    flowerDummy.position.set(x,at(cx,cz)+5.2*scale+(rng()-.5)*2.6*scale,z);
+    flowerDummy.rotation.set(rng()*.6,rng()*6.28,rng()*6.28);
+    flowerDummy.scale.setScalar((.23+rng()*.34)*scale);
+    flowerDummy.updateMatrix();leaves.setMatrixAt(i,flowerDummy.matrix);
+    leaves.setColorAt(i,new THREE.Color(flowerPalette[(tree+i)%flowerPalette.length]));
+  }
+  leaves.instanceMatrix.needsUpdate=true;
+  if(leaves.instanceColor) leaves.instanceColor.needsUpdate=true;
+  root.add(leaves);
+
+  // More of the actual detailed authored lodge asset as a small inhabited
+  // street, rather than unadorned terrain behind one solitary cottage.
+  for(const [x,z,w,d,angle] of [
+    [-20,-22,6.2,5.2,.31],
+    [19,-24,7.4,5.5,-.25],
+  ]) {
+    const building=new THREE.Group();
+    building.position.set(x,at(x,z)-.16,z);
+    building.rotation.y=angle;
+    buildRefugeLodge(building,0,0,w,d,paint);
+    root.add(building);
+  }
+
   // Existing story giant used here only as distant cinematic set dressing.
   // Real giant gameplay and AI remain owned by the actual Hearthmere engine.
   const giant = new HearthmereGiant();
-  giant.root.position.set(14.0,at(14,-43),-43);
-  giant.root.scale.setScalar(.91);
+  giant.root.position.set(11.8,at(11.8,-29.5),-29.5);
+  giant.root.scale.setScalar(.68);
   giant.root.rotation.y=Math.PI-.45;
   root.add(giant.root);
 
