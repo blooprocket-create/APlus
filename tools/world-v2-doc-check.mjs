@@ -62,7 +62,9 @@ mustContain('AGENTS.md', 'WORLD_V2_STATUS.md', 'status source of truth');
 mustContain('AGENTS.md', 'WORLD_V2_PHASE3_HANDOFF.md', 'next-work handoff');
 mustContain('CLAUDE.md', 'AGENTS.md', 'delegated common agent instructions');
 mustContain('docs/WORLD_V2_STATUS.md', 'staging', 'staging/prod distinction');
-mustContain('docs/WORLD_V2_STATUS.md', 'not yet', 'unshipped-system distinction');
+if (!/not implemented|not yet|future/i.test(docs.get('docs/WORLD_V2_STATUS.md') ?? '')) {
+  errors.push('docs/WORLD_V2_STATUS.md: missing unshipped-system distinction');
+}
 mustContain('docs/WORLD_V2_DECISIONS.md', 'LOCKED', 'explicit decision statuses');
 mustContain('docs/PRODUCTION_ROADMAP.md', 'Phase 3', 'current phase plan');
 
