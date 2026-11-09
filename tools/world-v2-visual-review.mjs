@@ -341,7 +341,7 @@ async function run() {
     if (cdp?.ws?.readyState === WebSocket.OPEN) cdp.ws.close();
     for (const child of children.reverse()) { try { child.kill('SIGTERM'); } catch {} }
     await delay(150);
-    rmSync(profile, { recursive: true, force: true });
+    rmSync(profile, { recursive: true, force: true, maxRetries: 12, retryDelay: 250 });
   }
   if (report.technicalFailures.length) process.exitCode = 1;
 }
