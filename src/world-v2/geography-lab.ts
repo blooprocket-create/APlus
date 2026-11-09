@@ -59,11 +59,39 @@ const biomeColors = [0x163e5e, 0x368aa7, 0xe6d5a1, 0xa3c87d,
 const riverMeshes: Array<{ mesh: THREE.Mesh; originX: number; originZ: number }> = [];
 for (const river of geoWorld.rivers) {
   const first = river.points[0];
-  const curve = new THREE.CatmullRomCurve3(river.points.map(p =>
-    new THREE.Vector3(p.x - first.x, p.waterLevel + 0.45, p.z - first.z)));
+  // A water-surface ribbon, not a round pipe floating through the
+  // landscape. Each left/right bank vertex follows the river's monotonic
+  // stage height; the carved terrain naturally hides portions behind banks.
+  const vertices: number[] = [];
+  const triangles: number[] = [];
+  const points = river.points;
+  for (let i = 0; i < points.length; i++) {
+    const center = points[i];
+    const previous = points[Math.max(0, i - 1)];
+    const next = points[Math.min(points.length - 1, i + 1)];
+    const dx = next.x - previous.x, dz = next.z - previous.z;
+    const length = Math.max(0.0001, Math.hypot(dx, dz));
+    const normalX = dz / length, normalZ = -dx / length;
+    const halfWidth = river.halfWidth * 0.85;
+    for (const sign of [-1, 1]) {
+      vertices.push(center.x - first.x + normalX * halfWidth * sign,
+        center.waterLevel + 0.05,
+        center.z - first.z + normalZ * halfWidth * sign);
+    }
+    if (i > 0) {
+      const k = (i - 1) * 2;
+      triangles.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(triangles);
   const mesh = new THREE.Mesh(
-    new THREE.TubeGeometry(curve, river.points.length * 3, Math.max(1.2, river.halfWidth * 0.45), 6, false),
-    new THREE.MeshBasicMaterial({ color: 0x66cad5, transparent: true, opacity: 0.8 }),
+    geometry,
+    new THREE.MeshBasicMaterial({
+      color: 0x65bfd0, transparent: true, opacity: 0.88,
+      side: THREE.DoubleSide, depthWrite: false,
+    }),
   );
   scene.add(mesh);
   riverMeshes.push({ mesh, originX: first.x, originZ: first.z });
