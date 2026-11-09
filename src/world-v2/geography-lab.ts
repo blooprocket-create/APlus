@@ -49,11 +49,11 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 if (artMode) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 0.97;
 }
 const scene = new THREE.Scene();
 // Original Hearthmere palette and real paper-wash sky instead of flat teal.
-scene.fog = artMode ? new THREE.FogExp2(0x8a96b5, 0.0055)
+scene.fog = artMode ? new THREE.FogExp2(0x566783, 0.0095)
   : new THREE.Fog(0xa5ccdc, 180, 395);
 const paintedSky = new THREE.Group();
 addPaintedSky(paintedSky, 360);
@@ -72,16 +72,16 @@ const worldLights = addOriginalWorldLighting(scene, {
   touchUI: window.innerWidth < 760, preservePaintedSky: true,
 });
 if (artMode) {
-  worldLights.ambient.color.setHex(0xabb7d8);
-  worldLights.ambient.intensity = 0.95;
-  worldLights.sun.color.setHex(0xffd4ac);
-  worldLights.sun.intensity = 2.55;
+  worldLights.ambient.color.setHex(0x8594c5);
+  worldLights.ambient.intensity = 0.63;
+  worldLights.sun.color.setHex(0xffc6a1);
+  worldLights.sun.intensity = 1.6;
   worldLights.sun.position.set(-13,28,-17);
 }
 const rim = new THREE.DirectionalLight(0xffc79b, 0.58);
 rim.position.set(-14, 16, -22);
 scene.add(rim);
-if (artMode) { rim.intensity = 1.1; rim.color.setHex(0xe0a1fc); }
+if (artMode) { rim.intensity = 1.7; rim.color.setHex(0xcd92ff); }
 const originUniform: THREE.IUniform<THREE.Vector3> = { value: new THREE.Vector3() };
 const disabledSceneryCutaway = { value: new THREE.Vector4(0, 0, 0, 0) };
 const ocean = createOceanPreview();
@@ -95,7 +95,7 @@ if (artComposer) {
   artComposer.addPass(new RenderPass(scene, camera));
   artComposer.addPass(new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth,window.innerHeight),
-    0.38,0.38,0.89,
+    0.53,0.42,0.81,
   ));
   artComposer.addPass(new OutputPass());
 }
@@ -415,6 +415,7 @@ function resize() {
   artComposer?.setSize(w, h);
   cameraController.updateAspect();
   camera.aspect = w / h;
+  if (artMode) camera.fov = w / h < 0.85 ? 47 : 39;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -468,7 +469,8 @@ function tick(now: number) {
   playerRig.updateAnimation(dt, {
     isMoving: len > 0 && (!storyMode || !!storySession?.role),
     moveSpeedRatio: len > 0 && (!storyMode || !!storySession?.role) ? 1 : 0,
-    attackComboStep: 0, attackSwingProgress: 0,
+    attackComboStep: artMode ? 1 : 0,
+    attackSwingProgress: artMode ? .39 + Math.sin(now*.0018)*.12 : 0,
     isDashing: false, hitFlashTimer: 0,
   });
   if (storySession) {
@@ -514,7 +516,8 @@ function tick(now: number) {
       rig.root.position.set(x-origin.x,(terrain?.y ?? player.y)+.15,z-origin.z);
       rig.root.rotation.y = index === 0 ? .15 : -.32;
       rig.updateAnimation(dt,{
-        isMoving:false,moveSpeedRatio:0,attackComboStep:0,attackSwingProgress:0,
+        isMoving:false,moveSpeedRatio:0,attackComboStep:index===1?1:0,
+        attackSwingProgress:index===1?.58:0,
         isDashing:false,hitFlashTimer:0,charging:index===0,skillSlot:'skill1',
       });
     }
@@ -541,12 +544,18 @@ function tick(now: number) {
   // Review zoom scales around the *native* offset, not the old 54-unit aerial
   // inspection camera. At sea, a later ship view can widen deliberately.
   const offset = GAMEPLAY_CAMERA_OFFSET;
-  const shotZoom = artMode ? .83 : reviewZoom;
-  const shotAngle = artMode ? -.17 : reviewAngle;
-  const camX = -offset.z * Math.sin(shotAngle) * shotZoom;
-  const camZ = offset.z * Math.cos(shotAngle) * shotZoom;
-  camera.position.set(local.x + camX, local.y + .8 + offset.y * shotZoom, local.z + camZ);
-  camera.lookAt(local.x, local.y + (artMode ? 1.55 : .8), local.z + (artMode ? -2.6 : 0));
+  if (artMode) {
+    // Deliberately cinematic, lower 3/4 lens for LOOK DEVELOPMENT only.
+    // Actual moving-game camera remains the canonical original close isometric.
+    camera.position.set(local.x + 2.6, local.y + 6.7, local.z + 9.6);
+    camera.lookAt(local.x,local.y + 2.2,local.z - 5.1);
+  } else {
+    const camX = -offset.z * Math.sin(reviewAngle) * reviewZoom;
+    const camZ = offset.z * Math.cos(reviewAngle) * reviewZoom;
+    camera.position.set(local.x + camX,
+      local.y + .8 + offset.y * reviewZoom, local.z + camZ);
+    camera.lookAt(local.x,local.y+.8,local.z);
+  }
   paintedSky.position.copy(camera.position);
   ocean.update(player.x, player.z, local.x, local.z, reviewMode ? 0 : now * 0.001);
   if (artComposer) artComposer.render(); else renderer.render(scene, camera);
