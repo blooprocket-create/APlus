@@ -94,7 +94,7 @@ const gameplay = new WorldV2GameplayBridge<SurfaceResource>(source, {
     mesh.receiveShadow = false;
     const group = new THREE.Group();
     group.add(mesh);
-    const scenery = createSceneryMeshes(cell, atlas.worldSeed);
+    const scenery = createSceneryMeshes(cell, atlas.worldSeed, atlas.anchors);
     group.add(scenery.group);
     if (debugGrid) {
       const border = new THREE.LineSegments(
