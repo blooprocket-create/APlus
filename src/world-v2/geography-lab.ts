@@ -112,6 +112,8 @@ const gameplay = new WorldV2GameplayBridge<SurfaceResource>(source, {
     scene.remove(resource.mesh);
     resource.mesh.traverse(node => {
       if (!(node instanceof THREE.Mesh) && !(node instanceof THREE.LineSegments)) return;
+      // InstancedMesh owns GPU instance buffers beyond shared geometry.
+      if (node instanceof THREE.InstancedMesh) node.dispose();
       node.geometry.dispose();
       const materials = Array.isArray(node.material) ? node.material : [node.material];
       for (const material of materials) material.dispose();
