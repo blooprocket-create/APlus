@@ -259,6 +259,64 @@ async function main() {
     const geoShot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     writeFileSync(path.join(screenshots, 'world-v2-geography.png'), Buffer.from(geoShot.data, 'base64'));
     console.log('Phase 2 geography browser smoke passed:', geoStatus);
+
+    // Phase 3.0 opt-in acceptance: the real mage character and the other
+    // two canonical hero rigs on the existing page-streamed terrain, plus a
+    // LIVE keyboard movement and first story interaction. Remaining story
+    // beats are intentionally NOT ported and the old entrypoint is untouched.
+    await cdp.send('Page.navigate', { url:
+      serverUrl + 'world-v2-story.html?role=mage&functionalQA=1' });
+    await poll(async () => await cdp.eval(
+      "window.__worldV2Phase3QA?.snapshot()?.role === 'mage'"
+    ), 'Phase 3 opt-in hero entered V2 terrain', 40000);
+    await poll(async () => await cdp.eval(
+      "window.__worldV2Phase3QA?.snapshot()?.groundReady && " +
+      "window.__worldV2Phase3QA?.snapshot()?.residentCells >= 15"
+    ), 'Phase 3 story arrival ground/companion streaming ready', 45000);
+    const beforeStory = await cdp.eval('window.__worldV2Phase3QA.snapshot()');
+    if (beforeStory.step !== 'arrival' || beforeStory.companions.join(',') !== 'warrior,assassin' ||
+      beforeStory.loadingErrors !== 0 || beforeStory.interactionAvailable) {
+      throw new Error('Phase 3 initial player/party/step contract violation: ' +
+        JSON.stringify(beforeStory));
+    }
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'rawKeyDown', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
+    });
+    try {
+      await poll(async () => await cdp.eval(
+        'window.__worldV2Phase3QA.snapshot().interactionAvailable'
+      ), 'Phase 3 native WASD walking to the lead', 40000);
+    } catch (error) {
+      const diagnostic = await cdp.eval('window.__worldV2Phase3QA.snapshot()');
+      throw new Error('Phase 3 arrival route failed: ' +
+        JSON.stringify(diagnostic) + ' / ' + String(error));
+    } finally {
+      await cdp.send('Input.dispatchKeyEvent', {
+        type: 'keyUp', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
+      });
+    }
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'rawKeyDown', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70,
+    });
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'keyUp', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70,
+    });
+    await poll(async () => await cdp.eval(
+      "window.__worldV2Phase3QA.snapshot().step === 'market'"
+    ), 'Phase 3 shared opening dialogue and step transition', 10000);
+    const storyResult = await cdp.eval('window.__worldV2Phase3QA.snapshot()');
+    if (!storyResult.lastDialogue.includes('The record says this pump was serviced') ||
+      storyResult.stage !== 'awaiting-restage' ||
+      storyResult.interactionAvailable || storyResult.loadingErrors) {
+      throw new Error('Phase 3 script reuse/stop-at-unported-step failed: ' +
+        JSON.stringify(storyResult));
+    }
+    const storyShot = await cdp.send('Page.captureScreenshot', {
+      format: 'png', captureBeyondViewport: false,
+    });
+    writeFileSync(path.join(screenshots, 'world-v2-phase3-arrival-mage.png'),
+      Buffer.from(storyShot.data, 'base64'));
+    console.log('Phase 3 first playable arrival browser smoke passed:', JSON.stringify(storyResult));
     if (cdp.exceptions.length) throw new Error('Browser exceptions: ' + JSON.stringify(cdp.exceptions));
     console.log('Phase 0 Chrome smoke: 3/3 heroes entered the actual playable HUD; screenshots saved.');
     ws.close();
