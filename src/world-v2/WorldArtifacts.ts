@@ -23,6 +23,7 @@ export interface CompiledCell {
     readonly biomes: readonly number[];
     readonly roads: readonly number[];
   };
+  readonly navigation?: { readonly gridSize: number; readonly walkable: readonly number[] };
 }
 
 export interface CompiledCellReference {
@@ -71,6 +72,10 @@ export function encodeCompiledCell(atlas: WorldAtlasManifest, cell: TerrainCell)
       biomes: Array.from(cell.geography.biomes),
       roads: Array.from(cell.geography.roads),
     } } : {}),
+    ...(cell.navigation ? { navigation: {
+      gridSize: cell.navigation.gridSize,
+      walkable: Array.from(cell.navigation.walkable),
+    } } : {}),
   };
 }
 
@@ -116,10 +121,22 @@ export function decodeCompiledCell(
       roads: new Uint8Array(attrs.roads),
     };
   }
+  let navigation: TerrainCell['navigation'];
+  if (value.navigation !== undefined) {
+    if (!validRecord(value.navigation) || value.navigation.gridSize !== segments ||
+      !Array.isArray(value.navigation.walkable) ||
+      value.navigation.walkable.length !== segments * segments ||
+      !value.navigation.walkable.every(bit => bit === 0 || bit === 1)) {
+      return fail('Invalid baked navigation grid or walkability bits');
+    }
+    navigation = { gridSize: segments, walkable: new Uint8Array(value.navigation.walkable) };
+  }
   const address = { x: x as number, z: z as number };
   return {
     id: cellRef.id, coordinate: address, corner: cellToWorldCorner(address, atlas.cellSize),
-    segments, cellSize: atlas.cellSize, heights: typed, ...(geography ? { geography } : {}),
+    segments, cellSize: atlas.cellSize, heights: typed,
+    ...(geography ? { geography } : {}),
+    ...(navigation ? { navigation } : {}),
   };
 }
 
