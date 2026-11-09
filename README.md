@@ -4,7 +4,7 @@ A local-first browser action RPG built with TypeScript and Three.js. The playabl
 
 The [story foundation](docs/OPEN_WORLD_STORY.md) and [campaign treatment](docs/CAMPAIGN_TREATMENT.md) describe the larger connected world and planned campaign. The current build runs from arrival in Hearthmere to the refuge camp.
 
-**Start with [the consolidated design overview](docs/DESIGN_OVERVIEW.md)** for the current requirements, draft scope, remaining work, and reading order. [Saving and offline play](docs/SAVE_AND_OFFLINE.md) covers guest access, optional cloud/cross-device sync, evolving hero saves, recovery backups, and downloaded-content offline play.
+**Coding agents (Claude/Codex/others): start with [AGENTS.md](AGENTS.md)** (and [CLAUDE.md](CLAUDE.md) for Claude). The [World V2 status](docs/WORLD_V2_STATUS.md) distinguishes verified code from staging samples and unfinished systems; the [decision register](docs/WORLD_V2_DECISIONS.md) identifies locked decisions. [Design overview](docs/DESIGN_OVERVIEW.md) is for the broader creative requirements. [Saving and offline play](docs/SAVE_AND_OFFLINE.md) covers guest access, optional cloud/cross-device sync, evolving hero saves, recovery backups, and downloaded-content offline play.
 
 The new [branching campaign draft](docs/BRANCHING_CAMPAIGN.md) develops major decisions and persistent consequences around a confirmed three-route, nine-ending structure: hopeful, bittersweet, and dark per route, plus variations. Particular new scenes and ending conditions are awaiting review.
 
@@ -19,6 +19,10 @@ The [resistance design](docs/RESISTANCE_DESIGN.md) records the faction conflict 
 The [exploration and puzzle brief](docs/EXPLORATION_PUZZLES.md) collects the three class utilities, automatic companion use, exploration freedom, and puzzle direction.
 
 The [combat and progression brief](docs/COMBAT_PROGRESSION.md) collects the action foundation, class skill trees, awakening, difficulty modes, and defeat direction.
+
+## Agent handoff and roadmap
+
+The [production roadmap](docs/PRODUCTION_ROADMAP.md) and [Phase 3 Hearthmere integration plan](docs/WORLD_V2_PHASE3_HANDOFF.md) are the active work queue. Phase 2's staged engineering core is merged, but the **existing Hearthmere opening is not yet running on World V2**; exact atlas layout, ships, persistence on V2, distant LOD and physical-device FPS remain open. See [the status matrix](docs/WORLD_V2_STATUS.md) before assigning work.
 
 ## World Architecture V2
 
