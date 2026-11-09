@@ -3,6 +3,7 @@ import { bakePieces, beam, loft, panel, piece, smoothLoft } from './ArtMesh';
 import { buildRefugeBridge, buildRefugeFire, buildRefugeGrove, buildRefugeLodge } from './HearthmereRefuge';
 import { addPaintedMeadow, type MeadowPlant } from './PaintedMeadow';
 import { GroundMeshCollider } from '../game/GroundMeshCollider';
+import { addPaintedSky, paintedPalette, addSceneryCutaway, PAINTED_WATER_PALETTE } from './PaintedWorldStyle';
 import { RIVER_CENTER_X, RIVER_WAKES, RIVER_WIDTH, SceneryMotion } from './SceneryMotion';
 
 export interface TownBuilding { x: number; z: number; w: number; d: number; refuge?: true }
@@ -95,103 +96,6 @@ function buildCoverWall(
       left = end;
     }
   }
-}
-
-function addSceneryCutaway(shader: THREE.WebGLProgramParametersWithUniforms, focus: THREE.IUniform<THREE.Vector4>): void {
-  shader.uniforms.sceneryFocus = focus;
-  const varyings = 'varying vec3 paintPosition;\nvarying vec3 paintView;\n';
-  shader.vertexShader = varyings + shader.vertexShader.replace('#include <project_vertex>', `
-    #include <project_vertex>
-    paintPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
-    paintView = mvPosition.xyz;
-  `);
-  shader.fragmentShader = varyings + 'uniform vec4 sceneryFocus;\n' +
-    shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
-      #include <clipping_planes_fragment>
-      if (sceneryFocus.w > 0.5 && paintPosition.y > 0.15 && paintView.z > sceneryFocus.z + 0.12) {
-        // Compare scenery and hero at the same distance from the eye.
-        vec2 offset = paintView.xy * (sceneryFocus.z / paintView.z) - sceneryFocus.xy;
-        float silhouette = length(offset / vec2(1.10, 1.43));
-        float cutaway = (1.0 - smoothstep(0.71, 1.16, silhouette))
-          * smoothstep(0.12, 0.40, paintView.z - sceneryFocus.z)
-          * smoothstep(0.15, 0.39, paintPosition.y);
-        float grain = fract(0.5 + dot(floor(gl_FragCoord.xy), vec2(0.75487766, 0.56984029)));
-        if (cutaway > grain) discard;
-      }
-    `);
-}
-
-function paintedPalette(focus: THREE.IUniform<THREE.Vector4>): THREE.MeshLambertMaterial {
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true });
-  material.onBeforeCompile = shader => {
-    addSceneryCutaway(shader, focus);
-    shader.fragmentShader = `
-      float paperHash(vec2 p) {
-        vec3 n = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-        n += dot(n, n.yzx + 33.33);
-        return fract((n.x + n.y) * n.z);
-      }
-      float wash(vec2 p) {
-        vec2 cell = floor(p);
-        vec2 u = fract(p);
-        u = u*u*(3.0 - 2.0*u);
-        return mix(mix(paperHash(cell), paperHash(cell + vec2(1.0, 0.0)), u.x),
-          mix(paperHash(cell + vec2(0.0, 1.0)), paperHash(cell + vec2(1.0)), u.x), u.y);
-      }
-    ` + shader.fragmentShader.replace('#include <color_fragment>', `
-      #include <color_fragment>
-      vec2 brush = vec2(paintPosition.x * 0.72 + paintPosition.y * 0.47,
-        paintPosition.z * 1.12 - paintPosition.y * 0.68);
-      float broadWash = wash(brush * 1.33);
-      float fineWash = wash(brush * vec2(5.0, 9.0));
-      float fleck = smoothstep(0.57, 0.8, broadWash + (fineWash - 0.5) * 0.31);
-      diffuseColor.rgb *= mix(vec3(0.91, 0.93, 1.0), vec3(1.11, 1.07, 0.92), broadWash);
-      diffuseColor.rgb += vec3(0.041, 0.037, 0.021) * fleck;
-      diffuseColor.rgb *= 0.93 + fineWash * 0.13;
-    `);
-  };
-  return material;
-}
-
-function addPaintedSky(parent: THREE.Group): void {
-  const material = new THREE.ShaderMaterial({
-    depthWrite: false, side: THREE.BackSide,
-    uniforms: {
-      horizon: { value: new THREE.Color(0xf1ddba) },
-      middle: { value: new THREE.Color(0xa5ccdc) },
-      zenith: { value: new THREE.Color(0x658ac0) },
-      cloud: { value: new THREE.Color(0xf6ede0) },
-    },
-    vertexShader: `
-      varying vec3 skyPosition;
-      void main() {
-        skyPosition = position;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying vec3 skyPosition;
-      uniform vec3 horizon;
-      uniform vec3 middle;
-      uniform vec3 zenith;
-      uniform vec3 cloud;
-      void main() {
-        vec3 p = normalize(skyPosition);
-        float height = max(0.0, p.y);
-        vec3 color = mix(horizon, middle, smoothstep(0.0, 0.33, height));
-        color = mix(color, zenith, smoothstep(0.28, 0.91, height));
-        float smear = sin(p.x * 16.0 + p.z * 7.0) * 0.035 + sin(p.x * 34.0 - p.z * 18.0) * 0.008;
-        float cloudBand = 1.0 - smoothstep(0.012, 0.053, abs(p.y + smear - 0.22));
-        float upperBand = 1.0 - smoothstep(0.006, 0.033, abs(p.y + smear * 0.66 - 0.43));
-        color = mix(color, cloud, (cloudBand * 0.71 + upperBand * 0.47) * (0.69 + 0.31 * sin(p.x * 7.0 + p.z * 4.1)));
-        gl_FragColor = vec4(color, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
-  });
-  const sky = piece(parent, new THREE.SphereGeometry(92, 28, 14), material, 3, 0, 0);
-  sky.renderOrder = -20;
 }
 
 export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly TownBuilding[]) {
@@ -472,10 +376,10 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
       time,
       wakes: motion.wakes,
       bridgeWake: { value: new THREE.Vector3(0, 0, -1) },
-      deep: { value: new THREE.Color(0x254f71) },
-      channel: { value: new THREE.Color(0x4386a0) },
-      shallows: { value: new THREE.Color(0x80b7a2) },
-      glint: { value: new THREE.Color(0xe0f0df) },
+      deep: { value: new THREE.Color(PAINTED_WATER_PALETTE.deep) },
+      channel: { value: new THREE.Color(PAINTED_WATER_PALETTE.channel) },
+      shallows: { value: new THREE.Color(PAINTED_WATER_PALETTE.shallows) },
+      glint: { value: new THREE.Color(PAINTED_WATER_PALETTE.glint) },
     },
     vertexShader: `
       varying vec2 vUv;

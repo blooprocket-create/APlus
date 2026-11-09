@@ -6,6 +6,8 @@ import { HttpWorldArtifactTransport, WorldV2ArtifactSource, WorldV2GameplayBridg
 import { createOceanPreview } from './WorldOceanPreview';
 import { createSceneryMeshes } from './WorldSceneryRender';
 import { planCells } from './WorldCellStreamer';
+import { addOriginalWorldLighting, addPaintedSky, paintedPalette } from '../rendering/PaintedWorldStyle';
+import { CharacterRig } from '../rendering/CharacterMeshBuilder';
 
 /**
  * Standalone QA-only sandbox: does NOT use Hearthmere's old path generator,
@@ -25,24 +27,29 @@ if (!canvas || !status) throw new Error('World V2 lab UI is missing');
 const reviewMode = new URLSearchParams(location.search).get('visualReview') === '1';
 const debugGrid = new URLSearchParams(location.search).get('debugGrid') === '1';
 if (reviewMode) document.documentElement.classList.add('visual-review');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.setClearColor(0x91c6d2);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x91c6d2, 160, 400);
+// Original Hearthmere palette and real paper-wash sky instead of flat teal.
+scene.fog = new THREE.Fog(0xa5ccdc, 180, 395);
+const paintedSky = new THREE.Group();
+addPaintedSky(paintedSky, 360);
+scene.add(paintedSky);
+addOriginalWorldLighting(scene, { touchUI: window.innerWidth < 760, preservePaintedSky: true });
+const rim = new THREE.DirectionalLight(0xffc79b, 0.58);
+rim.position.set(-14, 16, -22);
+scene.add(rim);
+const originUniform: THREE.IUniform<THREE.Vector3> = { value: new THREE.Vector3() };
+const disabledSceneryCutaway = { value: new THREE.Vector4(0, 0, 0, 0) };
 const ocean = createOceanPreview();
 scene.add(ocean.mesh);
-scene.add(new THREE.HemisphereLight(0xf7f5e6, 0x37544a, 2.4));
-const sun = new THREE.DirectionalLight(0xfff1d1, 2);
-sun.position.set(28, 62, 17);
-scene.add(sun);
 const camera = new THREE.OrthographicCamera(-65, 65, 44, -44, 0.1, 400);
-const playerMesh = new THREE.Mesh(
-  new THREE.ConeGeometry(1.5, 4, 7),
-  new THREE.MeshStandardMaterial({ color: 0xf2a64a, roughness: 0.7 }),
-);
-scene.add(playerMesh);
-playerMesh.visible = !reviewMode;
+// The actual existing hero rig (not the lab's previous orange cone).
+const playerRig = new CharacterRig('warrior');
+scene.add(playerRig.root);
+playerRig.root.visible = !reviewMode;
 const anchorMeshes: Array<{ mesh: THREE.Mesh; pos: WorldPosition }> = [];
 for (const anchor of anchors.list()) {
   const marker = new THREE.Mesh(
@@ -53,9 +60,18 @@ for (const anchor of anchors.list()) {
   scene.add(marker);
   anchorMeshes.push({ mesh: marker, pos: anchor.position });
 }
-type SurfaceResource = { readonly cell: TerrainCell; readonly mesh: THREE.Group; readonly sceneryCount: number };
-const biomeColors = [0x163e5e, 0x368aa7, 0xe6d5a1, 0xa3c87d,
-  0x3f9465, 0x777f71, 0xe8f5fa, 0xd7bc75];
+type SurfaceResource = {
+  readonly cell: TerrainCell;
+  readonly mesh: THREE.Group;
+  readonly sceneryCount: number;
+  readonly sceneryTime: THREE.IUniform<number>;
+};
+// Colors are selected from HearthmereScenery's painted foliage, stone,
+// plaster, road and river palette, not arbitrary RGB debug colors.
+const biomeColors = [0x254f71, 0x4386a0, 0xd7bf97, 0x7b965c,
+  0x49665d, 0x898e88, 0xf1ddba, 0xaa8b6d];
+const biomeHighlights = [0x4386a0, 0x80b7a2, 0xe0cda9, 0xa5ab70,
+  0x879a62, 0xb2ac9e, 0xf6ede0, 0xbda887];
 const riverMeshes: Array<{ mesh: THREE.Mesh; originX: number; originZ: number }> = [];
 for (const river of geoWorld.rivers) {
   const first = river.points[0];
@@ -127,23 +143,35 @@ const gameplay = new WorldV2GameplayBridge<SurfaceResource>(source, {
     const colors: number[] = [];
     const g = cell.geography;
     if (!g) throw new Error('Geography artifact missing biome/water attributes');
+    const color = new THREE.Color(), base = new THREE.Color(), highlight = new THREE.Color();
+    const roadColor = new THREE.Color(0xb4a184);
     for (let index = 0; index < position.count; index++) {
       const terrainY = cell.heights[index];
       position.setZ(index, terrainY);
       const biome = g.biomes[index];
-      const color = new THREE.Color(biomeColors[biome]);
-      if (g.roads[index] > 10) color.lerp(new THREE.Color(0xd9bca0), g.roads[index] / 255 * 0.85);
+      const col = index % (cell.segments + 1);
+      const row = Math.floor(index / (cell.segments + 1));
+      const wx = (cell.coordinate.x + col / cell.segments) * atlas.cellSize;
+      const wz = (cell.coordinate.z + row / cell.segments) * atlas.cellSize;
+      const wash = Math.sin(wx * .28 + wz * .44) +
+        Math.sin(wz * .68 - wx * .21) * .64 +
+        Math.sin(wx * 1.33 + wz * .91) * .26;
+      base.setHex(biomeColors[biome]); highlight.setHex(biomeHighlights[biome]);
+      color.copy(base).lerp(highlight, THREE.MathUtils.clamp(.24 + wash * .13, .07, .48));
+      if (g.roads[index] > 10) color.lerp(roadColor, g.roads[index] / 255 * .89);
       colors.push(color.r, color.g, color.b);
     }
     position.needsUpdate = true;
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geometry.rotateX(-Math.PI / 2);
     geometry.computeVertexNormals();
-    const mesh = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-    mesh.receiveShadow = false;
+    const mesh = new THREE.Mesh(geometry, paintedPalette(disabledSceneryCutaway, {
+      worldOrigin: originUniform, side: THREE.DoubleSide,
+    }));
+    mesh.receiveShadow = true;
     const group = new THREE.Group();
     group.add(mesh);
-    const scenery = createSceneryMeshes(cell, atlas.worldSeed, atlas.anchors);
+    const scenery = createSceneryMeshes(cell, atlas.worldSeed, atlas.anchors, originUniform);
     group.add(scenery.group);
     if (debugGrid) {
       const border = new THREE.LineSegments(
@@ -155,7 +183,7 @@ const gameplay = new WorldV2GameplayBridge<SurfaceResource>(source, {
       group.add(border);
     }
     scene.add(group);
-    return { cell, mesh: group, sceneryCount: scenery.count };
+    return { cell, mesh: group, sceneryCount: scenery.count, sceneryTime: scenery.time };
   },
   unload: resource => {
     scene.remove(resource.mesh);
@@ -260,7 +288,13 @@ function tick(now: number) {
   }
   const origin = renderOriginFor(player, atlas.cellSize);
   const local = { x: player.x - origin.x, y: player.y, z: player.z - origin.z };
-  playerMesh.position.set(local.x, local.y + 2.6, local.z);
+  originUniform.value.set(origin.x, origin.y, origin.z);
+  playerRig.root.position.set(local.x, local.y + .15, local.z);
+  playerRig.updateAnimation(dt, {
+    isMoving: len > 0, moveSpeedRatio: len > 0 ? 1 : 0,
+    attackComboStep: 0, attackSwingProgress: 0,
+    isDashing: false, hitFlashTimer: 0,
+  });
   for (const { mesh, pos } of anchorMeshes) {
     mesh.position.set(pos.x - origin.x, height(pos.x, pos.z) + 2.5, pos.z - origin.z);
   }
@@ -268,6 +302,7 @@ function tick(now: number) {
     river.mesh.position.set(river.originX - origin.x, 0, river.originZ - origin.z);
   }
   for (const { resource } of streamer.loaded()) {
+    resource.sceneryTime.value = reviewMode ? 0 : now * .001;
     const cell = resource.cell;
     resource.mesh.position.set(
       cell.corner.x + cell.cellSize / 2 - origin.x, 0,
@@ -278,6 +313,7 @@ function tick(now: number) {
   const camZ = 35 * Math.sin(reviewAngle) + 48 * Math.cos(reviewAngle);
   camera.position.set(local.x + camX, local.y + 54, local.z + camZ);
   camera.lookAt(local.x, local.y, local.z);
+  paintedSky.position.copy(camera.position);
   ocean.update(player.x, player.z, local.x, local.z, reviewMode ? 0 : now * 0.001);
   renderer.render(scene, camera);
   framesRendered++;
@@ -317,6 +353,7 @@ declare global {
         ready: boolean; frame: number; expected: number; resident: number;
         loadingErrors: number; scenery: number; worldX: number; worldZ: number;
         atlasHash: string; currentBiome: string; water: string; cellId: string;
+        artPipeline: 'hearthmere-painted-v1';
       };
     };
   }
@@ -352,6 +389,7 @@ if (reviewMode) {
         frame: framesRendered, expected, resident: resident.length,
         loadingErrors, scenery, worldX: player.x, worldZ: player.z,
         atlasHash: atlas.contentHash,
+        artPipeline: 'hearthmere-painted-v1',
         currentBiome: BIOME_LABELS[biome.biome],
         water: biome.waterKind === 0 ? 'land' : biome.waterKind === 1 ? 'ocean' : 'river',
         cellId: home?.id ?? 'unloaded',
