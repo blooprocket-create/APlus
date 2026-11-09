@@ -1,10 +1,13 @@
 import * as THREE from 'three';
+import { PAINTED_WATER_PALETTE } from '../rendering/PaintedWorldStyle';
 
 /**
- * Continuous, camera-centered ocean demonstration. Unlike the old per-cell
- * translucent planes, it cannot expose square gaps when stream rings unload.
- * Wave shading is world-space: origin rebasing and camera motion do not change
- * its pattern. Actual ocean physics and ship wake come in Phase 4.
+ * World V2's continuous ocean now shares the original Hearthmere river
+ * pigments and hand-painted stroke language. The ocean remains camera-
+ * centered for seamless distant rendering, while its water pattern uses
+ * absolute atlas coordinates across cell loads and floating-origin rebases.
+ *
+ * This is visual water only; navigation/buoyancy remain later-phase systems.
  */
 export function createOceanPreview(): {
   mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
@@ -14,12 +17,16 @@ export function createOceanPreview(): {
     uniforms: {
       uWorldCenter: { value: new THREE.Vector2() },
       uTime: { value: 0 },
+      deep: { value: new THREE.Color(PAINTED_WATER_PALETTE.deep) },
+      channel: { value: new THREE.Color(PAINTED_WATER_PALETTE.channel) },
+      shallows: { value: new THREE.Color(PAINTED_WATER_PALETTE.shallows) },
+      glint: { value: new THREE.Color(PAINTED_WATER_PALETTE.glint) },
     },
     vertexShader: `
       uniform vec2 uWorldCenter;
       varying vec2 vOceanXZ;
       void main() {
-        // A rotated plane maps local +Y to world -Z.
+        // Rotated plane maps its local +Y to world -Z.
         vOceanXZ = vec2(position.x, -position.y) + uWorldCenter;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
@@ -28,16 +35,50 @@ export function createOceanPreview(): {
       precision mediump float;
       varying vec2 vOceanXZ;
       uniform float uTime;
+      uniform vec3 deep;
+      uniform vec3 channel;
+      uniform vec3 shallows;
+      uniform vec3 glint;
+
+      // The stroke and wash grammar is adapted directly from HearthmereScenery,
+      // rather than introducing an unrelated glossy ocean rendering style.
+      float hash(vec2 p) {
+        p = fract(p * vec2(.1031, .1099));
+        p += dot(p, p.yx + 33.33);
+        return fract(p.x * p.y * 19.31);
+      }
+      float strokes(vec2 p) {
+        vec2 cell = floor(p);
+        vec2 q = fract(p);
+        float seed = hash(cell);
+        float along = (q.y - .5) / (.19 + seed * .29);
+        float width = .023 + .048 * hash(cell.yx);
+        float bend = along * (seed - .5) * .31 + along * along * .19;
+        float cross = (q.x - (.26 + seed * .47) - bend) / width;
+        return (1.0 - smoothstep(.32, 1.0, cross * cross + along * along))
+          * smoothstep(.53, .91, seed);
+      }
       void main() {
         vec2 p = vOceanXZ;
-        float a = sin(p.x * 0.047 + sin(p.y * 0.029) * 1.2 + uTime * 0.65);
-        float b = sin(p.y * 0.095 - p.x * 0.024 - uTime * 0.45);
-        float c = sin((p.x + p.y) * 0.034 + uTime * 0.26);
-        float shading = 0.5 + 0.18 * a + 0.14 * b + 0.12 * c;
-        vec3 sea = mix(vec3(0.085, 0.40, 0.53), vec3(0.13, 0.59, 0.67), clamp(shading, 0.0, 1.0));
-        float crest = smoothstep(0.81, 0.96, 0.5 + 0.27 * a + 0.17 * b);
-        sea = mix(sea, vec3(0.45, 0.79, 0.78), crest * 0.16);
-        gl_FragColor = vec4(sea, 1.0);
+        float longFlow = sin(p.x * .047 + sin(p.y * .029) * 1.2 + uTime * .65);
+        float crossFlow = sin(p.y * .095 - p.x * .024 - uTime * .45);
+        float secondary = sin((p.x + p.y) * .034 + uTime * .26);
+        float wash = smoothstep(-.7, .75, longFlow * .55 + crossFlow * .24 + secondary * .14);
+        float shallowsRibbon = smoothstep(.32, .88, crossFlow * .47 + longFlow * .26);
+        vec3 water = mix(deep, channel, .43 + wash * .37);
+        water = mix(water, shallows, shallowsRibbon * .20);
+
+        // Little brushed highlights, not metallic specular glints.
+        vec2 brush = vec2(p.x * .11 + sin(p.y * .017) * .25,
+                          p.y * .10 - uTime * .045);
+        float flecks = strokes(brush) +
+          strokes(brush * vec2(1.4, 1.8) + vec2(.63, .38)) * .40;
+        float ribbon = smoothstep(.76, .97, longFlow * .51 + crossFlow * .41) *
+          .19;
+        water = mix(water, glint, min(.30, flecks * .19 + ribbon));
+        gl_FragColor = vec4(water, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
       }
     `,
     side: THREE.DoubleSide,
