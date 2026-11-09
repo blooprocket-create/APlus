@@ -11,7 +11,7 @@ import { CharacterRig } from '../rendering/CharacterMeshBuilder';
 import { GAMEPLAY_CAMERA_OFFSET, IsometricCameraController } from '../rendering/IsometricCamera';
 import { surfaceAt, traverseTerrain, type TerrainCellStore, type TraversalBlock } from './WorldSurface';
 import { findTerrainPath, type NavigationResult } from './WorldNavigation';
-import { WorldV2ArrivalSession } from './WorldV2ArrivalSession';
+import { WorldV2ArrivalSession } from '../ui/WorldV2ArrivalSession';
 import { getCompanionClassesForPlayer } from '../game/CompanionRoster';
 import { disposeObject } from '../rendering/SceneResources';
 import type { CharacterClassId } from '../types/game';
