@@ -59,12 +59,14 @@ const biomeColors = [0x163e5e, 0x368aa7, 0xe6d5a1, 0xa3c87d,
 const riverMeshes: Array<{ mesh: THREE.Mesh; originX: number; originZ: number }> = [];
 for (const river of geoWorld.rivers) {
   const first = river.points[0];
-  // A water-surface ribbon, not a round pipe floating through the
-  // landscape. Each left/right bank vertex follows the river's monotonic
-  // stage height; the carved terrain naturally hides portions behind banks.
+  // Water ribbon has feathered banks and a tapered headwater source; the
+  // previous hard-edged cyan plane read as a floating road above the hills.
   const vertices: number[] = [];
+  const alpha: number[] = [];
   const triangles: number[] = [];
   const points = river.points;
+  const sections = [-1, -0.58, 0, 0.58, 1];
+  const edges = [0, 0.52, 0.84, 0.52, 0];
   for (let i = 0; i < points.length; i++) {
     const center = points[i];
     const previous = points[Math.max(0, i - 1)];
@@ -72,27 +74,46 @@ for (const river of geoWorld.rivers) {
     const dx = next.x - previous.x, dz = next.z - previous.z;
     const length = Math.max(0.0001, Math.hypot(dx, dz));
     const normalX = dz / length, normalZ = -dx / length;
-    const halfWidth = river.halfWidth * 0.85;
-    for (const sign of [-1, 1]) {
-      vertices.push(center.x - first.x + normalX * halfWidth * sign,
-        center.waterLevel + 0.05,
-        center.z - first.z + normalZ * halfWidth * sign);
+    const headwaterTaper = Math.min(1, 0.15 + i / 5);
+    const halfWidth = river.halfWidth * 0.54 * headwaterTaper;
+    for (let j = 0; j < sections.length; j++) {
+      const across = sections[j];
+      vertices.push(center.x - first.x + normalX * halfWidth * across,
+        center.waterLevel + 0.038,
+        center.z - first.z + normalZ * halfWidth * across);
+      alpha.push(edges[j]);
     }
     if (i > 0) {
-      const k = (i - 1) * 2;
-      triangles.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+      const prevBase = (i - 1) * sections.length;
+      const currentBase = i * sections.length;
+      for (let j = 0; j < sections.length - 1; j++) {
+        triangles.push(prevBase + j, prevBase + j + 1, currentBase + j);
+        triangles.push(prevBase + j + 1, currentBase + j + 1, currentBase + j);
+      }
     }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute('aWaterAlpha', new THREE.Float32BufferAttribute(alpha, 1));
   geometry.setIndex(triangles);
-  const mesh = new THREE.Mesh(
-    geometry,
-    new THREE.MeshBasicMaterial({
-      color: 0x65bfd0, transparent: true, opacity: 0.88,
-      side: THREE.DoubleSide, depthWrite: false,
-    }),
-  );
+  const mesh = new THREE.Mesh(geometry, new THREE.ShaderMaterial({
+    vertexShader: `
+      attribute float aWaterAlpha;
+      varying float vWaterAlpha;
+      void main() {
+        vWaterAlpha = aWaterAlpha;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision mediump float;
+      varying float vWaterAlpha;
+      void main() {
+        gl_FragColor = vec4(0.35, 0.72, 0.81, vWaterAlpha);
+      }
+    `,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  }));
   scene.add(mesh);
   riverMeshes.push({ mesh, originX: first.x, originZ: first.z });
 }
