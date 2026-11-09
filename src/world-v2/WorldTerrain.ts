@@ -58,6 +58,8 @@ export interface TerrainCell {
     readonly biomes: Uint8Array;
     readonly roads: Uint8Array;
   };
+  /** Offline walkability overlay, derived from the same triangles as collision. */
+  readonly navigation?: { readonly gridSize: number; readonly walkable: Uint8Array };
 }
 
 /**
@@ -103,23 +105,38 @@ export function terrainHeightAtVertex(cell: TerrainCell, column: number, row: nu
  * Query height from a *resident baked* terrain tile using bilinear sampling.
  * This is a Phase 1 walking-preview query, not final character collision/slope.
  */
-export function sampleCellHeight(cell: TerrainCell, worldX: number, worldZ: number): number {
+/**
+ * Single source of truth for the exact two-triangle mesh under a player or
+ * environment prop. Three.js PlaneGeometry connects the (x0,z1) and (x1,z0)
+ * corners, so bilinear interpolation was previously wrong inside each quad.
+ */
+export function sampleCellTriangle(
+  cell: TerrainCell, worldX: number, worldZ: number,
+): { height: number; dx: number; dz: number } {
   if (!Number.isFinite(worldX) || !Number.isFinite(worldZ)) {
     throw new RangeError('Terrain query coordinates must be finite');
   }
   const x = (worldX - cell.corner.x) / cell.cellSize * cell.segments;
   const z = (worldZ - cell.corner.z) / cell.cellSize * cell.segments;
-  if (x < 0 || z < 0 || x > cell.segments || z > cell.segments) {
+  if (x < -1e-5 || z < -1e-5 || x > cell.segments + 1e-5 || z > cell.segments + 1e-5) {
     throw new RangeError('Terrain query falls outside resident tile');
   }
-  const ax = Math.min(cell.segments - 1, Math.floor(x));
-  const az = Math.min(cell.segments - 1, Math.floor(z));
-  const tx = x - ax, tz = z - az;
-  const a = terrainHeightAtVertex(cell, ax, az);
-  const b = terrainHeightAtVertex(cell, ax + 1, az);
-  const d = terrainHeightAtVertex(cell, ax, az + 1);
-  const e = terrainHeightAtVertex(cell, ax + 1, az + 1);
-  return (a + (b - a) * tx) * (1 - tz) + (d + (e - d) * tx) * tz;
+  const ix = Math.min(cell.segments - 1, Math.max(0, Math.floor(Math.min(x, cell.segments - 1e-5))));
+  const iz = Math.min(cell.segments - 1, Math.max(0, Math.floor(Math.min(z, cell.segments - 1e-5))));
+  const tx = Math.max(0, Math.min(1, x - ix)), tz = Math.max(0, Math.min(1, z - iz));
+  const w = cell.segments + 1;
+  const h00 = cell.heights[iz * w + ix], h10 = cell.heights[iz * w + ix + 1];
+  const h01 = cell.heights[(iz + 1) * w + ix], h11 = cell.heights[(iz + 1) * w + ix + 1];
+  const step = cell.cellSize / cell.segments;
+  if (tx + tz <= 1) {
+    return { height: h00 + tx * (h10 - h00) + tz * (h01 - h00),
+      dx: (h10 - h00) / step, dz: (h01 - h00) / step };
+  }
+  return { height: h11 + (1 - tx) * (h01 - h11) + (1 - tz) * (h10 - h11),
+    dx: (h11 - h01) / step, dz: (h11 - h10) / step };
+}
+export function sampleCellHeight(cell: TerrainCell, worldX: number, worldZ: number): number {
+  return sampleCellTriangle(cell, worldX, worldZ).height;
 }
 
 /** Builds exactly shared world-space samples; no hardcoded path constraints. */

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { getViewportProfile } from '../platform/Viewport';
 
+/** Native isometric follow distance shared by live Hearthmere and World V2. */
+export const GAMEPLAY_CAMERA_OFFSET = Object.freeze({ x: 0, y: 14.5, z: 13.5 });
+
 export class IsometricCameraController {
   public readonly camera: THREE.PerspectiveCamera;
   private currentFocus = new THREE.Vector3(0, 0, 0);
@@ -10,7 +13,8 @@ export class IsometricCameraController {
   private zoomPunch = 0;
 
   // Isometric offset angle (45 deg yaw, ~42 deg pitch)
-  private readonly baseOffset = new THREE.Vector3(0, 14.5, 13.5);
+  private readonly baseOffset = new THREE.Vector3(
+    GAMEPLAY_CAMERA_OFFSET.x, GAMEPLAY_CAMERA_OFFSET.y, GAMEPLAY_CAMERA_OFFSET.z);
   private readonly previewPosition = new THREE.Vector3(2.1, 2.75, 7.15);
   private readonly previewLookAt = new THREE.Vector3(0.94, 1.16, 0);
   private cutsceneShot: {

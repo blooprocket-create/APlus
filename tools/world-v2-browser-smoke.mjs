@@ -175,13 +175,64 @@ async function main() {
 
     // Phase 2: exercise the actual OFFLINE-BAKED geographical profile in
     // Chrome, including island-to-ocean transitions and no cell fetch errors.
-    await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-geography.html' });
+    await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-geography.html?functionalQA=1' });
     await poll(async () => await cdp.eval(
       "(document.querySelector('#status')?.textContent ?? '').includes('baked geography tiles:')"
     ), 'Phase 2 geography lab rendered', 35000);
     await poll(async () => await cdp.eval(
       "Number((document.querySelector('#status')?.textContent ?? '').match(/Resident cells: (\\d+)/)?.[1] ?? 0) > 0"
     ), 'Phase 2 geography tiles loaded', 35000);
+    // Runtime acceptance: the active camera is the SAME perspective used
+    // in Hearthmere and the player actually snaps onto streamed ground.
+    await poll(async () => await cdp.eval(
+      "!!window.__worldV2FunctionalQA && window.__worldV2FunctionalQA.snapshot().groundY !== null"
+    ), 'V2 ground collision ready', 25000);
+    const beforeMovement = await cdp.eval('window.__worldV2FunctionalQA.snapshot()');
+    if (beforeMovement.camera !== 'PerspectiveCamera' ||
+      beforeMovement.cameraDistance < 12 || beforeMovement.cameraDistance > 28 ||
+      beforeMovement.atlasPages < 60 ||
+      Math.abs(beforeMovement.y - beforeMovement.groundY) > 0.3 ||
+      !beforeMovement.walkable) {
+      throw new Error('V2 camera/ground/page contract violation: ' + JSON.stringify(beforeMovement));
+    }
+    const pathProbe = await cdp.eval('window.__worldV2FunctionalQA.pathTo(4, 0)');
+    if (pathProbe.status !== 'complete') {
+      throw new Error('Local baked terrain navigation failed: ' + JSON.stringify(pathProbe));
+    }
+    await poll(async () => await cdp.eval(
+      'window.__worldV2FunctionalQA.snapshot().resident >= 18'
+    ), 'Nearby page tiles and collision meshes resident', 25000);
+    // Headless software WebGL has wildly variable frame pacing. Hold the
+    // actual keyboard input until the *player has moved*, not for a guessed
+    // millisecond duration that can elapse entirely during frame compilation.
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'rawKeyDown', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
+    });
+    try {
+      await poll(async () => await cdp.eval(
+        'window.__worldV2FunctionalQA.snapshot().x > 0.3'
+      ), 'V2 player moving over rendered ground', 30000);
+    } catch (error) {
+      const diagnostics = await cdp.eval('window.__worldV2FunctionalQA.snapshot()');
+      throw new Error('Grounded WASD movement failed: ' + JSON.stringify(diagnostics) +
+        ' / ' + String(error));
+    } finally {
+      await cdp.send('Input.dispatchKeyEvent', {
+        type: 'keyUp', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
+      });
+    }
+    const afterMovement = await cdp.eval('window.__worldV2FunctionalQA.snapshot()');
+    if (Math.abs(afterMovement.y - afterMovement.groundY) > 0.3 ||
+      afterMovement.fetchedPages < 1) {
+      throw new Error('V2 movement lost ground lock or bypassed page fetch: ' + JSON.stringify(afterMovement));
+    }
+    const nativeCameraShot = await cdp.send('Page.captureScreenshot', {
+      format: 'png', captureBeyondViewport: false,
+    });
+    writeFileSync(path.join(screenshots, 'world-v2-native-grounded-camera.png'),
+      Buffer.from(nativeCameraShot.data, 'base64'));
+    console.log('World V2 native camera, grounded movement and A* browser checks passed:',
+      JSON.stringify(afterMovement));
     await cdp.eval("document.querySelector('#geo-jump-island').click()");
     await poll(async () => await cdp.eval(
       "((document.querySelector('#status')?.textContent ?? '').match(/Cell: (-?\\d+), (-?\\d+)/)?.slice(1).join(',') === '21,8')"

@@ -34,7 +34,7 @@ const sourceDir = path.join(root, 'src/world-v2');
 const modules = [
   'WorldCoordinates', 'WorldIdentity', 'WorldAtlas',
   'WorldTerrain', 'WorldPreviewAtlas', 'WorldArtifacts',
-  'WorldGeography', 'WorldGeographyStage',
+  'WorldGeography', 'WorldGeographyStage', 'WorldSurface', 'WorldNavigation',
 ];
 function transcribeSharedSources() {
   writeFileSync(path.join(tmp, 'package.json'), '{"type":"commonjs"}');
@@ -74,36 +74,49 @@ async function main() {
     const { previewAtlas } = require('./WorldPreviewAtlas.js');
     const { stageAtlas, stageGeography } = require('./WorldGeographyStage.js');
     const { buildPlaceholderTerrainCell, buildGeographyTerrainCell } = require('./WorldTerrain.js');
+    const { withTerrainNavigation } = require('./WorldNavigation.js');
     const atlas = geographyMode ? stageAtlas : previewAtlas;
-    const { encodeCompiledCell, validateCompiledAtlasIndex } = require('./WorldArtifacts.js');
+    const { encodeCompiledCell, validateCompiledAtlasIndex,
+      validateCompiledCellPage, WORLD_PAGE_SIZE } = require('./WorldArtifacts.js');
 
-    // Bake selected inspectable patches, NOT all continents or an infinite
-    // world. Future releases use paged region catalogs and runtime discovery.
+    // Entire finite *STAGING* atlas (continents, islands and connecting sea),
+    // expanded by two cells of ocean and aligned to complete 8×8 catalog pages.
+    // These are geographic bounds from the declared atlas, not hand-picked
+    // "camera test patches"; future releases can expand to adjacent pages.
     const coords = [];
-    const seen = new Set();
-    const addPatch = (cx, cz, radius) => {
-      for (let z = cz - radius; z <= cz + radius; z++)
-        for (let x = cx - radius; x <= cx + radius; x++) {
-          const key = `${x}:${z}`;
-          if (!seen.has(key)) { seen.add(key); coords.push({ x, z }); }
-        }
-    };
     if (geographyMode) {
-      addPatch(0, 0, 4);       // Hearthmere anchors + connecting roads
-      addPatch(7, 0, 3);       // Mainland coast and contiguous ocean
-      addPatch(21, 8, 4);      // First island and all accessible shores
-      addPatch(42, 3, 3);      // Second continent interior
-      addPatch(-22, 10, 3);    // Remote island/ocean
-    } else addPatch(0, 0, 4);
+      const reservations = atlas.landmasses.map(land => land.envelope);
+      const minX = Math.min(...reservations.map(e => e.minX));
+      const maxX = Math.max(...reservations.map(e => e.maxX));
+      const minZ = Math.min(...reservations.map(e => e.minZ));
+      const maxZ = Math.max(...reservations.map(e => e.maxZ));
+      const size = atlas.cellSize, pad = 2, n = WORLD_PAGE_SIZE;
+      const pMinX = Math.floor((Math.floor(minX / size) - pad) / n);
+      const pMaxX = Math.floor((Math.floor(maxX / size) + pad) / n);
+      const pMinZ = Math.floor((Math.floor(minZ / size) - pad) / n);
+      const pMaxZ = Math.floor((Math.floor(maxZ / size) + pad) / n);
+      for (let pz = pMinZ; pz <= pMaxZ; pz++) for (let px = pMinX; px <= pMaxX; px++) {
+        for (let dz = 0; dz < n; dz++) for (let dx = 0; dx < n; dx++) {
+          coords.push({ x: px * n + dx, z: pz * n + dz });
+        }
+      }
+    } else {
+      for (let z = -4; z <= 4; z++) for (let x = -4; x <= 4; x++) coords.push({ x, z });
+    }
     if (reverse) coords.reverse();
     const generated = new Map();
     const refs = [];
     const terrainByCoord = new Map();
-    const summary = { land: 0, ocean: 0, river: 0, road: 0, biomes: Array(8).fill(0) };
+    const summary = { land: 0, ocean: 0, river: 0, road: 0, biomes: Array(8).fill(0),
+      navWalkable: 0, navBlocked: 0 };
     for (const address of coords) {
       const cell = geographyMode
-        ? buildGeographyTerrainCell(stageGeography, address)
+        ? withTerrainNavigation(buildGeographyTerrainCell(stageGeography, address))
         : buildPlaceholderTerrainCell(previewAtlas, address);
+      if (cell.navigation) for (const value of cell.navigation.walkable) {
+        if (value === 1) summary.navWalkable++;
+        else summary.navBlocked++;
+      }
       if (cell.geography) for (let i = 0; i < cell.heights.length; i++) {
         const g = cell.geography;
         if (g.waterKinds[i] === 1) summary.ocean++;
@@ -142,13 +155,47 @@ async function main() {
       }
     }
     if (checkedSeamVertices === 0) throw new Error('No terrain seams validated');
+    const pages = [];
+    if (geographyMode) {
+      const batches = new Map();
+      for (const cell of refs) {
+        const px = Math.floor(cell.coordinate.x / WORLD_PAGE_SIZE);
+        const pz = Math.floor(cell.coordinate.z / WORLD_PAGE_SIZE);
+        const key = `${px}:${pz}`;
+        if (!batches.has(key)) batches.set(key, { x: px, z: pz, cells: [] });
+        batches.get(key).cells.push(cell);
+      }
+      for (const page of batches.values()) {
+        const pathName = `pages/${page.x}/${page.z}.json`;
+        const payload = { schemaVersion: 1, atlasHash: atlas.contentHash,
+          x: page.x, z: page.z, cells: page.cells };
+        const raw = JSON.stringify(payload) + '\n';
+        generated.set(pathName, raw);
+        pages.push({
+          x: page.x, z: page.z, path: pathName,
+          sha256: checksum(raw), cellCount: page.cells.length,
+        });
+      }
+      pages.sort((a, b) => a.z - b.z || a.x - b.x);
+      if (pages.some(p => p.cellCount !== WORLD_PAGE_SIZE * WORLD_PAGE_SIZE)) {
+        throw new Error('Staging full atlas must consist of complete geographic pages');
+      }
+    }
     const index = validateCompiledAtlasIndex({
       schemaVersion: 1,
       profile: geographyMode ? 'geography-stage-v1' : 'placeholder-preview-v1',
-      atlas, segments: 16, cells: refs,
-      ...(geographyMode ? { geography: stageGeography.definition } : {}),
+      atlas, segments: 16, cells: geographyMode ? [] : refs,
+      ...(geographyMode ? { geography: stageGeography.definition, pages } : {}),
     });
     if (geographyMode) {
+      for (const page of pages) {
+        validateCompiledCellPage(JSON.parse(generated.get(page.path)), index, page);
+      }
+    }
+    if (geographyMode) {
+      if (!summary.navWalkable || !summary.navBlocked) {
+        throw new Error('Geography navigation overlay has no walkable or blocked terrain');
+      }
       if (!summary.land || !summary.ocean || !summary.river || !summary.road ||
         summary.biomes.filter(count => count > 0).length < 4) {
         throw new Error('Geography bake did not generate coast, river, roads and multiple biomes');
@@ -230,6 +277,8 @@ async function main() {
         anchorsValidated: atlas.anchors.length, landmassesDefined: atlas.landmasses.length,
       } : {}),
       cellCount: refs.length,
+      ...(geographyMode ? { pageCount: pages.length, pageSizeCells: WORLD_PAGE_SIZE,
+        completeExtent: true } : {}),
       checkedSeamVertices,
       maxSeamMismatch: 0,
       generatorVersion: atlas.generatorVersion,
@@ -252,7 +301,7 @@ async function main() {
         writeFileSync(fullPath, generated.get(filename));
       }
     }
-    console.log(`World V2 ${verify ? 'verify' : 'bake'} PASS: ${refs.length} cells, atlas ${atlas.contentHash}, ${paths.length} artifacts, ${checkedSeamVertices} seam vertices, output ${path.relative(root, out)}`);
+    console.log(`World V2 ${verify ? 'verify' : 'bake'} PASS: ${refs.length} cells (${pages.length} pages), atlas ${atlas.contentHash}, ${paths.length} artifacts, ${checkedSeamVertices} seam vertices, output ${path.relative(root, out)}`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
