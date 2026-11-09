@@ -202,16 +202,25 @@ async function main() {
     await poll(async () => await cdp.eval(
       'window.__worldV2FunctionalQA.snapshot().resident >= 18'
     ), 'Nearby page tiles and collision meshes resident', 25000);
+    // Headless software WebGL has wildly variable frame pacing. Hold the
+    // actual keyboard input until the *player has moved*, not for a guessed
+    // millisecond duration that can elapse entirely during frame compilation.
     await cdp.send('Input.dispatchKeyEvent', {
       type: 'rawKeyDown', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
     });
-    await delay(1600);
-    await cdp.send('Input.dispatchKeyEvent', {
-      type: 'keyUp', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
-    });
-    await poll(async () => await cdp.eval(
-      'window.__worldV2FunctionalQA.snapshot().x > 0.3'
-    ), 'V2 player moving over rendered ground', 12000);
+    try {
+      await poll(async () => await cdp.eval(
+        'window.__worldV2FunctionalQA.snapshot().x > 0.3'
+      ), 'V2 player moving over rendered ground', 30000);
+    } catch (error) {
+      const diagnostics = await cdp.eval('window.__worldV2FunctionalQA.snapshot()');
+      throw new Error('Grounded WASD movement failed: ' + JSON.stringify(diagnostics) +
+        ' / ' + String(error));
+    } finally {
+      await cdp.send('Input.dispatchKeyEvent', {
+        type: 'keyUp', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
+      });
+    }
     const afterMovement = await cdp.eval('window.__worldV2FunctionalQA.snapshot()');
     if (Math.abs(afterMovement.y - afterMovement.groundY) > 0.3 ||
       afterMovement.fetchedPages < 1) {
