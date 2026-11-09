@@ -34,7 +34,7 @@ const sourceDir = path.join(root, 'src/world-v2');
 const modules = [
   'WorldCoordinates', 'WorldIdentity', 'WorldAtlas',
   'WorldTerrain', 'WorldPreviewAtlas', 'WorldArtifacts',
-  'WorldGeography', 'WorldGeographyStage',
+  'WorldGeography', 'WorldGeographyStage', 'WorldSurface', 'WorldNavigation',
 ];
 function transcribeSharedSources() {
   writeFileSync(path.join(tmp, 'package.json'), '{"type":"commonjs"}');
@@ -74,6 +74,7 @@ async function main() {
     const { previewAtlas } = require('./WorldPreviewAtlas.js');
     const { stageAtlas, stageGeography } = require('./WorldGeographyStage.js');
     const { buildPlaceholderTerrainCell, buildGeographyTerrainCell } = require('./WorldTerrain.js');
+    const { withTerrainNavigation } = require('./WorldNavigation.js');
     const atlas = geographyMode ? stageAtlas : previewAtlas;
     const { encodeCompiledCell, validateCompiledAtlasIndex } = require('./WorldArtifacts.js');
 
@@ -99,11 +100,16 @@ async function main() {
     const generated = new Map();
     const refs = [];
     const terrainByCoord = new Map();
-    const summary = { land: 0, ocean: 0, river: 0, road: 0, biomes: Array(8).fill(0) };
+    const summary = { land: 0, ocean: 0, river: 0, road: 0, biomes: Array(8).fill(0),
+      navWalkable: 0, navBlocked: 0 };
     for (const address of coords) {
       const cell = geographyMode
-        ? buildGeographyTerrainCell(stageGeography, address)
+        ? withTerrainNavigation(buildGeographyTerrainCell(stageGeography, address))
         : buildPlaceholderTerrainCell(previewAtlas, address);
+      if (cell.navigation) for (const value of cell.navigation.walkable) {
+        if (value === 1) summary.navWalkable++;
+        else summary.navBlocked++;
+      }
       if (cell.geography) for (let i = 0; i < cell.heights.length; i++) {
         const g = cell.geography;
         if (g.waterKinds[i] === 1) summary.ocean++;
@@ -149,6 +155,9 @@ async function main() {
       ...(geographyMode ? { geography: stageGeography.definition } : {}),
     });
     if (geographyMode) {
+      if (!summary.navWalkable || !summary.navBlocked) {
+        throw new Error('Geography navigation overlay has no walkable or blocked terrain');
+      }
       if (!summary.land || !summary.ocean || !summary.river || !summary.road ||
         summary.biomes.filter(count => count > 0).length < 4) {
         throw new Error('Geography bake did not generate coast, river, roads and multiple biomes');
