@@ -412,6 +412,15 @@ Atlas hash: ${atlas.contentHash} · baked geography tiles: ${source.catalog.cell
  */
 declare global {
   interface Window {
+    __worldV2FunctionalQA?: {
+      snapshot: () => {
+        camera: string; cameraDistance: number; cameraFov: number;
+        x: number; y: number; z: number; groundY: number | null;
+        walkable: boolean; collision: TraversalBlock | null;
+        resident: number; atlasPages: number; fetchedPages: number;
+      };
+      pathTo: (x: number, z: number) => NavigationResult;
+    };
     __worldV2Review?: {
       setView: (view: { x: number; z: number; zoom?: number; angle?: number }) => void;
       snapshot: () => {
@@ -422,6 +431,29 @@ declare global {
       };
     };
   }
+}
+if (new URLSearchParams(location.search).get('functionalQA') === '1') {
+  window.__worldV2FunctionalQA = {
+    snapshot() {
+      const ground = surfaceAt(tileStore, player.x, player.z);
+      return {
+        camera: camera.type,
+        cameraDistance: camera.position.distanceTo(playerRig.root.position),
+        cameraFov: camera.fov,
+        x: player.x, y: player.y, z: player.z,
+        groundY: ground?.y ?? null, walkable: ground?.walkable ?? false,
+        collision: movementBlocked,
+        resident: streamer.loaded().length,
+        atlasPages: source.catalog.pages?.length ?? 0,
+        fetchedPages: performance.getEntriesByType('resource')
+          .filter(item => item.name.includes('/world-v2/geography/pages/')).length,
+      };
+    },
+    pathTo(x, z) {
+      if (![x, z].every(Number.isFinite)) throw new RangeError('Invalid QA navigation goal');
+      return findTerrainPath(tileStore, player, { x, z });
+    },
+  };
 }
 if (reviewMode) {
   window.__worldV2Review = {
