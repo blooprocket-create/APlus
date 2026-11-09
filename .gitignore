@@ -11,3 +11,6 @@ __pycache__/
 
 # Regenerated geography catalog (prebuild)
 public/world-v2/geography/
+
+# Generated local verification output; selected art evidence lives in docs/screenshots
+test-artifacts/

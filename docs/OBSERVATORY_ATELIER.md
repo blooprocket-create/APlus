@@ -4,7 +4,7 @@
 
 Open `/atelier.html`. The normal Hearthmere game remains `/index.html`. This is an art-focused, single-hero combat sandbox built on `GameEngine`, its existing internal `MoatSlice`, `CharacterRig`, `HeroMotion`, input, combat, damage, sentinel AI and `IsometricCameraController`. It does not implement another gameplay engine, publish geography, migrate saves, or complete World V2 Phase 3.
 
-Controls: WASD/arrows to walk, Space to evade, click for basic attacks, **Q / Astral bloom** for the revised gravity ability, **C / Camera** to cycle cinematic / hero / native isometric cameras, **P** to hide/restore the interface. The page uses an in-memory character and the existing slice's no-save behavior. Reload resets the encounter. It is a desktop review sandbox; it does not yet provide a complete mobile control layout.
+Controls: WASD/arrows to walk, Shift to evade, click for basic attacks, **Q / Astral bloom** for the revised gravity ability, **C / Camera** to cycle cinematic / hero / native isometric cameras, **P** to hide/restore the interface. The page uses an in-memory character and the existing slice's no-save behavior. Reload resets the encounter. It is a desktop review sandbox; it does not yet provide a complete mobile control layout.
 
 ## What the audit found
 
@@ -85,3 +85,7 @@ Rollback: remove the `atelier.html` Vite input/entry, `startObservatoryAtelier` 
 ## Painted atlas provenance
 
 Original generated albedo atlas, 2026-11-09, native ImageGen. No downloaded model or third-party texture. The checked-in PNG and SHA-256 in `manifest.json` are the reproducible source for this build. Prompt intent: a square 2×2 atlas with independently tileable warm umber/violet flowing bark, quiet weathered ivory limestone with teal crevice moss, rich jade/viridian velvet moss and blue-green slate with restrained brass dust; original gouache/watercolor pigments, uniform diffuse lighting, no scene, object, border, labels or material-ball previews. It is sampled as a surface map in the real game, not shown as a prerendered scene.
+
+## Verification record
+
+181 tests pass; production build, asset integrity, documentation/dependency checks and forward/reverse world bakes pass. The existing browser smoke passed all three heroes, grounded navigation and all three opt-in first-arrival roles. One subsequent art movement rerun was invalidated by an external diagnostic viewport resize (which resets input); it is rerun without concurrent interaction. A concurrent World V2 visual-capture run hit a software-rendering frame timeout and is repeated serially. These are recorded as review-infrastructure failures, not ignored as art acceptance.
