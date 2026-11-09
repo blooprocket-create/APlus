@@ -1,6 +1,6 @@
 # Astral Chronicles — Phase 3 agent handoff: Hearthmere on World V2
 
-**Status:** **PLANNED / NOT IMPLEMENTED** as of merged [PR #9](https://github.com/blooprocket-create/APlus/pull/9). The World V2 terrain/navigation foundation exists; the **real game still launches its older Hearthmere scene**. Read [AGENTS.md](../AGENTS.md), [current status](WORLD_V2_STATUS.md), [user decisions](WORLD_V2_DECISIONS.md), [World V2 architecture](WORLD_V2_ARCHITECTURE.md) and the [Phase 0 legacy audit](WORLD_V2_PHASE0_AUDIT.md) before editing.
+**Status:** **IN PROGRESS** via the first opt-in arrival integration [PR #11](https://github.com/blooprocket-create/APlus/pull/11), documented in [Phase 3.0 progress](WORLD_V2_PHASE3_PROGRESS.md). Full campaign restaging, companion AI and V2 saving are **NOT implemented**. Baseline before work was merged [PR #9](https://github.com/blooprocket-create/APlus/pull/9). The World V2 terrain/navigation foundation exists; the **real game still launches its older Hearthmere scene**. Read [AGENTS.md](../AGENTS.md), [current status](WORLD_V2_STATUS.md), [user decisions](WORLD_V2_DECISIONS.md), [World V2 architecture](WORLD_V2_ARCHITECTURE.md) and the [Phase 0 legacy audit](WORLD_V2_PHASE0_AUDIT.md) before editing.
 
 ## Goal
 
@@ -24,6 +24,8 @@ This phase is **integration**, not a wholesale new game, not an optional static 
 ## Implementation slices, in the order agents should attempt them
 
 ### 3.0 — baseline and the new entry point
+
+**Started in PR #11:** `/world-v2-story.html` is a separate entrypoint with genuine role selection, a first terrain-grounded `arrival → market` interaction and shared script extraction. No later quest has been ported, no V2 progress is saved, and the companions have **visual formation follow only**. The existing game/Phase 2 geography lab remain independent. See [progress and evidence](WORLD_V2_PHASE3_PROGRESS.md).
 - Re-run the existing **three-hero Hearthmere** browser smoke, build, tests and world dependency audit. Capture baseline saved flags, 13 opening step IDs, camera positions, NPC ownership and input/cutscene handoffs.
 - Add a **clearly opt-in World V2 story entry/session**, not an immediate replacement for `/index.html`. Users must be able to return to the old opening while the migration is incomplete.
 - Identify all hardcoded `Y=0`/waypoint/road/circle restrictions in the live opening, plus the exact owner and replacement seam; don't globally remove them for the legacy path.
