@@ -1,5 +1,5 @@
 import { worldToCell, type WorldCellCoordinate, type WorldPosition } from './WorldCoordinates';
-import { sampleCellHeight, type TerrainCell } from './WorldTerrain';
+import type { TerrainCell } from './WorldTerrain';
 
 /** The exact two-triangle plane used by the Three.js PlaneGeometry grid.
  * Calling this for collision avoids the former bilinear-vs-render mismatch.
