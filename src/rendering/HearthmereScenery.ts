@@ -3,7 +3,7 @@ import { bakePieces, beam, loft, panel, piece, smoothLoft } from './ArtMesh';
 import { buildRefugeBridge, buildRefugeFire, buildRefugeGrove, buildRefugeLodge } from './HearthmereRefuge';
 import { addPaintedMeadow, type MeadowPlant } from './PaintedMeadow';
 import { GroundMeshCollider } from '../game/GroundMeshCollider';
-import { addPaintedSky, paintedPalette, addSceneryCutaway } from './PaintedWorldStyle';
+import { addPaintedSky, paintedPalette, addSceneryCutaway, PAINTED_WATER_PALETTE } from './PaintedWorldStyle';
 import { RIVER_CENTER_X, RIVER_WAKES, RIVER_WIDTH, SceneryMotion } from './SceneryMotion';
 
 export interface TownBuilding { x: number; z: number; w: number; d: number; refuge?: true }
@@ -376,10 +376,10 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
       time,
       wakes: motion.wakes,
       bridgeWake: { value: new THREE.Vector3(0, 0, -1) },
-      deep: { value: new THREE.Color(0x254f71) },
-      channel: { value: new THREE.Color(0x4386a0) },
-      shallows: { value: new THREE.Color(0x80b7a2) },
-      glint: { value: new THREE.Color(0xe0f0df) },
+      deep: { value: new THREE.Color(PAINTED_WATER_PALETTE.deep) },
+      channel: { value: new THREE.Color(PAINTED_WATER_PALETTE.channel) },
+      shallows: { value: new THREE.Color(PAINTED_WATER_PALETTE.shallows) },
+      glint: { value: new THREE.Color(PAINTED_WATER_PALETTE.glint) },
     },
     vertexShader: `
       varying vec2 vUv;
