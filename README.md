@@ -20,7 +20,7 @@ The [exploration and puzzle brief](docs/EXPLORATION_PUZZLES.md) collects the thr
 
 The [combat and progression brief](docs/COMBAT_PROGRESSION.md) collects the action foundation, class skill trees, awakening, difficulty modes, and defeat direction.
 
-## Agent handoff and roadmap
+## Current priority: Phase 2.5 gameplay & rendering convergence\n\nBefore completing the Phase 3 Hearthmere migration, integrate the **existing real gameplay engine** on V2 streamed ground: movement, all currently implemented three-hero combat/abilities, NPC/enemy/companion AI, animation, effects, shaders, audio, camera, HUD and desktop/touch controls. Use shared owners, not a duplicated lab-only game. The old painted styling is an implementation baseline; the new desired art quality combines **lush, painterly Ghibli-leaning environments** with **dramatic, sharp Solo Leveling-feeling anime heroes and VFX**, in an original unified look. Full final polish is not claimed. See [Phase 2.5 handoff](docs/WORLD_V2_PHASE2_5_GAMEPLAY_INTEGRATION.md) and [revised art contract](docs/WORLD_V2_ART_PARITY.md).\n\n## Agent handoff and roadmap
 
 The [production roadmap](docs/PRODUCTION_ROADMAP.md) and [Phase 3 Hearthmere integration plan](docs/WORLD_V2_PHASE3_HANDOFF.md) are the active work queue. Phase 2's staged engineering core is merged, but the **existing Hearthmere opening is not yet running on World V2**; exact atlas layout, ships, persistence on V2, distant LOD and physical-device FPS remain open. See [the status matrix](docs/WORLD_V2_STATUS.md) before assigning work.
 
