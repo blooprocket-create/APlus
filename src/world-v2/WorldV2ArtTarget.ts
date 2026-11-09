@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { beam, piece, smoothLoft } from '../rendering/ArtMesh';
 import { buildRefugeLodge } from '../rendering/HearthmereRefuge';
+import { HearthmereGiant } from '../rendering/HearthmereGiant';
 import { disposeObject } from '../rendering/SceneResources';
 import type { WorldPosition } from './WorldCoordinates';
 
@@ -43,7 +44,7 @@ export function createWorldV2ArtTarget(
     return material;
   };
   const at = (x: number, z: number) => groundHeight(center.x + x, center.z + z) ?? center.y;
-  const stone = [0x8d8e8e, 0xb5a79b, 0x6d807d, 0xc2b5a5];
+  const stone = [0x616d77, 0x9da0a6, 0x6b7b7c, 0xaba7ab];
   const warm = new THREE.Color(0xffd3a0);
   const shadow = paint(0x423c43);
   const brass = paint(0xc69e61);
@@ -67,6 +68,21 @@ export function createWorldV2ArtTarget(
     }
   }
 
+  // A few reflective patches break the path's repetitive dry surface. They are
+  // cheap presentation-only meshes with feathered, uneven boundaries.
+  const wet = new THREE.MeshBasicMaterial({
+    color:0x688ca9, transparent:true,opacity:.23,depthWrite:false,
+    side:THREE.DoubleSide,
+  });
+  for(const [x,z,rx,rz] of [
+    [-2.8,2.7,1.15,.53],[2.4,.3,.83,.34],
+    [3.1,-7.7,1.9,.48],[-1.7,-11.3,1.17,.35],
+  ]) {
+    const puddle=piece(root,new THREE.CircleGeometry(1,32),wet,x,at(x,z)+.09,z);
+    puddle.rotation.x=-Math.PI/2;
+    puddle.scale.set(rx,rz,1);
+  }
+
   // One actual authored Hearthmere lodge, reused rather than a billboard or
   // environment concept image; terrain-grounded and framed by foliage.
   const lodge = new THREE.Group();
@@ -74,6 +90,35 @@ export function createWorldV2ArtTarget(
   lodge.rotation.y = .18;
   buildRefugeLodge(lodge, 0, 0, 8.0, 5.6, paint);
   root.add(lodge);
+
+  // Theatre-style distant mountain silhouettes and veiled cascades. These
+  // are REAL background meshes in the 3D scene, not a flat concept-art image,
+  // and do not replace walkable geographical data or collisions.
+  const ridgePaint = [paint(0x45586b),paint(0x667581),paint(0x7a858b)];
+  const ridges = [
+    { z:-78, width:91, height:25, color:ridgePaint[0], shift:-8 },
+    { z:-62, width:83, height:18, color:ridgePaint[1], shift:4 },
+    { z:-53, width:77, height:12, color:ridgePaint[2], shift:9 },
+  ];
+  for(const [i,ridge] of ridges.entries()) {
+    const profile=new THREE.Shape();
+    profile.moveTo(-ridge.width/2,0);
+    for(let j=0;j<=32;j++) {
+      const x=-ridge.width/2+j/32*ridge.width;
+      const wave=Math.abs(Math.sin(j*.57+i*1.9))*.46 +
+        Math.abs(Math.sin(j*.19-i*.83))*.40 +
+        Math.abs(Math.sin(j*1.39+i*.13))*.14;
+      const h=ridge.height*(.33+.67*wave);
+      profile.lineTo(x,h);
+    }
+    profile.lineTo(ridge.width/2,0);
+    profile.closePath();
+    const wall=piece(root,new THREE.ExtrudeGeometry(profile,{
+      depth:1.8,bevelEnabled:true,bevelThickness:.6,bevelSize:.65,
+      bevelSegments:1,steps:1,
+    }),ridge.color,ridge.shift,center.y-4,ridge.z);
+    wall.receiveShadow=true;
+  }
 
   // Weathered stone gateway: deliberately irregular, hand-composed silhouette.
   const arch = new THREE.Group();
@@ -145,6 +190,34 @@ export function createWorldV2ArtTarget(
     }
   }
 
+  // Existing story giant used here only as distant cinematic set dressing.
+  // Real giant gameplay and AI remain owned by the actual Hearthmere engine.
+  const giant = new HearthmereGiant();
+  giant.root.position.set(11.0,at(11,-31),-31);
+  giant.root.scale.setScalar(1.26);
+  giant.root.rotation.y=Math.PI-.45;
+  root.add(giant.root);
+
+  // Wisps of draping wisteria-like flowers and hanging leaf trails punctuate
+  // the near silhouette without filling the whole play area with particles.
+  const flowering=paint(0xcab2d9);
+  for(const [x,z] of [[-14.5,1.0],[12.3,.1],[-14.8,-17]]) {
+    const y=at(x,z)+5.9;
+    for(let j=0;j<7;j++){
+      const px=x+(rng()-.5)*3.7;
+      const pz=z+(rng()-.5)*2.3;
+      const strand=piece(root,new THREE.CylinderGeometry(.015,.035,.7+rng()*1.5,5),
+        flowering,px,y-rng()*.9,pz);
+      strand.rotation.z=(rng()-.5)*.22;
+      for(let p=0;p<3;p++) {
+        const petal=piece(root,new THREE.SphereGeometry(.08,6,5),
+          paint(blossoms[(p+j)%blossoms.length]),
+          px+(rng()-.5)*.22,y-.35-p*.27,pz+(rng()-.5)*.19);
+        petal.scale.set(1.0,1.7,.72);
+      }
+    }
+  }
+
   // Warm lantern pools anchor the storybook mood and foreground silhouette.
   const pointLights: THREE.PointLight[] = [];
   for (const [x,z] of [[-5.6,-8.7],[5.1,-7.5],[-9.1,-3.9],[9.9,-3.2]]) {
@@ -162,6 +235,31 @@ export function createWorldV2ArtTarget(
       root.add(light);
       pointLights.push(light);
     }
+  }
+
+  // Soft vertical cascade lights give the distant cliffs a magical landmark.
+  const fallMaterial=new THREE.ShaderMaterial({
+    uniforms:{uTime:{value:0}},
+    transparent:true,depthWrite:false,side:THREE.DoubleSide,
+    vertexShader:[
+      'varying vec2 vUv;',
+      'void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+    ].join('\n'),
+    fragmentShader:[
+      'uniform float uTime; varying vec2 vUv;',
+      'void main(){float stream=.5+.5*sin(vUv.x*19.0+sin(vUv.y*9.0+uTime)*1.3);',
+      'float fade=smoothstep(0.0,.18,vUv.x)*(1.0-smoothstep(.82,1.0,vUv.x));',
+      'fade*=smoothstep(0.0,.1,vUv.y)*(1.0-smoothstep(.89,1.0,vUv.y));',
+      'gl_FragColor=vec4(vec3(.58,.79,.89),fade*(.17+.14*stream));',
+      '#include <tonemapping_fragment>',
+      '#include <colorspace_fragment>',
+      '}',
+    ].join('\n'),
+  });
+  for(const [x,z,w,h] of [[-17,-51,3.5,15],[30,-58,5.1,20]]) {
+    const fall=piece(root,new THREE.PlaneGeometry(w,h),fallMaterial,
+      x,center.y-2+h*.5,z+2);
+    fall.renderOrder=5;
   }
 
   // Painterly ground-hugging fog: intentionally faint, with a soft feathered
@@ -271,6 +369,8 @@ export function createWorldV2ArtTarget(
       root.position.set(center.x-origin.x,0,center.z-origin.z);
       fogMaterial.uniforms.uTime.value=t;
       dustMaterial.uniforms.uTime.value=t;
+      fallMaterial.uniforms.uTime.value=t;
+      giant.pose(Math.min(.04,1/60));
       magic.position.set(-2.6,at(-2.6,-1.9)+2.5,-1.9);
       magic.rotation.y=t*.24;
       magic.rotation.z=Math.sin(t*.32)*.12;
