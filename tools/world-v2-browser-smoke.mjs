@@ -260,6 +260,39 @@ async function main() {
     writeFileSync(path.join(screenshots, 'world-v2-geography.png'), Buffer.from(geoShot.data, 'base64'));
     console.log('Phase 2 geography browser smoke passed:', geoStatus);
 
+    // Opt-in visual target is a real WebGL scene on streamed V2 ground, not an
+    // illustration or a claim that the full combat engine has already migrated.
+    await cdp.send('Page.navigate', {
+      url: serverUrl + 'world-v2-art-target.html?functionalQA=1&showcaseShot=1',
+    });
+    await poll(async () => await cdp.eval(
+      'window.__worldV2ArtQA?.snapshot()?.ready === true && ' +
+      'window.__worldV2ArtQA.snapshot().resident >= 12 && ' +
+      'window.__worldV2ArtQA.snapshot().frames >= 4'
+    ), 'Hearthmere art target rendered on compiled V2 ground', 55000);
+    const artSnapshot = await cdp.eval('window.__worldV2ArtQA.snapshot()');
+    if (artSnapshot.heroRigCount !== 3 || artSnapshot.loadingErrors ||
+        !artSnapshot.effects) {
+      throw new Error('Art target scene missing real heroes or failed streaming: ' +
+        JSON.stringify(artSnapshot));
+    }
+    const artShot = await cdp.send('Page.captureScreenshot', {
+      format:'png', captureBeyondViewport:false,
+    });
+    writeFileSync(path.join(screenshots,'world-v2-art-target.png'),
+      Buffer.from(artShot.data,'base64'));
+    await cdp.send('Input.dispatchKeyEvent', {
+      type:'rawKeyDown',key:'g',code:'KeyG',windowsVirtualKeyCode:71,
+    });
+    await cdp.send('Input.dispatchKeyEvent', {
+      type:'keyUp',key:'g',code:'KeyG',windowsVirtualKeyCode:71,
+    });
+    await poll(async () => await cdp.eval(
+      'window.__worldV2ArtQA.snapshot().effects === false'
+    ), 'Art-target effects toggle responds', 10000);
+    console.log('V2 actual in-engine art target browser screenshot passed:',
+      JSON.stringify(artSnapshot));
+
     // Phase 3.0 opt-in acceptance: the real mage character and the other
     // two canonical hero rigs on the existing page-streamed terrain, plus a
     // LIVE keyboard movement and first story interaction. Remaining story
