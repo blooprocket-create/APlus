@@ -37,7 +37,9 @@ describe('World V2 screenshot-led scenery placement', () => {
   });
 
   it('places nothing on open sea cells or preview tiles without geology', () => {
-    const ocean = buildGeographyTerrainCell(stageGeography, { x: 20, z: 11 });
+    // The previous 20,11 cell contained a tiny beach corner. Choose an
+    // unambiguously offshore catalogued tile for the zero-scene assertion.
+    const ocean = buildGeographyTerrainCell(stageGeography, { x: 20, z: 12 });
     expect(stageGeography.sample(1330, 760).waterKind).toBe(1);
     expect(makeSceneryPlacements(ocean, stageAtlas.worldSeed)).toHaveLength(0);
   });
