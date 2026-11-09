@@ -114,7 +114,7 @@ async function measureScreenshot(cdp, base64) {
     'colorBuckets:colors.size}; })()';
   return cdp.eval(script);
 }
-function renderGallery(rows) {
+function renderGallery(rows, referenceImage) {
   const cards = rows.map(row => {
     const image = esc(row.image);
     const before = row.before
@@ -161,6 +161,12 @@ function renderGallery(rows) {
     'Inspect individual images and record actionable observations in review-checklist.md.</p>' +
     '<p><a href="contact-sheet.svg" style="color:#85e2d6">Open full contact sheet</a> · ' +
     '<a href="visual-review.json" style="color:#85e2d6">Machine-readable diagnostics</a></p>' +
+    (referenceImage
+      ? '<section class="tile" style="max-width:850px;margin-bottom:22px"><h2>Existing game — native Hearthmere art reference</h2>' +
+        '<p class="focus">Actual current-game Chrome screenshot, captured in this same CI run. Compare lighting, shapes, palette and material treatment; camera and gameplay content differ.</p>' +
+        '<img style="display:block;width:100%;border-radius:8px" src="' + esc(referenceImage) +
+        '" alt="Original Astral Chronicles playable Hearthmere art reference"></section>'
+      : '<p class="warning">No original Hearthmere screenshot was available to compare art direction.</p>') +
     '<div class="grid">' + cards + '</div><p class="foot">Review focus: coastline, sea gaps, ' +
     'biome silhouettes, artistic consistency, road/river readability and mobile framing. ' +
     'This is not a player-approved final map.</p></body></html>';
@@ -294,7 +300,10 @@ async function run() {
         if (shot.id === 'open-ocean' && metrics.navyFraction > 0.14) {
           warnings.push('Large dark-blue shapes in ocean view; inspect for streaming gaps');
         }
-        if (shot.expectWater !== 'any' && state.water !== shot.expectWater) {
+        if (state.artPipeline !== 'hearthmere-painted-v1') {
+        warnings.push('World lab is not using the native Hearthmere painted art pipeline');
+      }
+      if (shot.expectWater !== 'any' && state.water !== shot.expectWater) {
           warnings.push('Expected ' + shot.expectWater + ' at screenshot origin but found ' + state.water);
         }
         if (state.scenery < shot.minScenery) warnings.push('Expected scenery absent in this view');
@@ -325,12 +334,25 @@ async function run() {
     report.browserExceptions = cdp.exceptions;
     const strongIssues = report.shots.flatMap(s => s.warnings.filter(w =>
       w.includes('blank/broken') || w.includes('Viewport pixels') ||
-      w.includes('Expected scenery absent') || w.includes('Expected ')));
+      w.includes('Expected scenery absent') || w.includes('Expected ') ||
+      w.includes('not using the native Hearthmere')));
     if (strongIssues.length) report.technicalFailures.push(...strongIssues);
     if (report.shots.length !== shots.length) report.technicalFailures.push('Not all required screenshots captured');
     if (report.browserExceptions.length) report.technicalFailures.push('Browser JavaScript exceptions');
+    // Use the production-game browser smoke screenshot as an actual visual
+    // art reference for the new geography, not a fake generated concept.
+    const originalHearthmere = path.join(root, 'test-artifacts/browser-smoke/hearthmere-warrior.png');
+    let hearthmereReference;
+    if (existsSync(originalHearthmere)) {
+      mkdirSync(path.join(output, 'reference'), { recursive: true });
+      copyFileSync(originalHearthmere, path.join(output, 'reference/hearthmere-warrior.png'));
+      hearthmereReference = 'reference/hearthmere-warrior.png';
+      report.artReference = hearthmereReference;
+    } else {
+      report.technicalFailures.push('Missing original Hearthmere art-reference screenshot');
+    }
     if (report.shots.length) {
-      writeFileSync(path.join(output, 'gallery.html'), renderGallery(report.shots));
+      writeFileSync(path.join(output, 'gallery.html'), renderGallery(report.shots, hearthmereReference));
       writeFileSync(path.join(output, 'contact-sheet.svg'), contactSvg(report.shots, pngById));
       writeFileSync(path.join(output, 'review-checklist.md'), reviewChecklist(report.shots));
     }
