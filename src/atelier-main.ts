@@ -8,7 +8,13 @@ async function main(){
   const hero=await p.createCharacter({accountId:'atelier',slotIndex:0,name:'Celestia',classId:'mage'});
   const engine=new GameEngine(document.querySelector('canvas')!,document.querySelector('#damage-layer')!,p,{
     onHudUpdate:()=>{},onBannerNotification:()=>{},onUltimateCutIn:()=>{},onLootObtained:()=>{},
-    onDefeated:()=>{document.querySelector('#loading')!.textContent='You fell in battle. Reload to return to the garden.';},
+    onDefeated:()=>{
+      const panel=document.createElement('div');panel.id='loading';panel.setAttribute('role','status');
+      panel.innerHTML='<p>The garden remembers.</p><button>Return to the observatory</button>';
+      panel.querySelector('button')!.addEventListener('click',()=>location.reload());
+      document.querySelector('#atelier-ui')!.classList.remove('hidden');
+      document.querySelector('#atelier-ui')!.appendChild(panel);
+    },
     onZoneCleared:()=>{},onCharacterSaved:()=>{},onTriggerCutscene:()=>{},
   });
   await engine.startObservatoryAtelier(hero,new URLSearchParams(location.search).has('baseline'));

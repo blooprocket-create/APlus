@@ -1,6 +1,6 @@
 # Astral Chronicles — World V2 implementation status
 
-**2026-11-09 isolated visual investigation:** `/atelier.html` adds the [Remembering Observatory art stage](OBSERVATORY_ATELIER.md) on the existing `GameEngine`/moat sandbox. Original offline Blender assets and material/VFX review tooling are opt-in; this does not move any Hearthmere story beat, publish an atlas, change saves or complete a World V2 phase. The high-end visual target remains unaccepted.
+**2026-11-09 isolated visual investigation:** `/atelier.html` adds the [Remembering Observatory art stage](OBSERVATORY_ATELIER.md) on the existing `GameEngine`/moat sandbox. Original offline Blender assets and material/VFX review tooling are opt-in; this does not move any Hearthmere story beat, publish an atlas, change saves or complete a World V2 phase. The high-end visual target remains unaccepted. Engineering evidence: 181 tests, three-hero browser regression and 11/11 World V2 captures pass; the actual art-stage captures/recording and limitations are in the atelier document.
 
 
 **Baseline checked:** 2026-11-08 at `main` merge `c40f578cf2a70d2f23ca767a17865e1716991026` ([PR #9](https://github.com/blooprocket-create/APlus/pull/9)). **Post-merge GitHub Actions [42566887740](https://github.com/blooprocket-create/APlus/actions/runs/42566887740): SUCCESS.** This is a snapshot; future work must update its status and evidence. Start with [agent instructions](../AGENTS.md) and [decision register](WORLD_V2_DECISIONS.md).

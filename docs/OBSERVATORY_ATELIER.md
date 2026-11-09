@@ -88,4 +88,12 @@ Original generated albedo atlas, 2026-11-09, native ImageGen. No downloaded mode
 
 ## Verification record
 
-181 tests pass; production build, asset integrity, documentation/dependency checks and forward/reverse world bakes pass. The existing browser smoke passed all three heroes, grounded navigation and all three opt-in first-arrival roles. One subsequent art movement rerun was invalidated by an external diagnostic viewport resize (which resets input); it is rerun without concurrent interaction. A concurrent World V2 visual-capture run hit a software-rendering frame timeout and is repeated serially. These are recorded as review-infrastructure failures, not ignored as art acceptance.
+- `npm test`: 181 tests / 26 files pass, including all three existing opening paths. Source CI at `6e7a59d` also passed [GitHub Actions 42665023675](https://github.com/blooprocket-create/APlus/actions/runs/42665023675); the later evidence/recovery-panel commit is checked separately.
+- `npm run build`, `art:verify`, `docs:check`, `audit:world`, `world:bake:verify`, `world:geo:verify` and reverse-order geography verification pass.
+- `test:browser` passes all three heroes, grounded movement/navigation and all three opt-in first-arrival roles.
+- `test:visual -- --base-url http://127.0.0.1:4191/`: **11/11 frames, zero issues** against the explicit final production-build server. This is regression evidence, not artistic approval.
+- Final art run (2026-11-09 17:40 UTC): keyboard travel from Z=11 to Z=11.576, developed ability at age 0.5333 seconds, recorded ability at age 0.7167 seconds, no browser exceptions. The raw canvas recording is 53.2 seconds at 960×600; stills are 1280×800. It is slow under CPU rendering and is not retimed.
+- Hosted preview executed in Chromium and reported its original art fully loaded; [hosted capture](screenshots/astral-slice/06-hosted-preview.png).
+- Review infrastructure failures were retained during investigation: a diagnostic viewport resize cleared held input in an art rerun; concurrent captures hit short deadlines; a later visual retry lost its internally started preview server (resident cells 0, 2,480 loading errors); port 4190 was then found to be blocked by browser/Node fetch. Final verification uses reachable port 4191 without concurrent browser interaction. None of those failures was silently treated as a pass.
+
+The art evidence JSON contains actual measured frame intervals, including warm-up/capture pauses on CPU SwiftShader. They are not a sustained hardware benchmark. The desktop recording is a raw browser artifact and can be very slow under software rendering; no physical-device performance claim is made.

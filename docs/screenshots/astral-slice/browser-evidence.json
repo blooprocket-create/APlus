@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-09T17:15:17.641Z",
+  "capturedAt": "2026-11-09T17:40:24.072Z",
   "browser": "Chromium / SwiftShader",
   "viewport": [
     1280,
@@ -10,9 +10,9 @@
       "ready": true,
       "view": 0,
       "castAge": 10,
-      "frameIntervalMs": 1863.0499999999884,
+      "frameIntervalMs": 1862.069999999972,
       "calls": 149,
-      "triangles": 1707404,
+      "triangles": 1176916,
       "position": [
         -9,
         0,
@@ -31,10 +31,10 @@
     {
       "ready": true,
       "view": 0,
-      "castAge": 0.1,
-      "frameIntervalMs": 3408.6222222222195,
-      "calls": 159,
-      "triangles": 1714846,
+      "castAge": 0.5333000000000029,
+      "frameIntervalMs": 3390.0391304347786,
+      "calls": 158,
+      "triangles": 1183638,
       "position": [
         -9,
         0,
@@ -44,7 +44,7 @@
         "isMoving": false,
         "moveSpeedRatio": 0,
         "attackComboStep": 4,
-        "attackSwingProgress": 0.36504761904762206,
+        "attackSwingProgress": 0.7142857142857145,
         "isDashing": false,
         "hitFlashTimer": 0,
         "skillSlot": "skill1",
@@ -63,6 +63,32 @@
         0,
         11.576
       ]
+    },
+    {
+      "recordedAbility": {
+        "ready": true,
+        "view": 0,
+        "castAge": 0.7167000000000046,
+        "frameIntervalMs": 2486.3719999999926,
+        "calls": 158,
+        "triangles": 1183638,
+        "position": [
+          -9,
+          0,
+          11
+        ],
+        "animation": {
+          "isMoving": false,
+          "moveSpeedRatio": 0,
+          "attackComboStep": 4,
+          "attackSwingProgress": 0.8888571428571459,
+          "isDashing": false,
+          "hitFlashTimer": 0,
+          "charging": false,
+          "skillSlot": "skill1"
+        },
+        "hp": 530
+      }
     }
   ],
   "errors": []
