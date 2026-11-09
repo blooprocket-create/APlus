@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Astral Chronicles — Phase 3 Hearthmere V2 Integration</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #122830; color: #f4f0e9; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    #lab { display: block; width: 100%; height: 100%; touch-action: none; }
+    #heads-up { position:fixed; top:max(12px,env(safe-area-inset-top)); left:14px;
+      width:min(400px,calc(100vw - 28px)); padding:13px 15px; border-radius:13px;
+      border:1px solid #ffe6bd45; background:#10242fdf; pointer-events:none; line-height:1.45; }
+    #heads-up strong { display:block; font-size:17px; }
+    #heads-up p { font-size:12px; opacity:.84; margin:4px 0 8px; }
+    #status { white-space:pre-line; font-size:11px; opacity:.78; }
+    #story-hud { position:fixed; left:14px; bottom:max(14px,env(safe-area-inset-bottom));
+      width:min(450px,calc(100vw - 28px)); background:#10242ff0; border:1px solid #f3cd8750;
+      border-radius:13px; padding:14px; }
+    #story-hud h2 { margin:0 0 6px; font-size:16px; }
+    #story-hud p { margin:6px 0; font-size:13px; }
+    #story-dialogue { font-size:13px; color:#ffe5b2; min-height:1.5em; }
+    button { background:#1c4956; color:#fff4e1; border:1px solid #f3cd8770;
+      border-radius:8px; padding:9px 13px; cursor:pointer; font:inherit; touch-action:manipulation; }
+    button:disabled { opacity:.45; cursor:default; }
+    button:focus-visible { outline:2px solid #ffe6ae; outline-offset:2px; }
+    #story-choose { position:fixed; inset:0; background:#0d1720bc; display:grid; place-items:center;
+      z-index:10; padding:20px; }
+    #story-choose[hidden], #story-hud[hidden] { display:none; }
+    #choice-panel { max-width:520px; text-align:center; background:#142632f5;
+      border:1px solid #d9bd8977; border-radius:17px; padding:24px; }
+    #choice-panel h1 { font-size:23px; margin:0 0 8px; }
+    #choice-panel p { line-height:1.5; font-size:14px; }
+    #choice-buttons { display:flex; flex-wrap:wrap; justify-content:center; gap:9px; margin:16px 0; }
+    #arrows { position:fixed; right:14px; bottom:max(14px,env(safe-area-inset-bottom));
+      display:grid; grid-template-columns:repeat(3,48px); grid-template-rows:repeat(2,46px); gap:4px; }
+    #arrows button { padding:0; font-size:20px; background:#153f52e6; }
+    @media (min-width:850px) { #arrows { display:none; } }
+    @media (max-width:849px) { #story-hud { bottom:max(130px,env(safe-area-inset-bottom)); max-width:calc(100vw - 28px); } }
+    @media (max-width:540px) { #heads-up { font-size:11px; padding:9px; }
+      #story-hud { padding:10px; } #choice-panel { padding:17px; } }
+  </style>
+</head>
+<body>
+  <canvas id="lab" aria-label="World V2 interactive Hearthmere integration scene"></canvas>
+  <section id="heads-up" aria-label="World V2 session status">
+    <strong>Hearthmere — Phase 3 integration</strong>
+    <p>Opt-in playable arrival test on streamed land. The town, later quests, combat and full companion AI are not yet integrated. <a href="/" style="color:#ffe6ae;pointer-events:auto">Return to the existing game</a>.</p>
+    <div id="status">Loading compiled terrain…</div>
+  </section>
+  <section id="story-hud" hidden aria-live="polite">
+    <h2 id="story-objective">Select a hero to begin.</h2>
+    <p id="story-hint"></p>
+    <p id="story-dialogue"></p>
+    <button id="story-action" disabled>Investigate (F)</button>
+  </section>
+  <section id="story-choose" aria-label="Choose a hero">
+    <div id="choice-panel">
+      <h1>Astral Chronicles — Hearthmere</h1>
+      <p>Phase 3 test: select your original hero and investigate the first opening lead in the procedural world. Your other two companions appear in formation; their combat AI and the rest of the quest chain are not ported yet.</p>
+      <div id="choice-buttons">
+        <button data-select-hero="warrior">Brynhildr · Warrior</button>
+        <button data-select-hero="mage">Celestia · Mage</button>
+        <button data-select-hero="assassin">Akatsuki · Assassin</button>
+      </div>
+      <p><small>WASD / arrows to move · F / Investigate to interact · no V2 save is written during this test.</small></p>
+    </div>
+  </section>
+  <div id="arrows" aria-label="Touch movement">
+    <span></span><button data-direction="up" aria-label="Move north">▲</button><span></span>
+    <button data-direction="left" aria-label="Move west">◀</button>
+    <button data-direction="down" aria-label="Move south">▼</button>
+    <button data-direction="right" aria-label="Move east">▶</button>
+  </div>
+  <script type="module" src="/src/world-v2/geography-lab.ts"></script>
+</body>
+</html>

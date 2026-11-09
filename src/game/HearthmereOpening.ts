@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { OPENING_STEPS, type OpeningStep, type OpeningPoint } from './HearthmereStory';
+import { OPENING_LEADS, openingDialogue, nextOpeningStep,
+  type OpeningLine } from './HearthmereScript';
+export { OPENING_LEADS } from './HearthmereScript';
+export type { OpeningLine } from './HearthmereScript';
 import type { CharacterClassId } from '../types/game';
 import { buildHearthmereScenery } from '../rendering/HearthmereScenery';
 import { HearthmereImpact, HearthmereResident } from '../rendering/HearthmereCast';
@@ -39,26 +43,7 @@ export interface OpeningObjective {
   target: OpeningPoint;
   action?: string;
 }
-export interface OpeningLine { speaker: string; text: string; pitch: number }
 export interface OpeningEnemySeed extends OpeningPoint { kind: 'slime' | 'sentinel'; scale: number }
-
-export const OPENING_LEADS: Record<CharacterClassId, { hint: string; arrival: string; shipment: string }> = {
-  warrior: {
-    hint: 'Check the Covenant seal on the guard’s cart at the west gate.',
-    arrival: 'That is the Covenant’s seal. They changed the escort order after I signed it.',
-    shipment: 'The escort order says to clear the square before you open it.',
-  },
-  mage: {
-    hint: 'Inspect the stalled water pump by the west gate.',
-    arrival: 'The record says this pump was serviced. The old fitting hasn’t even been touched.',
-    shipment: 'That fitting is cracked. Stop before you break the seal.',
-  },
-  assassin: {
-    hint: 'Check the courier’s manifest at the west gate.',
-    arrival: 'He left the missing worker’s name off the manifest. He’s heading for the square.',
-    shipment: 'The courier left in a hurry. What was he really delivering?',
-  },
-};
 
 const OPENING_OBJECTIVES: Record<OpeningStep, OpeningObjective> = {
   arrival: { beat: 1, title: 'Find your lead', hint: '', target: { x: -22, z: 0 }, action: 'Investigate' },
@@ -400,27 +385,15 @@ export class HearthmereOpening {
 
   interact(player: OpeningPoint, enemies: number, name: string): boolean {
     if (!this.actionAt(player, enemies)) return false;
-    const lead = OPENING_LEADS[this.role];
-    const lines: Partial<Record<OpeningStep, OpeningLine>> = {
-      arrival: { speaker: name, text: lead.arrival, pitch: 180 },
-      market: { speaker: 'Gatekeeper', text: 'Royal square, past the well. Ask Mara. She knows which roads they still let us use.', pitch: 125 },
-      mara: { speaker: 'Mara', text: 'The well cart goes first. Rowan’s at the forge with a bad wheel. Take him this pin, will you?', pitch: 196 },
-      rowan: { speaker: 'Rowan', text: 'Hold the axle there. Right. Try it over the step. If it holds there, it holds all the way to the well.', pitch: 232 },
-      square: { speaker: 'Mara', text: 'I’m here. Keep them behind you. Rowan’s cart should still be by the rear gate.', pitch: 196 },
-      yard_gate: { speaker: 'Mara', text: 'That’s it. Bring the cart through before the road gives.', pitch: 196 },
-      load_cart: { speaker: 'Resident', text: 'I can sit up. Get us to the wall and I’ll hold on.', pitch: 152 },
-      far_hold: { speaker: 'Mara', text: 'Everyone move. Stay together past the bend.', pitch: 196 },
-      refuge: { speaker: 'Mara', text: 'They’ve put troops on every way back in. Rowan’s still out there. A carter saw the soldiers take the mill road.', pitch: 196 },
-    };
-    this.line = lines[this.step] ?? null;
+    this.line = openingDialogue(this.role, this.step, name);
     this.lineTime = 9;
     this.advance();
     return true;
   }
 
   private advance(): void {
-    const next = OPENING_STEPS[this.index + 1];
-    if (!next) return;
+    const next = nextOpeningStep(this.step);
+    if (next === this.step) return;
     this.step = next;
     this.refresh();
   }
