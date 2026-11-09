@@ -87,3 +87,8 @@ Mobile tests cover independent joystick/attack/ability pointers, pointer cancell
 This is a single-player campaign foundation with procedural art. Completion time has not been measured; it is not a verified twenty-hour adventure. There is no server, multiplayer, or cloud synchronization.
 
 The connected-world tests cover all field activity rules, chapter roads, travel locks, town returns, partial objective persistence, hero-specific map seeds, legacy checkpoint layouts, and the walkability of objectives across multiple generated maps. Browser checks exercise the real renderer and touch HUD separately from the rendering stubs in integration tests.
+
+
+## Optional visual atelier
+
+`/atelier.html` opens the isolated Remembering Observatory art investigation. It uses the existing engine, animation and combat; the regular opening remains `/index.html`. See [the audit, rebuild instructions, browser evidence and limitations](docs/OBSERVATORY_ATELIER.md). This candidate is not signed off as high-end production art.

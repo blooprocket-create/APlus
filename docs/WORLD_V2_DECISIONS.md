@@ -1,5 +1,8 @@
 # Astral Chronicles — World V2 decision register
 
+**2026-11-09 latest user scope — confirmed:** substantially investigate and redesign the visual-production pipeline in a separate reversible branch, implement one original live-rendered environment/hero/ability slice, capture browser evidence, supply a preview and open an unmerged PR. This supersedes deferring visual work for this assignment only. The resulting asset designs, garden layout, name and rendering choices are **PROPOSED**, not approved canonical art/geography. Existing engine and architecture boundaries remain binding.
+
+
 **Last reconciled:** 2026-11-08 against merged [PR #9](https://github.com/blooprocket-create/APlus/pull/9) and the source tree. **Use [AGENTS.md](../AGENTS.md) first.**
 
 ## Decision semantics

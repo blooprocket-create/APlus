@@ -1,5 +1,8 @@
 # Astral Chronicles — World Architecture V2
 
+**Optional art stage (2026-11-09):** [Observatory atelier](OBSERVATORY_ATELIER.md) is a lazy-loaded rendering presentation attached to the existing engine and internal moat fixture. It owns imported art/materials/postprocessing only; existing combat, input, animation, sentinel AI and camera own behavior. No pure world imports or atlas/collision/save contracts change. It is not a second world/gameplay runtime or campaign cutover.
+
+
 **Status:** Product direction locked 2026-11-08. Phase 1 platform is complete; Phase 2's [geography](WORLD_V2_PHASE2_GEOGRAPHY.md) now has a [functional staging runtime](WORLD_V2_PHASE2_RUNTIME.md): full bounded atlas pages, actual bare-terrain collision, baked walkability/nav paths, and native close gameplay camera. **The five-landmass staging map and Hearthmere replacement coordinates are NOT approved final canon.** Production story integration, ships and iPhone performance profiling remain later phases.  
 **Authority:** Latest explicit user-approved direction → [decision register](WORLD_V2_DECISIONS.md) and underlying [DESIGN_DIRECTION.md](DESIGN_DIRECTION.md) → this architecture → relevant story briefs. **Implementation evidence:** [current source/status matrix](WORLD_V2_STATUS.md); [Phase 3 next handoff](WORLD_V2_PHASE3_HANDOFF.md).  
 **Execution:** [Phase 0 audit and preservation register](WORLD_V2_PHASE0_AUDIT.md) → [production roadmap](PRODUCTION_ROADMAP.md).

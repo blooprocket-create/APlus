@@ -1,0 +1,69 @@
+{
+  "capturedAt": "2026-11-09T17:15:17.641Z",
+  "browser": "Chromium / SwiftShader",
+  "viewport": [
+    1280,
+    800
+  ],
+  "logs": [
+    {
+      "ready": true,
+      "view": 0,
+      "castAge": 10,
+      "frameIntervalMs": 1863.0499999999884,
+      "calls": 149,
+      "triangles": 1707404,
+      "position": [
+        -9,
+        0,
+        11
+      ],
+      "animation": {
+        "isMoving": false,
+        "moveSpeedRatio": 0,
+        "attackComboStep": 0,
+        "attackSwingProgress": 0,
+        "isDashing": false,
+        "hitFlashTimer": 0
+      },
+      "hp": 530
+    },
+    {
+      "ready": true,
+      "view": 0,
+      "castAge": 0.1,
+      "frameIntervalMs": 3408.6222222222195,
+      "calls": 159,
+      "triangles": 1714846,
+      "position": [
+        -9,
+        0,
+        11
+      ],
+      "animation": {
+        "isMoving": false,
+        "moveSpeedRatio": 0,
+        "attackComboStep": 4,
+        "attackSwingProgress": 0.36504761904762206,
+        "isDashing": false,
+        "hitFlashTimer": 0,
+        "skillSlot": "skill1",
+        "charging": false
+      },
+      "hp": 530
+    },
+    {
+      "walkingFrom": [
+        -9,
+        0,
+        11
+      ],
+      "walkingTo": [
+        -9,
+        0,
+        11.576
+      ]
+    }
+  ],
+  "errors": []
+}

@@ -1,5 +1,8 @@
 # The Starforged Crown production roadmap
 
+**2026-11-09 owner-requested art investigation:** an isolated [Observatory vertical-slice pipeline](OBSERVATORY_ATELIER.md) explores offline sculpted assets, fitted Celestia couture, painted material authoring and release-driven VFX. This is an explicit visual-priority exception for this branch, not a change to Phase 3 completion requirements. Production art acceptance and hardware profiling remain open.
+
+
 Updated November 8, 2026. **Active World V2 engineering roadmap and downstream campaign-production plan.** Start with [agent instructions](../AGENTS.md), [current implementation status](WORLD_V2_STATUS.md) and [locked decisions](WORLD_V2_DECISIONS.md) before following individual milestones. The downstream campaign sections of this document are a content plan, **not proof that their features have shipped**. [Design decisions](DESIGN_DIRECTION.md) govern creative requirements. [The design overview](DESIGN_OVERVIEW.md) summarizes them, [the branching draft](BRANCHING_CAMPAIGN.md) supplies campaign continuity, and [the opening draft](OPENING_HOUR.md) supplies the first playable story beats.
 
 ## Where development starts

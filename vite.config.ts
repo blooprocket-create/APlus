@@ -12,6 +12,7 @@ export default defineConfig({
       // The world lab is a separate QA page, never an entrypoint to Hearthmere.
       input: {
         game: 'index.html',
+        atelier: 'atelier.html',
         worldV2Lab: 'world-v2-lab.html',
         worldV2Geography: 'world-v2-geography.html',
         worldV2Story: 'world-v2-story.html',

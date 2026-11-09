@@ -5,3 +5,9 @@ dist/
 
 # Generated Phase 1 preview bake (reproduced on every build)
 public/world-v2/preview/
+
+# Local Blender Python bytecode
+__pycache__/
+
+# Regenerated geography catalog (prebuild)
+public/world-v2/geography/

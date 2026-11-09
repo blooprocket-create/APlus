@@ -53,3 +53,17 @@ There is still no approval of the five-landmass atlas as **final world canon**, 
 - These are still staged landmass positions and temporary biome populations, not user-approved final map or gameplay geography.
 
 **Disposition:** The off-style prototype-renderer defect is corrected in code and improved in verified screenshots. **Do not mark the entire Phase 2 geography or final art polish complete.** Keep the shared renderer as the standard for future region authoring and run the screenshot gallery alongside the playable original after every major environment change.
+
+
+## 2026-11-09 — isolated Observatory atelier investigation
+
+Owner-requested art work; **not World V2 geography/campaign acceptance**. [Full audit, pipeline, verification and candid limitations](OBSERVATORY_ATELIER.md). All images below are browser captures of the real Three.js game. The atlas is used only as a material map.
+
+- [Baseline hero](screenshots/astral-slice/00-baseline-lobby.png) and [baseline opening](screenshots/astral-slice/00-baseline-game.png): useful animation foundation, small segmented forms and weak material separation.
+- [Pass 01](screenshots/astral-slice/01-garden.png): rejected for inward faces, pale pigments and incomplete fitting.
+- [Pass 02 environment](screenshots/astral-slice/02-materials.png) / [hero](screenshots/astral-slice/02-hero.png): rejected for repeated paving, disconnected roots, hidden weighted limbs and excessive foreground haze.
+- [Pass 03](screenshots/astral-slice/03-sculpt.png): continuous fused tree and fitted court improve form; synthetic surface patterns, empty hills and weak framing remain.
+- [Pass 04 environment](screenshots/astral-slice/04-painted.png) / [hero](screenshots/astral-slice/04-hero.png): original painted atlas improves material character; ground noise, distant shadow artifacts and harsh skin lighting require correction.
+- [Current cinematic](screenshots/astral-slice/05-final-garden.png), [hero](screenshots/astral-slice/05-final-hero.png), [native gameplay camera](screenshots/astral-slice/05-final-gameplay.png), [ability](screenshots/astral-slice/05-final-ability.png): inspect these as the candidate result, not an automatic visual pass. [Browser diagnostics](screenshots/astral-slice/browser-evidence.json) and [actual canvas recording](screenshots/astral-slice/gameplay.webm) accompany the captures.
+
+The candidate demonstrates a distinct offline model/material pipeline, original fitted art and release-linked VFX. It still falls short of a high-end anime RPG, especially facial/anatomical sophistication, authored performance, environment density/composition and production finish. Physical mobile performance and visual approval remain unverified.
