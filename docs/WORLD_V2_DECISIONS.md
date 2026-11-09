@@ -16,8 +16,8 @@
 | ID | Status | Decision and nonnegotiable consequence |
 | --- | --- | --- |
 | D153 (supersedes D11/D143) | LOCKED | Keep the game's existing close **isometric gameplay camera**; it is not a third-person chase view. The shipped prototype perspective is the starting point. |
-| D154 / D22 | LOCKED | Original beautiful, stylized **anime/cel-shaded** visual identity, shaped silhouettes and painted environments. Generic primitives are not the target aesthetic. Visual polish may be deferred while core systems are built; don't establish a different art direction. |
-| D155 | LOCKED | **Procedural-first true open world**, no exploration limited to the former path/corridor network. Roads are terrain features, not the edges of the world. |
+| D154 / D22 | LOCKED (REFINED BY D166) | Beautiful anime/cel-shaded visual identity, shaped silhouettes and painted environments. The existing shaders/assets remain a functional baseline, **not** the final production look. Generic primitives are not the target aesthetic. |
+| D166 (2026-11-08) | LOCKED DIRECTION / DETAILS OPEN | Upgrade Astral Chronicles' visual ambition: a **beautiful original anime style**, environments with evocative, lush **Studio Ghibli-leaning painterly atmosphere**, and sharper, dramatic **Solo Leveling-feeling characters and combat effects**. These are inspiration references, not a mandate to copy IP-specific designs. Current original-game art parity is a temporary starting point, **not a quality ceiling**; target shots and final shader/material decisions need user review. |\n| D155 | LOCKED | **Procedural-first true open world**, no exploration limited to the former path/corridor network. Roads are terrain features, not the edges of the world. |
 | D156 | LOCKED | **One canonical deterministic geography shared by all players/playthroughs**; private player world/quest deltas do not change the master terrain. |
 | D157 | LOCKED | **Multiple continents and islands** in a finite, expandable atlas. No user-approved number, size, outline or seed yet. |
 | D158 | LOCKED | **Fully explorable oceans** connecting landmasses; not just teleport portals between zones. |
