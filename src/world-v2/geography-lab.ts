@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { createWorldV2ArtTarget, type WorldV2ArtTarget } from './WorldV2ArtTarget';
 import { sampleCellHeight, type TerrainCell } from './WorldTerrain';
 import { createGeography, BIOME_LABELS } from './WorldGeography';
 import { renderOriginFor, worldToCell, type WorldPosition } from './WorldCoordinates';
@@ -32,23 +37,51 @@ const status = document.querySelector<HTMLElement>('#status');
 if (!canvas || !status) throw new Error('World V2 lab UI is missing');
 
 const storyMode = location.pathname.endsWith('/world-v2-story.html');
-const reviewMode = !storyMode && new URLSearchParams(location.search).get('visualReview') === '1';
+const artMode = location.pathname.endsWith('/world-v2-art-target.html');
+const artShotMode = artMode && new URLSearchParams(location.search).get('showcaseShot') === '1';
+const reviewMode = !storyMode && !artMode && new URLSearchParams(location.search).get('visualReview') === '1';
 const debugGrid = new URLSearchParams(location.search).get('debugGrid') === '1';
 if (reviewMode) document.documentElement.classList.add('visual-review');
+if (artShotMode) document.documentElement.classList.add('art-shot');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+if (artMode) {
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+}
 const scene = new THREE.Scene();
 // Original Hearthmere palette and real paper-wash sky instead of flat teal.
-scene.fog = new THREE.Fog(0xa5ccdc, 180, 395);
+scene.fog = artMode ? new THREE.FogExp2(0x8a96b5, 0.0055)
+  : new THREE.Fog(0xa5ccdc, 180, 395);
 const paintedSky = new THREE.Group();
 addPaintedSky(paintedSky, 360);
 scene.add(paintedSky);
-addOriginalWorldLighting(scene, { touchUI: window.innerWidth < 760, preservePaintedSky: true });
+if (artMode) {
+  paintedSky.traverse(node => {
+    if (!(node instanceof THREE.Mesh) || !(node.material instanceof THREE.ShaderMaterial)) return;
+    const u = node.material.uniforms;
+    if (u.horizon) (u.horizon.value as THREE.Color).setHex(0xf7b7a4);
+    if (u.middle) (u.middle.value as THREE.Color).setHex(0x7184ac);
+    if (u.zenith) (u.zenith.value as THREE.Color).setHex(0x252b5b);
+    if (u.cloud) (u.cloud.value as THREE.Color).setHex(0xe5c4bc);
+  });
+}
+const worldLights = addOriginalWorldLighting(scene, {
+  touchUI: window.innerWidth < 760, preservePaintedSky: true,
+});
+if (artMode) {
+  worldLights.ambient.color.setHex(0xabb7d8);
+  worldLights.ambient.intensity = 0.95;
+  worldLights.sun.color.setHex(0xffd4ac);
+  worldLights.sun.intensity = 2.55;
+  worldLights.sun.position.set(-13,28,-17);
+}
 const rim = new THREE.DirectionalLight(0xffc79b, 0.58);
 rim.position.set(-14, 16, -22);
 scene.add(rim);
+if (artMode) { rim.intensity = 1.1; rim.color.setHex(0xe0a1fc); }
 const originUniform: THREE.IUniform<THREE.Vector3> = { value: new THREE.Vector3() };
 const disabledSceneryCutaway = { value: new THREE.Vector4(0, 0, 0, 0) };
 const ocean = createOceanPreview();
@@ -57,6 +90,15 @@ const cameraController = new IsometricCameraController();
 const camera = cameraController.camera;
 camera.far = 500;
 camera.updateProjectionMatrix();
+const artComposer = artMode ? new EffectComposer(renderer) : null;
+if (artComposer) {
+  artComposer.addPass(new RenderPass(scene, camera));
+  artComposer.addPass(new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth,window.innerHeight),
+    0.38,0.38,0.89,
+  ));
+  artComposer.addPass(new OutputPass());
+}
 // The actual existing hero rig (not the lab's previous orange cone).
 let playerRig = new CharacterRig('warrior');
 scene.add(playerRig.root);
@@ -67,7 +109,7 @@ for (const anchor of anchors.list()) {
     new THREE.CylinderGeometry(1.6, 1.6, 5, 12),
     new THREE.MeshBasicMaterial({ color: anchor.id.includes('hearthmere') ? 0xf8d37a : 0xe2aed4 }),
   );
-  marker.visible = !reviewMode && !storyMode;
+  marker.visible = !reviewMode && !storyMode && !artMode;
   scene.add(marker);
   anchorMeshes.push({ mesh: marker, pos: anchor.position });
 }
@@ -270,6 +312,26 @@ window.addEventListener('blur', () => movement.clear());
 
 const player = { x: 0, y: 0, z: 0 };
 const storyCompanions: Array<{ rig: CharacterRig; world: WorldPosition }> = [];
+const artCompanions = artMode ? [new CharacterRig('mage'), new CharacterRig('assassin')] : [];
+for (const companion of artCompanions) scene.add(companion.root);
+let artTarget: WorldV2ArtTarget | null = null;
+let artEffectsEnabled = true;
+function toggleArtEffects(): void {
+  artEffectsEnabled = !artEffectsEnabled;
+  artTarget?.setEffectsEnabled(artEffectsEnabled);
+  const button = document.querySelector<HTMLButtonElement>('#art-toggle-effects');
+  if (button) button.textContent = artEffectsEnabled ? 'Effects: ON (G)' : 'Effects: OFF (G)';
+}
+if (artMode) {
+  document.querySelector('#art-toggle-effects')?.addEventListener('click', toggleArtEffects);
+  document.querySelector('#art-toggle-hud')?.addEventListener('click', () => {
+    document.documentElement.classList.toggle('art-shot');
+  });
+  window.addEventListener('keydown', e => {
+    if (e.code === 'KeyG' && !e.repeat) toggleArtEffects();
+    if (e.code === 'KeyH' && !e.repeat) document.documentElement.classList.toggle('art-shot');
+  });
+}
 const tileStore: TerrainCellStore = {
   cellSize: atlas.cellSize,
   getCell(address) {
@@ -350,6 +412,7 @@ const streamOptions = { worldId: atlas.worldId, cellSize: atlas.cellSize,
 function resize() {
   const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
   renderer.setSize(w, h, false);
+  artComposer?.setSize(w, h);
   cameraController.updateAspect();
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -383,6 +446,15 @@ function tick(now: number) {
   // Y=0 while waiting for a streamed collision cell to arrive.
   const ground = surfaceAt(tileStore, player.x, player.z);
   if (ground && (!previewWarp || reviewMode)) player.y = ground.y;
+  if (artMode && !artTarget) {
+    const location = surfaceAt(tileStore, 0, 0);
+    if (location?.walkable && streamer.loaded().length >= 4) {
+      artTarget = createWorldV2ArtTarget(scene,
+        { x:0,y:location.y,z:0 },
+        (x,z)=>surfaceAt(tileStore,x,z)?.y ?? null);
+      artTarget.setEffectsEnabled(artEffectsEnabled);
+    }
+  }
   const actualDx = player.x - oldX, actualDz = player.z - oldZ;
 
   if (now - lastStream > 120) {
@@ -434,6 +506,20 @@ function tick(now: number) {
       });
     }
   }
+  if (artMode) {
+    for (const [index, rig] of artCompanions.entries()) {
+      const x = player.x + (index === 0 ? -2.6 : 2.6);
+      const z = player.z - 1.9;
+      const terrain = surfaceAt(tileStore,x,z);
+      rig.root.position.set(x-origin.x,(terrain?.y ?? player.y)+.15,z-origin.z);
+      rig.root.rotation.y = index === 0 ? .15 : -.32;
+      rig.updateAnimation(dt,{
+        isMoving:false,moveSpeedRatio:0,attackComboStep:0,attackSwingProgress:0,
+        isDashing:false,hitFlashTimer:0,charging:index===0,skillSlot:'skill1',
+      });
+    }
+    artTarget?.update(now*.001,origin);
+  }
   for (const { mesh, pos } of anchorMeshes) {
     mesh.position.set(pos.x - origin.x, height(pos.x, pos.z) + 2.5, pos.z - origin.z);
   }
@@ -455,13 +541,15 @@ function tick(now: number) {
   // Review zoom scales around the *native* offset, not the old 54-unit aerial
   // inspection camera. At sea, a later ship view can widen deliberately.
   const offset = GAMEPLAY_CAMERA_OFFSET;
-  const camX = -offset.z * Math.sin(reviewAngle) * reviewZoom;
-  const camZ = offset.z * Math.cos(reviewAngle) * reviewZoom;
-  camera.position.set(local.x + camX, local.y + .8 + offset.y * reviewZoom, local.z + camZ);
-  camera.lookAt(local.x, local.y + .8, local.z);
+  const shotZoom = artMode ? .83 : reviewZoom;
+  const shotAngle = artMode ? -.17 : reviewAngle;
+  const camX = -offset.z * Math.sin(shotAngle) * shotZoom;
+  const camZ = offset.z * Math.cos(shotAngle) * shotZoom;
+  camera.position.set(local.x + camX, local.y + .8 + offset.y * shotZoom, local.z + camZ);
+  camera.lookAt(local.x, local.y + (artMode ? 1.55 : .8), local.z + (artMode ? -2.6 : 0));
   paintedSky.position.copy(camera.position);
   ocean.update(player.x, player.z, local.x, local.z, reviewMode ? 0 : now * 0.001);
-  renderer.render(scene, camera);
+  if (artComposer) artComposer.render(); else renderer.render(scene, camera);
   framesRendered++;
 
   const at = Math.floor(now / 200);
@@ -484,7 +572,7 @@ Collision: ${previewWarp ? 'spectator over water' : movementBlocked ?? 'grounded
 Resident cells: ${streamer.loaded().length} · failures: ${loadingErrors}
 Geography: ${source.catalog.atlas.landmasses.length} landmasses, ${geoWorld.rivers.length} rivers
 Atlas hash: ${atlas.contentHash} · baked geography tiles: ${source.catalog.cells.length +
-  (source.catalog.pages ?? []).reduce((sum, page) => sum + page.cellCount, 0)}`;
+  (source.catalog.pages ?? []).reduce((sum, page) => sum + page.cellCount, 0)}${artMode ? '\nArt target: ' + (artTarget ? 'ready' : 'loading') + ' · VFX: ' + (artEffectsEnabled ? 'on' : 'off') : ''}`;
   }
   requestAnimationFrame(tick);
 }
@@ -495,6 +583,10 @@ Atlas hash: ${atlas.contentHash} · baked geography tiles: ${source.catalog.cell
  */
 declare global {
   interface Window {
+    __worldV2ArtQA?: { snapshot: () => {
+      ready: boolean; effects: boolean; resident: number; frames: number;
+      heroRigCount: number; originX: number; originZ: number; loadingErrors: number;
+    } };
     __worldV2Phase3QA?: {
       snapshot: () => {
         role: CharacterClassId | null; step: import('../game/HearthmereStory').OpeningStep;
@@ -522,6 +614,13 @@ declare global {
       };
     };
   }
+}
+if (artMode && new URLSearchParams(location.search).get('functionalQA') === '1') {
+  window.__worldV2ArtQA = { snapshot: () => ({
+    ready: !!artTarget, effects: artEffectsEnabled, resident: streamer.loaded().length,
+    frames: framesRendered, heroRigCount: 1+artCompanions.length,
+    originX: player.x, originZ: player.z, loadingErrors,
+  }) };
 }
 if (storySession && new URLSearchParams(location.search).get('functionalQA') === '1') {
   window.__worldV2Phase3QA = {
@@ -603,6 +702,12 @@ requestAnimationFrame(tick);
 window.addEventListener('pagehide', () => {
   active = false;
   gameplay.dispose();
+  artTarget?.dispose();
+  for (const rig of artCompanions) {
+    scene.remove(rig.root);
+    disposeObject(rig.root);
+  }
+  artComposer?.dispose();
   if (storyLeadMarker) {
     scene.remove(storyLeadMarker);
     storyLeadMarker.geometry.dispose();
