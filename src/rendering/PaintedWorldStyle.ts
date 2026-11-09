@@ -118,3 +118,35 @@ export function addPaintedSky(parent: THREE.Group, radius = 92): void {
   sky.renderOrder = -20;
 }
 
+
+/**
+ * Shared lighting values from EnvironmentBuilder.initBaseLighting.
+ * Keeps new atlas scenes in the same illustrated shadow/highlight range.
+ */
+export function addOriginalWorldLighting(
+  scene: THREE.Scene,
+  options: { touchUI: boolean; preservePaintedSky?: boolean } = { touchUI: false },
+): { ambient: THREE.HemisphereLight; sun: THREE.DirectionalLight } {
+  if (!options.preservePaintedSky) {
+    scene.background = new THREE.Color(0x0b0e1d);
+    scene.fog = new THREE.FogExp2(0x0b0e1d, 0.011);
+  }
+  const ambient = new THREE.HemisphereLight(0xc2d5dc, 0x17292e, 1.25);
+  scene.add(ambient);
+  const sun = new THREE.DirectionalLight(0xffe2b1, 2.0);
+  sun.position.set(16, 32, 20);
+  sun.castShadow = true;
+  sun.shadow.mapSize.width = options.touchUI ? 512 : 1024;
+  sun.shadow.mapSize.height = sun.shadow.mapSize.width;
+  sun.shadow.camera.near = 5;
+  sun.shadow.camera.far = 140;
+  const d = 40;
+  sun.shadow.camera.left = -d;
+  sun.shadow.camera.right = d;
+  sun.shadow.camera.top = d;
+  sun.shadow.camera.bottom = -d;
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.025;
+  scene.add(sun);
+  return { ambient, sun };
+}
