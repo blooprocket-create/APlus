@@ -1,4 +1,4 @@
-import { worldToCell, type WorldCellCoordinate, type WorldPosition } from './WorldCoordinates';
+import { worldToCell, type WorldPosition } from './WorldCoordinates';
 import type { TerrainCell } from './WorldTerrain';
 import {
   DEFAULT_TRAVERSAL_RULES, getTraversalBlock, sampleTerrainSurface, surfaceAt,
