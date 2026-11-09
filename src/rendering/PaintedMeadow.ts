@@ -3,6 +3,8 @@ import { MEADOW_ACTORS, type SceneryMotion } from './SceneryMotion';
 
 export interface MeadowPlant {
   x: number;
+  /** Optional sampled terrain height; original Hearthmere remains at -.009. */
+  y?: number;
   z: number;
   scale: number;
   angle: number;
@@ -123,8 +125,8 @@ export function addPaintedMeadow(
     mesh.receiveShadow = true;
     const plant = new THREE.Object3D();
     const tint = new THREE.Color();
-    plants.forEach(({ x, z, scale, angle, tint: color }, index) => {
-      plant.position.set(x, -.009, z);
+    plants.forEach(({ x, y = -.009, z, scale, angle, tint: color }, index) => {
+      plant.position.set(x, y, z);
       plant.rotation.y = angle;
       plant.scale.setScalar(scale);
       plant.updateMatrix();
