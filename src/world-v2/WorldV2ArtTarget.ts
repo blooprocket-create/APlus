@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { beam, piece, smoothLoft } from '../rendering/ArtMesh';
+import { bakePieces, beam, piece, smoothLoft } from '../rendering/ArtMesh';
 import { buildRefugeLodge } from '../rendering/HearthmereRefuge';
 import { HearthmereGiant } from '../rendering/HearthmereGiant';
 import { disposeObject } from '../rendering/SceneResources';
@@ -204,8 +204,8 @@ export function createWorldV2ArtTarget(
     for(let k=0;k<3;k++){
       const a=k*Math.PI*2/3;
       const sx=Math.cos(a), sz=Math.sin(a);
-      pushTri([0,.09,0],[sx*.25,.22,sz*.25],[sx*.46,.12,sz*.46],0x446f54);
-      pushTri([0,.10,0],[sx*.46,.12,sz*.46],[sx*.12,.36,sz*.12],0x678f64);
+      pushTri([0,.09,0],[sx*.25,.22,sz*.25],[sx*.46,.12,sz*.46],0x779d69);
+      pushTri([0,.10,0],[sx*.46,.12,sz*.46],[sx*.12,.36,sz*.12],0x98b987);
     }
     for(let k=0;k<5;k++){
       const a=k*Math.PI*2/5;
@@ -220,8 +220,8 @@ export function createWorldV2ArtTarget(
     geometry.computeVertexNormals();return geometry;
   };
   const flowerGeometry=makeFlowerStem();
-  const flowerMaterial=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide});
-  const flowerCount=680, flowers=new THREE.InstancedMesh(
+  const flowerMaterial=new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide});
+  const flowerCount=460, flowers=new THREE.InstancedMesh(
     flowerGeometry,flowerMaterial,flowerCount);
   flowers.name='Hearthmere painterly roadside flowers';
   flowers.frustumCulled=false;
@@ -232,11 +232,11 @@ export function createWorldV2ArtTarget(
     const z=-24+rng()*39;
     const lane=2.4*Math.sin(z*.14)-.5;
     const side=rng()<.5?-1:1;
-    const distance=3.1+Math.pow(rng(),1.65)*14.4;
+    const distance=3.6+Math.pow(rng(),1.65)*13.6;
     const x=lane+distance*side+(rng()-.5)*1.7;
     flowerDummy.position.set(x,at(x,z)+.018,z);
     flowerDummy.rotation.set(0,rng()*Math.PI*2,(rng()-.5)*.16);
-    const scale=.52+rng()*.90;
+    const scale=.25+rng()*.43;
     flowerDummy.scale.set(scale,scale*(.65+rng()*.6),scale);
     flowerDummy.updateMatrix(); flowers.setMatrixAt(i,flowerDummy.matrix);
     flowers.setColorAt(i,new THREE.Color(flowerPalette[Math.floor(rng()*flowerPalette.length)])
@@ -258,10 +258,10 @@ export function createWorldV2ArtTarget(
   }
   leafGeometry.setAttribute('position',new THREE.Float32BufferAttribute(leafVertices,3));
   leafGeometry.computeVertexNormals();
-  const leafMaterial=new THREE.MeshLambertMaterial({
-    color:0xf1d1d7,side:THREE.DoubleSide,
+  const leafMaterial=new THREE.MeshBasicMaterial({
+    color:0xffebee,side:THREE.DoubleSide,
   });
-  const leafCount=850;
+  const leafCount=540;
   const leaves=new THREE.InstancedMesh(leafGeometry,leafMaterial,leafCount);
   leaves.name='Fine layered blossom silhouettes';
   leaves.frustumCulled=false;
@@ -273,7 +273,7 @@ export function createWorldV2ArtTarget(
     const x=cx+Math.cos(a)*spread*scale,z=cz+Math.sin(a)*spread*scale;
     flowerDummy.position.set(x,at(cx,cz)+5.2*scale+(rng()-.5)*2.6*scale,z);
     flowerDummy.rotation.set(rng()*.6,rng()*6.28,rng()*6.28);
-    flowerDummy.scale.setScalar((.23+rng()*.34)*scale);
+    flowerDummy.scale.setScalar((.12+rng()*.22)*scale);
     flowerDummy.updateMatrix();leaves.setMatrixAt(i,flowerDummy.matrix);
     leaves.setColorAt(i,new THREE.Color(flowerPalette[(tree+i)%flowerPalette.length]));
   }
@@ -294,10 +294,61 @@ export function createWorldV2ArtTarget(
     root.add(building);
   }
 
+
+  // PASS 5: distant wooded hillside to break the barren procedural mountain.
+  // One sculpted multi-crown model instanced over deterministic terrain with
+  // open sightlines reserved around the central gateway and the story giant.
+  const forestTemplate=new THREE.Group();
+  const forestTrunk=piece(forestTemplate,smoothLoft([
+    [0,.29,.29],[.8,.25,.27],[2.6,.19,.17,.13],
+    [4.2,.11,.12,.36],[5.2,.05,.05,.41],
+  ],14),paint(0x665747));
+  forestTrunk.castShadow=true;
+  const crownTints=[0x4e7168,0x718b74,0x8da286,0x607b73,0x93ad8e];
+  const lobes=[
+    [-1.1,4.25,-.2,1.6],[.9,4.8,-.5,1.9],
+    [-.5,5.45,.6,1.85],[1.25,5.43,.35,1.45],
+    [-.4,6.2,-.2,1.3],
+  ];
+  for(const [i,[x,y,z,r]] of lobes.entries()){
+    const crown=piece(forestTemplate,smoothLoft([
+      [-.75,.10,.14],[-.52,.62,.58],[-.26,.87,.82],
+      [.08,1,.93],[.47,.70,.65],[.72,.18,.23],
+    ],16),paint(crownTints[i]),x,y,z);
+    crown.scale.set(r,r*.78,r*.88);
+    crown.castShadow=true;
+  }
+  const forestPalette=new THREE.MeshLambertMaterial({
+    vertexColors:true,side:THREE.FrontSide,
+  });
+  bakePieces(forestTemplate,forestPalette);
+  const sourceMesh=forestTemplate.children.find(node=>node instanceof THREE.Mesh);
+  if(!(sourceMesh instanceof THREE.Mesh)) throw new Error('Missing authored forest template');
+  const treeCount=94;
+  const forest=new THREE.InstancedMesh(sourceMesh.geometry,forestPalette,treeCount);
+  forest.name='Hearthmere layered hillside forest';
+  forest.frustumCulled=false;
+  const treeDummy=new THREE.Object3D();
+  for(let i=0;i<treeCount;i++){
+    const x=(rng()-.5)*118, z=-32-rng()*74;
+    const exclusion=Math.hypot(x-12,z+29);
+    const relocatedX=exclusion<14?x+(x<12?-15:15):x;
+    treeDummy.position.set(relocatedX,at(relocatedX,z)-.17,z);
+    treeDummy.rotation.y=rng()*Math.PI*2;
+    const scale=.62+rng()*.92;
+    treeDummy.scale.set(scale*(.91+rng()*.18),scale,scale*(.88+rng()*.24));
+    treeDummy.updateMatrix(); forest.setMatrixAt(i,treeDummy.matrix);
+    forest.setColorAt(i,new THREE.Color().setRGB(.87+rng()*.12,
+      .91+rng()*.07,.92+rng()*.07));
+  }
+  forest.instanceMatrix.needsUpdate=true;
+  if(forest.instanceColor) forest.instanceColor.needsUpdate=true;
+  root.add(forest);
+
   // Existing story giant used here only as distant cinematic set dressing.
   // Real giant gameplay and AI remain owned by the actual Hearthmere engine.
   const giant = new HearthmereGiant();
-  giant.root.position.set(11.8,at(11.8,-29.5),-29.5);
+  giant.root.position.set(12.4,at(12.4,-29.5),-29.5);
   giant.root.scale.setScalar(.68);
   giant.root.rotation.y=Math.PI-.45;
   root.add(giant.root);
