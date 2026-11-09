@@ -21,6 +21,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Verify World V2 agent documentation contracts
+        run: npm run docs:check
       - run: npm run build
       - name: Verify deterministic atlas and cell artifacts
         run: |
