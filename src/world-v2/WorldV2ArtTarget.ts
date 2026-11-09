@@ -44,7 +44,7 @@ export function createWorldV2ArtTarget(
     return material;
   };
   const at = (x: number, z: number) => groundHeight(center.x + x, center.z + z) ?? center.y;
-  const stone = [0x616d77, 0x9da0a6, 0x6b7b7c, 0xaba7ab];
+  const stone = [0x6b7573, 0x8b9390, 0x879482, 0xa19b8f];
   const warm = new THREE.Color(0xffd3a0);
   const shadow = paint(0x423c43);
   const brass = paint(0xc69e61);
@@ -53,16 +53,16 @@ export function createWorldV2ArtTarget(
   // Meandering rain-darkened stone footpath, following real terrain heights.
   // Intentional variation, no repeating square-grid tile pattern.
   const rng = random(0x71a2c3);
-  for (let band = -15; band < 7; band += 0.78) {
+  for (let band = -15; band < 7; band += 1.12) {
     const xCenter = 2.4 * Math.sin(band * .14) - .5;
-    for (let col = -3; col <= 3; col++) {
-      if (rng() < .09) continue;
-      const x = xCenter + col * .72 + (rng() - .5) * .35;
+    for (let col = -2; col <= 2; col++) {
+      if (rng() < .20) continue;
+      const x = xCenter + col * .95 + (rng() - .5) * .55;
       const z = band + (rng() - .5) * .32;
-      const y = at(x, z) + .035;
+      const y = at(x, z) + .015;
       const cobble = piece(root, new THREE.DodecahedronGeometry(.5, 0),
         paint(stone[(Math.floor(rng() * stone.length)) % stone.length]), x, y, z);
-      cobble.scale.set(.60 + rng() * .45, .075 + rng() * .018, .73 + rng() * .3);
+      cobble.scale.set(.74 + rng() * .42, .047 + rng() * .016, .81 + rng() * .47);
       cobble.rotation.y = rng() * Math.PI;
       cobble.receiveShadow = true;
     }
@@ -193,8 +193,8 @@ export function createWorldV2ArtTarget(
   // Existing story giant used here only as distant cinematic set dressing.
   // Real giant gameplay and AI remain owned by the actual Hearthmere engine.
   const giant = new HearthmereGiant();
-  giant.root.position.set(11.0,at(11,-31),-31);
-  giant.root.scale.setScalar(1.26);
+  giant.root.position.set(14.0,at(14,-43),-43);
+  giant.root.scale.setScalar(.91);
   giant.root.rotation.y=Math.PI-.45;
   root.add(giant.root);
 
@@ -351,14 +351,26 @@ export function createWorldV2ArtTarget(
     purple,0,0,0);
   assassinArc.rotation.x=.64;
 
-  // Distant luminous atmospheric shafts, deliberately low-contrast.
-  const shaftMaterial=new THREE.MeshBasicMaterial({color:0xf4cbab,
-    transparent:true,opacity:.033,depthWrite:false,side:THREE.DoubleSide,
-    blending:THREE.AdditiveBlending});
-  for(let i=0;i<4;i++){
-    const shaft=piece(root,new THREE.ConeGeometry(2.0+i*.85,18,3,1,true),
-      shaftMaterial, -9+i*6,center.y+9,-16-i*1.6);
-    shaft.rotation.z=.30;
+  // Atmospheric shafts must be feathered shader planes, not hard triangular cones.
+  const shaftMaterial=new THREE.ShaderMaterial({
+    uniforms:{uColor:{value:new THREE.Color(0xffd6b5)}},
+    transparent:true,depthWrite:false,side:THREE.DoubleSide,
+    blending:THREE.AdditiveBlending,
+    vertexShader:[
+      'varying vec2 vUv;',
+      'void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+    ].join('\n'),
+    fragmentShader:[
+      'uniform vec3 uColor;varying vec2 vUv;',
+      'void main(){float a=pow(max(0.0,1.0-abs(vUv.x-.5)*2.0),3.0);',
+      'a*=smoothstep(0.0,.32,vUv.y)*(1.0-smoothstep(.78,1.0,vUv.y));',
+      'gl_FragColor=vec4(uColor,a*.052);}',
+    ].join('\n'),
+  });
+  for(let i=0;i<3;i++){
+    const shaft=piece(root,new THREE.PlaneGeometry(3.5+i*.7,23),
+      shaftMaterial, -14+i*8,center.y+9,-27-i*3);
+    shaft.rotation.z=-.27;
   }
 
   let effects=true;
