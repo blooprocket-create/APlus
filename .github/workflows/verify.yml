@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -43,8 +47,20 @@ jobs:
           name: hearthmere-browser-smoke
           path: test-artifacts/browser-smoke/*.png
           if-no-files-found: ignore
+      # Compare PR screenshots against the last successful main-branch
+      # visual evidence when available. The first run has no baseline.
+      - name: Retrieve approved main visual baseline
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          baseline_run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow verify.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$baseline_run" ] && [ "$baseline_run" != "null" ]; then
+            gh run download "$baseline_run" --repo "$GITHUB_REPOSITORY" --name world-v2-visual-review --dir test-artifacts/visual-baseline
+          fi
       - name: Capture and inspect World V2 geography screenshots
-        run: npm run test:visual
+        run: npm run test:visual -- --baseline test-artifacts/visual-baseline
       - uses: actions/upload-artifact@v4
         if: always()
         with:
