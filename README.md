@@ -20,6 +20,10 @@ The [exploration and puzzle brief](docs/EXPLORATION_PUZZLES.md) collects the thr
 
 The [combat and progression brief](docs/COMBAT_PROGRESSION.md) collects the action foundation, class skill trees, awakening, difficulty modes, and defeat direction.
 
+## In-engine World V2 cinematic look-development scene
+
+The opt-in [Hearthmere art target](/world-v2-art-target.html) is an **actual Three.js WebGL scene** on compiled, streamed World V2 geography, featuring the three original hero rigs, existing Hearthmere lodge art, a newly composed arrival vignette, dusk lighting, painterly foliage, warm lanterns, controlled particles/astral effects and subtle bloom. Use G to toggle effects and H to hide overlays; `?showcaseShot=1` gives a clean frame. [Art target scope and validation](docs/WORLD_V2_ART_TARGET.md). This is **an experimental visual target**, not full combat/companion AI, final polished assets, approved world geography or a shipped production scene. Review the actual captured browser image before judging quality.
+
 ## Agent handoff and roadmap
 
 The [production roadmap](docs/PRODUCTION_ROADMAP.md) and [Phase 3 Hearthmere integration plan](docs/WORLD_V2_PHASE3_HANDOFF.md) are the active work queue. Phase 2's staged engineering core is merged, but the **existing Hearthmere opening is not yet running on World V2**; exact atlas layout, ships, persistence on V2, distant LOD and physical-device FPS remain open. See [the status matrix](docs/WORLD_V2_STATUS.md) before assigning work.

@@ -15,6 +15,7 @@ export default defineConfig({
         worldV2Lab: 'world-v2-lab.html',
         worldV2Geography: 'world-v2-geography.html',
         worldV2Story: 'world-v2-story.html',
+        worldV2ArtTarget: 'world-v2-art-target.html',
       },
       output: {
         manualChunks: {
