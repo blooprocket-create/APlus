@@ -1,6 +1,6 @@
 # World V2 — Screenshot-based visual iteration log
 
-**Scope:** Phase 2 staged geography only. Screenshots depict actual browser/Three.js rendering from reproducible camera coordinates, not the finalized Astral Chronicles art direction or canonical world layout. This log records the actual image evidence and resulting code changes, rather than declaring a world visually complete because tests pass.
+**Scope:** Phase 2 staged geography and the later opt-in Phase 2.5 in-engine look-development target. Screenshots depict actual browser/Three.js rendering from reproducible camera coordinates, not the finalized Astral Chronicles art direction or canonical world layout. This log records the actual image evidence and resulting code changes, rather than declaring a world visually complete because tests pass.
 
 | Pass | Evidence | Observed result | Action |
 | --- | --- | --- | --- |
@@ -9,6 +9,18 @@
 | Visual pass 2 | [11 screenshots, second-pass gallery](https://github.com/blooprocket-create/APlus/actions/runs/42540145099) | **River gorge and severe story-pad cliffs substantially reduced** at the identical camera positions; forest clusters are less uniformly distributed (e.g. arrival: 537 → 227 nearby scenery instances). **New major defect exposed:** river displayed as a thick turquoise 3D tube now hovering/overlapping the terrain instead of occupying its carved bed. Ocean remains continuous. | Replace river-tube geometry with a world-space surface ribbon at the authoritative river water height. Confirm in the next screenshot set. |
 | Visual pass 3 | [Chrome screenshots with water-surface ribbon](https://github.com/blooprocket-create/APlus/actions/runs/42540403635) | Canyon remained improved, but the hard-edged flat cyan river surface was still very broad and visually read like a suspended roadway. Automated checks reported no issue, while the image made the defect unmistakable. | Narrow river width, taper source end, add per-vertex transparency that blends at banks. |
 | Visual pass 4 | [Fourth 11-view screenshots and diagnostics](https://github.com/blooprocket-create/APlus/actions/runs/42540733092) | **Verified:** The former massive ravine is gone; the river now reads as a thinner feathered surface with a tapered headwater. Ocean remains continuous, no dark tile polygons in the saved sea view, and all 11 shots have valid pixels and zero browser/load errors. **Still provisional:** stylized water needs proper banks/foam, more natural flow/tributaries and terrain art polish. | Mark the technical river-visual defect improved; leave final hydrology and environment direction open as subsequent Phase 2 art/nav work. |
+
+## Phase 2.5 in-engine cinematic art-target experiments (PR #14)
+
+These are **real headless-Chrome screenshots of the Three.js rendered World V2 art-target page**, not AI concept art. Each is saved as the world-v2-art-target.png browser artifact. The original-game screenshots are in the same archives for art comparison.
+
+| Pass | GitHub Actions evidence | Actual screenshot review | Conclusion |
+| --- | --- | --- | --- |
+| First staged composition | [Run 42574653474](https://github.com/blooprocket-create/APlus/actions/runs/42574653474) | High camera, tiny heroes, sparse flat ground, crude arch and tile-like path; controlled particles and spell rings are present but unconvincing. | **FAILED the creative beauty target**, even though browser smoke passed. Move camera lower and layer depth. |
+| Second cinematic framing | [Run 42575208212](https://github.com/blooprocket-create/APlus/actions/runs/42575208212) | Heroes read larger, but the giant is cropped against upper frame, raw spotlight cones look geometric, stone path reads as a regular paving grid. | Reposition giant, replace cones with soft alpha shafts, loosen path spacing and lower camera toward distant vista. |
+| Third atmospheric framing | [Run 42575706733](https://github.com/blooprocket-create/APlus/actions/runs/42575706733) | A pink horizon and layered cliff silhouettes are finally visible; full hero trio, lodge, gateway and distant giant remain visible. **Still visibly staging-quality:** foliage is rounded clumps, distant cliffs are faceted, the town lacks architectural richness, lighting is simplistic, and ability effects do not yet feel dramatic. | Validated a reproducible 3D look-development page and screenshots, **NOT final or approved production visuals**. Do not promote this to an art-quality acceptance claim. |
+
+**Hard remaining gap:** The user's target is genuinely stunning original anime production art, with storybook painterly world detail and sharp cinematic combat. The existing modeled assets and shading complexity are far below it. Next art production must invest in original hero/enemy/environment asset quality, expressive animation, sophisticated material/lighting composition, cinematic VFX choreography, and a screenshot-driven art-director acceptance loop. Do not disguise that gap by showing the previously generated 2D concept illustration as a game screenshot or by calling a passing CI render aesthetically approved.
 
 ## Explicit review findings
 
