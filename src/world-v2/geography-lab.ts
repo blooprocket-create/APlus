@@ -11,6 +11,10 @@ import { CharacterRig } from '../rendering/CharacterMeshBuilder';
 import { GAMEPLAY_CAMERA_OFFSET, IsometricCameraController } from '../rendering/IsometricCamera';
 import { surfaceAt, traverseTerrain, type TerrainCellStore, type TraversalBlock } from './WorldSurface';
 import { findTerrainPath, type NavigationResult } from './WorldNavigation';
+import { WorldV2ArrivalSession } from './WorldV2ArrivalSession';
+import { getCompanionClassesForPlayer } from '../game/CompanionRoster';
+import { disposeObject } from '../rendering/SceneResources';
+import type { CharacterClassId } from '../types/game';
 
 /**
  * Standalone QA-only sandbox: does NOT use Hearthmere's old path generator,
@@ -27,7 +31,8 @@ const canvas = document.querySelector<HTMLCanvasElement>('#lab');
 const status = document.querySelector<HTMLElement>('#status');
 if (!canvas || !status) throw new Error('World V2 lab UI is missing');
 
-const reviewMode = new URLSearchParams(location.search).get('visualReview') === '1';
+const storyMode = location.pathname.endsWith('/world-v2-story.html');
+const reviewMode = !storyMode && new URLSearchParams(location.search).get('visualReview') === '1';
 const debugGrid = new URLSearchParams(location.search).get('debugGrid') === '1';
 if (reviewMode) document.documentElement.classList.add('visual-review');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -53,16 +58,16 @@ const camera = cameraController.camera;
 camera.far = 500;
 camera.updateProjectionMatrix();
 // The actual existing hero rig (not the lab's previous orange cone).
-const playerRig = new CharacterRig('warrior');
+let playerRig = new CharacterRig('warrior');
 scene.add(playerRig.root);
-playerRig.root.visible = !reviewMode;
+playerRig.root.visible = !reviewMode && !storyMode;
 const anchorMeshes: Array<{ mesh: THREE.Mesh; pos: WorldPosition }> = [];
 for (const anchor of anchors.list()) {
   const marker = new THREE.Mesh(
     new THREE.CylinderGeometry(1.6, 1.6, 5, 12),
     new THREE.MeshBasicMaterial({ color: anchor.id.includes('hearthmere') ? 0xf8d37a : 0xe2aed4 }),
   );
-  marker.visible = !reviewMode;
+  marker.visible = !reviewMode && !storyMode;
   scene.add(marker);
   anchorMeshes.push({ mesh: marker, pos: anchor.position });
 }
@@ -264,6 +269,7 @@ window.addEventListener('keyup', event => movement.delete(event.key.toLowerCase(
 window.addEventListener('blur', () => movement.clear());
 
 const player = { x: 0, y: 0, z: 0 };
+const storyCompanions: Array<{ rig: CharacterRig; world: WorldPosition }> = [];
 const tileStore: TerrainCellStore = {
   cellSize: atlas.cellSize,
   getCell(address) {
@@ -275,6 +281,48 @@ const tileStore: TerrainCellStore = {
 let movementBlocked: TraversalBlock | null = null;
 let pathResult: NavigationResult | null = null;
 let previewWarp = false;
+let lastStream = -Infinity;
+const storyLeadMarker = storyMode ? new THREE.Mesh(
+  new THREE.RingGeometry(0.85, 1.12, 32),
+  new THREE.MeshBasicMaterial({ color: 0xffd475, side: THREE.DoubleSide, depthWrite: false }),
+) : null;
+if (storyLeadMarker) {
+  storyLeadMarker.rotation.x = -Math.PI / 2;
+  storyLeadMarker.visible = false;
+  scene.add(storyLeadMarker);
+}
+const storySession = storyMode ? new WorldV2ArrivalSession(
+  anchors,
+  (role: CharacterClassId) => {
+    scene.remove(playerRig.root);
+    disposeObject(playerRig.root);
+    playerRig = new CharacterRig(role);
+    scene.add(playerRig.root);
+    playerRig.root.visible = true;
+    const arrival = source.resolveAnchor('hearthmere.arrival');
+    player.x = arrival.position.x - 3.5;
+    player.z = arrival.position.z;
+    player.y = arrival.position.y; // re-sampled when compiled ground is resident
+    for (const companionClass of getCompanionClassesForPlayer(role)) {
+      const rig = new CharacterRig(companionClass);
+      scene.add(rig.root);
+      storyCompanions.push({ rig, world: { ...player } });
+    }
+    movement.clear();
+    lastStream = -Infinity;
+    gameplay.update(player, { x: 0, z: 0 });
+  },
+  (x, z) => !!surfaceAt(tileStore, x, z)?.walkable,
+  () => player,
+) : null;
+if (storySession) {
+  window.addEventListener('keydown', event => {
+    if (event.code === 'KeyF' && !event.repeat &&
+        !(event.target instanceof HTMLElement && event.target.matches('input, textarea, select'))) {
+      storySession.interact();
+    }
+  });
+}
 const jumps: Record<string, { x: number; z: number }> = {
   heart: { x: 0, z: 0 }, coast: { x: 505, z: 8 },
   island: { x: 1350, z: 540 }, continent: { x: 2700, z: 250 },
@@ -293,7 +341,6 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-jump]')
   });
 }
 let previous = performance.now();
-let lastStream = -Infinity;
 let active = true;
 let framesRendered = 0;
 let reviewAngle = 0;
@@ -324,7 +371,7 @@ function tick(now: number) {
   if (len > 0) { dx /= len; dz /= len; }
   const speed = movement.has('shift') ? 13 : 7;
   const oldX = player.x, oldZ = player.z;
-  if (!reviewMode && !previewWarp && len > 0) {
+  if (!reviewMode && !previewWarp && (!storyMode || !!storySession?.role) && len > 0) {
     const moved = traverseTerrain(tileStore, player, dx * dt * speed, dz * dt * speed);
     if (moved.moved) {
       player.x = moved.position.x; player.y = moved.position.y;
@@ -347,7 +394,8 @@ function tick(now: number) {
   originUniform.value.set(origin.x, origin.y, origin.z);
   playerRig.root.position.set(local.x, local.y + .15, local.z);
   playerRig.updateAnimation(dt, {
-    isMoving: len > 0, moveSpeedRatio: len > 0 ? 1 : 0,
+    isMoving: len > 0 && (!storyMode || !!storySession?.role),
+    moveSpeedRatio: len > 0 && (!storyMode || !!storySession?.role) ? 1 : 0,
     attackComboStep: 0, attackSwingProgress: 0,
     isDashing: false, hitFlashTimer: 0,
   });
@@ -500,6 +548,15 @@ requestAnimationFrame(tick);
 window.addEventListener('pagehide', () => {
   active = false;
   gameplay.dispose();
+  if (storyLeadMarker) {
+    scene.remove(storyLeadMarker);
+    storyLeadMarker.geometry.dispose();
+    storyLeadMarker.material.dispose();
+  }
+  for (const actor of storyCompanions) {
+    scene.remove(actor.rig.root);
+    disposeObject(actor.rig.root);
+  }
   if (pathLine) { scene.remove(pathLine); pathLine.geometry.dispose(); }
   pathLineMaterial.dispose();
   scene.remove(ocean.mesh);
