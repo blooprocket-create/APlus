@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { createWorldV2ArtTarget, type WorldV2ArtTarget } from './WorldV2ArtTarget';
 import { sampleCellHeight, type TerrainCell } from './WorldTerrain';
 import { createGeography, BIOME_LABELS } from './WorldGeography';
@@ -49,11 +50,11 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 if (artMode) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.97;
+  renderer.toneMappingExposure = 1.10;
 }
 const scene = new THREE.Scene();
 // Original Hearthmere palette and real paper-wash sky instead of flat teal.
-scene.fog = artMode ? new THREE.FogExp2(0x566783, 0.0095)
+scene.fog = artMode ? new THREE.FogExp2(0x8292a5, 0.0077)
   : new THREE.Fog(0xa5ccdc, 180, 395);
 const paintedSky = new THREE.Group();
 addPaintedSky(paintedSky, 360);
@@ -72,10 +73,10 @@ const worldLights = addOriginalWorldLighting(scene, {
   touchUI: window.innerWidth < 760, preservePaintedSky: true,
 });
 if (artMode) {
-  worldLights.ambient.color.setHex(0x8594c5);
-  worldLights.ambient.intensity = 0.63;
-  worldLights.sun.color.setHex(0xffc6a1);
-  worldLights.sun.intensity = 1.6;
+  worldLights.ambient.color.setHex(0x9dadd3);
+  worldLights.ambient.intensity = 0.93;
+  worldLights.sun.color.setHex(0xffd0a2);
+  worldLights.sun.intensity = 2.15;
   worldLights.sun.position.set(-13,28,-17);
 }
 const rim = new THREE.DirectionalLight(0xffc79b, 0.58);
@@ -90,13 +91,32 @@ const cameraController = new IsometricCameraController();
 const camera = cameraController.camera;
 camera.far = 500;
 camera.updateProjectionMatrix();
+// All grading is opt-in: the original playable Hearthmere and geo QA keep
+// their established output and don't pay for this screen-space pass.
 const artComposer = artMode ? new EffectComposer(renderer) : null;
+const colorGrade = artMode ? new ShaderPass({
+  uniforms:{tDiffuse:{value:null}},
+  vertexShader:[
+    'varying vec2 vUv;',
+    'void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+  ].join('\n'),
+  fragmentShader:[
+    'uniform sampler2D tDiffuse;varying vec2 vUv;',
+    'void main(){vec4 c=texture2D(tDiffuse,vUv);',
+    'float y=dot(c.rgb,vec3(.2126,.7152,.0722));',
+    'vec3 tinted=mix(c.rgb,vec3(y)*vec3(.96,1.015,1.07),.14);',
+    'tinted=mix(vec3(.48),tinted,1.075);',
+    'float vignette=1.0-.19*smoothstep(.26,.78,length((vUv-.5)*vec2(1.27,1.0)));',
+    'c.rgb=clamp(tinted*vignette,0.0,1.0);gl_FragColor=c;}',
+  ].join('\n'),
+}) : null;
 if (artComposer) {
   artComposer.addPass(new RenderPass(scene, camera));
   artComposer.addPass(new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth,window.innerHeight),
-    0.53,0.42,0.81,
+    0.35,0.42,0.84,
   ));
+  if(colorGrade) artComposer.addPass(colorGrade);
   artComposer.addPass(new OutputPass());
 }
 // The actual existing hero rig (not the lab's previous orange cone).
@@ -125,6 +145,12 @@ const biomeColors = [0x254f71, 0x4386a0, 0xd7bf97, 0x7b965c,
   0x49665d, 0x898e88, 0xf1ddba, 0xaa8b6d];
 const biomeHighlights = [0x4386a0, 0x80b7a2, 0xe0cda9, 0xa5ab70,
   0x879a62, 0xb2ac9e, 0xf6ede0, 0xbda887];
+// Look-development palette is consciously richer and greener; it does NOT
+// rewrite the canonical biomes or change the baseline test landscape.
+const cinematicBiomes = [0x315974,0x599ba4,0xcbb898,0x5a806a,
+  0x3d6959,0x75838b,0xd6d9cd,0x758777];
+const cinematicHighlights = [0x6596a1,0x9ec0a8,0xe3cfac,0x8da986,
+  0x749985,0xa5a9a2,0xf1ebe1,0xa4ad89];
 const riverMeshes: Array<{ mesh: THREE.Mesh; originX: number; originZ: number }> = [];
 for (const river of geoWorld.rivers) {
   const first = river.points[0];
@@ -209,7 +235,8 @@ const gameplay = new WorldV2GameplayBridge<SurfaceResource>(source, {
       const wash = Math.sin(wx * .28 + wz * .44) +
         Math.sin(wz * .68 - wx * .21) * .64 +
         Math.sin(wx * 1.33 + wz * .91) * .26;
-      base.setHex(biomeColors[biome]); highlight.setHex(biomeHighlights[biome]);
+      base.setHex((artMode ? cinematicBiomes : biomeColors)[biome]);
+      highlight.setHex((artMode ? cinematicHighlights : biomeHighlights)[biome]);
       color.copy(base).lerp(highlight, THREE.MathUtils.clamp(.24 + wash * .13, .07, .48));
       if (g.roads[index] > 10) color.lerp(roadColor, g.roads[index] / 255 * .89);
       colors.push(color.r, color.g, color.b);
