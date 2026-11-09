@@ -2,7 +2,7 @@
 
 **Baseline checked:** 2026-11-08 at `main` merge `c40f578cf2a70d2f23ca767a17865e1716991026` ([PR #9](https://github.com/blooprocket-create/APlus/pull/9)). **Post-merge GitHub Actions [42566887740](https://github.com/blooprocket-create/APlus/actions/runs/42566887740): SUCCESS.** This is a snapshot; future work must update its status and evidence. Start with [agent instructions](../AGENTS.md) and [decision register](WORLD_V2_DECISIONS.md).
 
-**Phase 3 work has begun in [PR #11](https://github.com/blooprocket-create/APlus/pull/11)** with a separate first-arrival story/role-selection page, *not* a new production game. See [Phase 3 progress](WORLD_V2_PHASE3_PROGRESS.md). All new behavior is pending that PR's final CI/merge until explicitly verified.
+**Phase 3 work has begun and [PR #11](https://github.com/blooprocket-create/APlus/pull/11) is merged** (commit `800eeead491179c6a162c5bb0c384c0e0b9fd1a9`). The separate first-arrival role-selected story page is verified by [181 passing tests and real-browser evidence](https://github.com/blooprocket-create/APlus/actions/runs/42570055439). This is **one first-beat prototype**, not a full playable World V2 campaign. See [Phase 3 progress](WORLD_V2_PHASE3_PROGRESS.md).
 
 ## In one paragraph
 
@@ -42,7 +42,7 @@
 
 ## Immediate next milestone: Phase 3 integration
 
-**3.0 in PR #11:** Start with the [first-beat opt-in entry](WORLD_V2_PHASE3_PROGRESS.md) and preserve the existing game. The next integration work is authentic NPC/cutscene/input/AI ownership, not duplicating a quest engine. The 13-beat plan is intentionally semantic, not a set of approved positions.
+**3.0 completed as a first-beat slice in merged PR #11:** Start with the [first-beat opt-in entry](WORLD_V2_PHASE3_PROGRESS.md) and preserve the existing game. The next integration work is authentic NPC/cutscene/input/AI ownership, not duplicating a quest engine. The 13-beat plan is intentionally semantic, not a set of approved positions.
 
 Use [WORLD_V2_PHASE3_HANDOFF.md](WORLD_V2_PHASE3_HANDOFF.md). Begin **additively**, extracting the live opening's semantic event/cinematic/interaction boundaries before changing world positions. Author proposed V2 story anchors through data, test all three heroes, then place the existing characters/scenes on streamed ground. Finish every step with a runnable game and an explicit rollback path. **Do not migrate v1 saves.**
 
