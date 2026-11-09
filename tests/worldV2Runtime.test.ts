@@ -4,7 +4,7 @@ import { buildGeographyTerrainCell } from '../src/world-v2/WorldTerrain';
 import { stageGeography, stageAtlas } from '../src/world-v2/WorldGeographyStage';
 import { sampleGroundTriangle, sampleTerrainSurface, surfaceAt, traverseTerrain,
   type TerrainCellStore } from '../src/world-v2/WorldSurface';
-import { bakeTerrainNavigation, withTerrainNavigation, findTerrainPath, findShoreApproach } from '../src/world-v2/WorldNavigation';
+import { withTerrainNavigation, findTerrainPath, findShoreApproach } from '../src/world-v2/WorldNavigation';
 import { decodeCompiledCell, encodeCompiledCell } from '../src/world-v2/WorldArtifacts';
 
 function flatCell(x: number, z: number, height = 0, ocean = false): TerrainCell {
