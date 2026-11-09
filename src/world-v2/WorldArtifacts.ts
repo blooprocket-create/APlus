@@ -193,7 +193,8 @@ export function validateCompiledAtlasIndex(value: unknown): CompiledAtlasIndex {
     for (const page of index.pages) {
       if (!validRecord(page) || !Number.isSafeInteger(page.x) || !Number.isSafeInteger(page.z) ||
         page.path !== `pages/${page.x}/${page.z}.json` ||
-        !/^[0-9a-f]{64}$/.test(page.sha256) ||
+        typeof page.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(page.sha256) ||
+        typeof page.cellCount !== 'number' ||
         !Number.isSafeInteger(page.cellCount) || page.cellCount < 1 ||
         page.cellCount > WORLD_PAGE_SIZE ** 2) return fail('Invalid geographic page reference');
       const key = `${page.x}:${page.z}`;
