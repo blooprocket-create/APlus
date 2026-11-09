@@ -49,15 +49,16 @@ jobs:
           if-no-files-found: ignore
       # Compare PR screenshots against the last successful main-branch
       # visual evidence when available. The first run has no baseline.
-      - name: Retrieve approved main visual baseline
+      - name: Retrieve previous green main screenshots when available
         if: github.event_name == 'pull_request'
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           baseline_run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow verify.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -n "$baseline_run" ] && [ "$baseline_run" != "null" ]; then
-            gh run download "$baseline_run" --repo "$GITHUB_REPOSITORY" --name world-v2-visual-review --dir test-artifacts/visual-baseline
+            if ! gh run download "$baseline_run" --repo "$GITHUB_REPOSITORY" --name world-v2-visual-review --dir test-artifacts/visual-baseline; then
+              echo "No compatible main-branch visual baseline yet; taking standalone screenshots."
+            fi
           fi
       - name: Capture and inspect World V2 geography screenshots
         run: npm run test:visual -- --baseline test-artifacts/visual-baseline
