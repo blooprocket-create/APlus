@@ -35,3 +35,21 @@ The user has **not** approved the staged five-landmass atlas, final story coordi
 The pairwise comparison was made from **actual screenshots** with the same shot IDs rather than from edited art or rotated camera angles. The corrected river altitude and broader stage-pad blend removed the enormous visible troughs in `river-basin.png` and `hearthmere-arrival.png`. The screenshot immediately revealed that the old debug water overlay was still a round tube drawn at the river centerline; with the canyon gone, it appeared to float *above* the rolling landscape. The third-pass fix builds a flat water surface mesh along the river's monotonic level, with the terrain handling occlusion at the banks. This requires another screenshot pass to verify.
 
 There is still no approval of the five-landmass atlas as **final world canon**, and the instanced preview trees are not a final art-asset replacement.
+
+## Art-style continuity correction — real browser comparison (November 8–9, 2026)
+
+**Trigger:** The user identified that World V2 was using a noticeably different art style than the existing Astral Chronicles environment. This is a real architectural/rendering defect, not a reason to redesign the game's art identity.
+
+**References:** [PR #8](https://github.com/blooprocket-create/APlus/pull/8); [visual screenshot and original-game reference artifact](https://github.com/blooprocket-create/APlus/actions/runs/42560483804); [shared art contract](WORLD_V2_ART_PARITY.md).
+
+**Before:** The exact `hearthmere-arrival.png` screenshot from the previous V2 staging lab shows very bright lime-green faceted terrain, mechanical cone/sphere trees and stark shadow shapes. It differs substantially from the existing game screenshot, which uses olive wash, painterly grass, sculpted lumpy canopies, a warmer sky and nuanced cel-shaded objects.
+
+**After:** The identical `hearthmere-arrival.png` and `mainland-coast.png` views now show fine painted ground texture, subdued Hearthmere greens and clay paths, irregular rounded lofted trees, meadow details and watercolor-inspired water strokes. This is a materially closer style match. The CI archive includes `reference/hearthmere-warrior.png` captured from the original playable game in the same workflow run, plus the 11 current shots and previous-iteration versions for direct visual comparison. The latest run at this revision passed 165 tests, original Hearthmere boot for all three heroes, all 11 V2 captures, with no visual-run technical failures.
+
+**Limitations visible in actual screenshots:**
+- The region composition is still largely grass and evenly spaced small trees with very few intentional authored landmarks. The existing Hearthmere screenshot contains buildings, props, bespoke groves, walkable town details, NPCs and staged architecture. The geography lab is a terrain-art integration proof, **not** an equivalent level-design build.
+- Ocean is visually continuous and now uses the original water pigment/stroke language, but shoreline foam, beach props and local water interaction still require art/physics work.
+- The mobile portrait image confirms the painter style renders in a narrow viewport, **not** that the actual game's mobile camera or iPhone GPU meets its target.
+- These are still staged landmass positions and temporary biome populations, not user-approved final map or gameplay geography.
+
+**Disposition:** The off-style prototype-renderer defect is corrected in code and improved in verified screenshots. **Do not mark the entire Phase 2 geography or final art polish complete.** Keep the shared renderer as the standard for future region authoring and run the screenshot gallery alongside the playable original after every major environment change.
