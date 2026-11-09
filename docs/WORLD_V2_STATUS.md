@@ -1,6 +1,8 @@
 # Astral Chronicles — World V2 implementation status
 
-**Checked:** 2026-11-08 at `main` merge `c40f578cf2a70d2f23ca767a17865e1716991026` ([PR #9](https://github.com/blooprocket-create/APlus/pull/9)). **Post-merge GitHub Actions [42566887740](https://github.com/blooprocket-create/APlus/actions/runs/42566887740): SUCCESS.** This is a snapshot; future work must update its status and evidence. Start with [agent instructions](../AGENTS.md) and [decision register](WORLD_V2_DECISIONS.md).
+**Baseline checked:** 2026-11-08 at `main` merge `c40f578cf2a70d2f23ca767a17865e1716991026` ([PR #9](https://github.com/blooprocket-create/APlus/pull/9)). **Post-merge GitHub Actions [42566887740](https://github.com/blooprocket-create/APlus/actions/runs/42566887740): SUCCESS.** This is a snapshot; future work must update its status and evidence. Start with [agent instructions](../AGENTS.md) and [decision register](WORLD_V2_DECISIONS.md).
+
+**Phase 3 work has begun in [PR #11](https://github.com/blooprocket-create/APlus/pull/11)** with a separate first-arrival story/role-selection page, *not* a new production game. See [Phase 3 progress](WORLD_V2_PHASE3_PROGRESS.md). All new behavior is pending that PR's final CI/merge until explicitly verified.
 
 ## In one paragraph
 
@@ -13,7 +15,7 @@
 | **0 — Audit & isolation preflight** | **Complete (engineering preflight)** | [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md), [dependency inventory](WORLD_V2_DEPENDENCY_INVENTORY.md), baseline/three-hero CI. | Old bundled systems remain; later safe removal only after V2 cutover. Not a clean legacy teardown. |
 | **1 — World platform** | **Complete (engineering foundation)** | [PR #4](https://github.com/blooprocket-create/APlus/pull/4) / [PR #5](https://github.com/blooprocket-create/APlus/pull/5), [kernel handoff](WORLD_V2_PHASE1_KERNEL.md). | Published canonical geography was deliberately **not** part of Phase 1. |
 | **2 — Geography/navigation** | **Core implemented (staging only)** | [PR #6](https://github.com/blooprocket-create/APlus/pull/6), [PR #7](https://github.com/blooprocket-create/APlus/pull/7), [PR #8](https://github.com/blooprocket-create/APlus/pull/8), [PR #9](https://github.com/blooprocket-create/APlus/pull/9); [runtime handoff](WORLD_V2_PHASE2_RUNTIME.md), [successful CI](https://github.com/blooprocket-create/APlus/actions/runs/42566887740). | Final atlas/anchors not approved; deeper hydrology, authored-object/bridge physics, long-range nav, distant LOD, real-device profiling and full gameplay integration remain open. Track owner phase for each. |
-| **3 — Hearthmere on V2** | **Not implemented** | [Phase 3 plan](WORLD_V2_PHASE3_HANDOFF.md) only. | Story-anchor catalog, spatial restage, quests/NPCs/companions/encounters/cinematics on V2, new V2 save/resume, three-role campaign acceptance and cutover. |
+| **3 — Hearthmere on V2** | **In progress — 3.0 opt-in first beat, NOT full migration** | [PR #11](https://github.com/blooprocket-create/APlus/pull/11) introduces one live V2 `arrival` interaction shared with legacy script and three hero rigs; see [3.0 evidence/limitations](WORLD_V2_PHASE3_PROGRESS.md). | Remaining 12 beats, actual scene/NPC/companion gameplay AI, scripted cinematics, new V2 save/resume, canonical town plan, complete three-role acceptance and cutover. |
 | **4 — Maritime world + persistence** | **Not implemented** | Ship/shore behavior defined in [architecture](WORLD_V2_ARCHITECTURE.md). | Control, buoyancy/grounding, boarding, free landing, persistent identities, recovery, fast travel, new-world deltas. Current shore probe is **not** a vessel implementation. |
 | **5 — Production optimization & authoring** | **Not completed** | No on-device performance certification. | World LOD/proxies, biome/region polish, authoring tools, physical mobile measurements/optimization, future region pipeline. |
 
@@ -26,6 +28,7 @@
 | `/index.html` / `src/main.ts` | Playable original Hearthmere opening through refuge for one selected hero and AI companions; existing quests/combat/cinematics and v1 local saves. | World V2 playable campaign or a new V2 save. |
 | `/world-v2-lab.html` | Phase 1 deterministic seeded-cell streaming fixture (81 test tiles). | Production geography, story or sea transport. |
 | `/world-v2-geography.html` | Phase 2 **staging** lab: procedural land/water/biomes, ground-aware walking, page streaming, A* path diagnostics and spectator view jumps. | Existing Hearthmere quests/NPC schedules; ship navigation or an approved atlas. |
+| `/world-v2-story.html` (PR #11) | Opt-in Phase 3 **first playable arrival lead** using hero selection and shared dialogue/step data on streamed V2 terrain. Companion rigs are a simple formation preview. | Full opening, real companion AI/combat, NPCs, cinematics, V2 saves or finalized geography. |
 | `src/game/GameEngine.ts` | Current live game and optional `attachWorldV2Port()` lifecycle seam. | A default replacement engine running V2 story scenarios. |
 
 ### Verified Phase 2 engineering facts (not final gameplay design)
@@ -38,6 +41,8 @@
 - **Regression:** merged PR #9's main-branch CI completed successfully. The normal opening and QA labs are separate. Desktop Chrome tests do **not** prove real-phone sustained 60 FPS.
 
 ## Immediate next milestone: Phase 3 integration
+
+**3.0 in PR #11:** Start with the [first-beat opt-in entry](WORLD_V2_PHASE3_PROGRESS.md) and preserve the existing game. The next integration work is authentic NPC/cutscene/input/AI ownership, not duplicating a quest engine. The 13-beat plan is intentionally semantic, not a set of approved positions.
 
 Use [WORLD_V2_PHASE3_HANDOFF.md](WORLD_V2_PHASE3_HANDOFF.md). Begin **additively**, extracting the live opening's semantic event/cinematic/interaction boundaries before changing world positions. Author proposed V2 story anchors through data, test all three heroes, then place the existing characters/scenes on streamed ground. Finish every step with a runnable game and an explicit rollback path. **Do not migrate v1 saves.**
 
