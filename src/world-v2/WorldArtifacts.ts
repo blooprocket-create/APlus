@@ -34,12 +34,32 @@ export interface CompiledCellReference {
   readonly sha256: string;
 }
 
+/** Each geographic catalog page describes 8×8 world cells, so the atlas
+ * root stays small and the browser can discover distant land without a giant
+ * eager flat tile index. Coordinates are signed page-grid coordinates. */
+export const WORLD_PAGE_SIZE = 8;
+export interface CompiledPageReference {
+  readonly x: number;
+  readonly z: number;
+  readonly path: string;
+  readonly sha256: string;
+  readonly cellCount: number;
+}
+export interface CompiledCellPage {
+  readonly schemaVersion: 1;
+  readonly atlasHash: string;
+  readonly x: number;
+  readonly z: number;
+  readonly cells: readonly CompiledCellReference[];
+}
 export interface CompiledAtlasIndex {
   readonly schemaVersion: 1;
   readonly profile: 'placeholder-preview-v1' | 'geography-stage-v1';
   readonly atlas: WorldAtlasManifest;
   readonly segments: number;
   readonly cells: readonly CompiledCellReference[];
+  /** Optional lazily loaded 8×8 region pages; direct inline cells remain compatible. */
+  readonly pages?: readonly CompiledPageReference[];
   readonly geography?: GeographyDefinition;
 }
 
@@ -162,7 +182,25 @@ export function validateCompiledAtlasIndex(value: unknown): CompiledAtlasIndex {
     }
   } else if (index.geography !== undefined) return fail('Placeholder catalog cannot include geographic shapes');
   if (!Number.isSafeInteger(index.segments) || index.segments < 1 || index.segments > 256 ||
-    index.cells.length < 1 || index.cells.length > 100000) return fail('Invalid cell catalog size');
+    index.cells.length > 100000 ||
+    (index.cells.length === 0 && !(Array.isArray(index.pages) && index.pages.length > 0))) {
+    return fail('Invalid cell catalog size');
+  }
+  if (index.pages !== undefined) {
+    if (!Array.isArray(index.pages) || index.pages.length < 1 || index.pages.length > 5000 ||
+      index.profile !== 'geography-stage-v1') return fail('Invalid paged geography catalog');
+    const seenPages = new Set<string>();
+    for (const page of index.pages) {
+      if (!validRecord(page) || !Number.isSafeInteger(page.x) || !Number.isSafeInteger(page.z) ||
+        page.path !== `pages/${page.x}/${page.z}.json` ||
+        !/^[0-9a-f]{64}$/.test(page.sha256) ||
+        !Number.isSafeInteger(page.cellCount) || page.cellCount < 1 ||
+        page.cellCount > WORLD_PAGE_SIZE ** 2) return fail('Invalid geographic page reference');
+      const key = `${page.x}:${page.z}`;
+      if (seenPages.has(key)) return fail('Duplicate world geographic page');
+      seenPages.add(key);
+    }
+  }
   const found = new Set<string>();
   for (const cell of index.cells) {
     if (!validRecord(cell) || !validRecord(cell.coordinate) ||
@@ -176,6 +214,37 @@ export function validateCompiledAtlasIndex(value: unknown): CompiledAtlasIndex {
       !/^[0-9a-f]{64}$/.test(cell.sha256)) return fail('Invalid cell path or digest');
   }
   return index;
+}
+
+export function validateCompiledCellPage(
+  value: unknown,
+  index: CompiledAtlasIndex,
+  reference: CompiledPageReference,
+): CompiledCellPage {
+  if (!validRecord(value) || value.schemaVersion !== 1 ||
+    value.atlasHash !== index.atlas.contentHash ||
+    value.x !== reference.x || value.z !== reference.z ||
+    !Array.isArray(value.cells) || value.cells.length !== reference.cellCount) {
+    return fail('Geographic page identity or size mismatch');
+  }
+  const cells = value.cells as CompiledCellReference[];
+  const seen = new Set<string>();
+  for (const cell of cells) {
+    if (!validRecord(cell) || !validRecord(cell.coordinate) ||
+      !Number.isSafeInteger(cell.coordinate.x) || !Number.isSafeInteger(cell.coordinate.z)) {
+      return fail('Geographic page cell address invalid');
+    }
+    const addr = cell.coordinate;
+    if (Math.floor(addr.x / WORLD_PAGE_SIZE) !== reference.x ||
+      Math.floor(addr.z / WORLD_PAGE_SIZE) !== reference.z ||
+      cell.id !== worldCellId(index.atlas.worldId, { ...addr, lod: 0 }) ||
+      cell.path !== `cells/0/${addr.x}/${addr.z}.json` ||
+      !/^[0-9a-f]{64}$/.test(cell.sha256) || seen.has(cell.id)) {
+      return fail('Invalid or duplicate geographic page cell');
+    }
+    seen.add(cell.id);
+  }
+  return value as unknown as CompiledCellPage;
 }
 
 export function findCompiledCell(index: CompiledAtlasIndex, address: WorldCellCoordinate): CompiledCellReference | undefined {
