@@ -23,6 +23,19 @@ describe('World V2 screenshot-led scenery placement', () => {
     }
   });
 
+  it('respects named story clearances even after reshuffling tile generation', () => {
+    const cell = buildGeographyTerrainCell(stageGeography, { x: 0, z: 0 });
+    const placements = makeSceneryPlacements(cell, stageAtlas.worldSeed, stageAtlas.anchors);
+    expect(placements.length).toBeGreaterThan(0);
+    for (const placement of placements) {
+      for (const anchor of stageAtlas.anchors) {
+        if (anchor.landmassId !== 'continent-a') continue;
+        expect(Math.hypot(placement.x - anchor.position.x, placement.z - anchor.position.z))
+          .toBeGreaterThanOrEqual(anchor.clearanceRadius + 3);
+      }
+    }
+  });
+
   it('places nothing on open sea cells or preview tiles without geology', () => {
     const ocean = buildGeographyTerrainCell(stageGeography, { x: 20, z: 11 });
     expect(stageGeography.sample(1330, 760).waterKind).toBe(1);
