@@ -42,6 +42,12 @@ npm run audit:world
 
 `public/world-v2/geography/` is a **generated directory**, excluded from source control and regenerated during Vite's prebuild. The schema/profile is `geography-stage-v1`. The staging compiler creates **302 streamed terrain cells**, a versioned atlas index, a deterministic `validation-report.json`, an `atlas-overview.svg`, and **9,078 border vertex comparisons**. Both normal and reversed generation orders are checked byte-for-byte. The report includes covered land/ocean/river/road samples, biome counts, validated anchors and rivers.
 
+### Screenshot-driven visual QA and first rendering iterations
+
+The companion [visual review system](WORLD_V2_SCREENSHOT_REVIEW.md) captures **11 deterministic, clean Chrome shots** on every PR/main push, including mainland/refuge/foothill/river/coast/island/open sea/second continent and a mobile-sized portrait view. It writes the actual image gallery, SVG contact sheet, pixel-level diagnostics, streaming status and human review checklist as the `world-v2-visual-review` Actions artifact. A PR can optionally compare with the latest successful main-branch screenshots. This is a **visual inspection aid**, not an automatic art-quality approval model.
+
+See the [evidence-based iteration log](WORLD_V2_VISUAL_REVIEW_LOG.md) for specific screenshot findings and fixes: removed per-cell ocean voids, added original batched biome scenery, widened staging clearances and corrected the river headwater elevation. Further river surface/riverbank art and terrain silhouette passes are part of Phase 2. Continue reviewing screenshots at the same camera positions rather than concluding visual quality from test green status alone.
+
 The browser does **not** run the expensive heightfield generator. It fetches compiled JSON tiles with per-cell SHA-256 and displays them only if atlas, ID, classification and dimensional validation pass. The river-line display is a lightweight debugging overlay from the same staged constraints, not a substitute for river surface meshes or buoyancy.
 
 ## Test and acceptance scope

@@ -21,6 +21,13 @@
     @media (max-width: 850px) { #geo-overview { width: min(46vw, 240px); top: auto; bottom: 16px; left: 14px; opacity: .8; } }
     @media (max-width: 600px) { #geo-overview { display: none; } }
     #waypoints { position: fixed; left: 14px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100vw - 190px); }
+    /* Deterministic screenshot mode: clean view, no overlays to obstruct
+       coastlines, terrain silhouettes, rivers or scenery. Diagnostics are
+       captured separately in JSON rather than painted over the world. */
+    html.visual-review #heads-up,
+    html.visual-review #geo-overview,
+    html.visual-review #waypoints,
+    html.visual-review #arrows { display: none !important; }
     #waypoints button { border: 1px solid #c5e4ea90; border-radius: 8px; background: #173b44dd; color: white; padding: 9px 12px; cursor: pointer; }
     #waypoints button:focus-visible { outline: 2px solid #fff4a9; }
     @media (max-width: 760px) { #heads-up { font-size: 11px; padding: 9px; } #waypoints { bottom: max(140px,env(safe-area-inset-bottom)); max-width: 100%; } #waypoints button { padding: 7px 9px; } }

@@ -106,8 +106,10 @@ function signedCoast(land: GeographicalLandmass, seed: number, x: number, z: num
 function rawElevation(land: GeographicalLandmass, seed: number, x: number, z: number, inland: number): number {
   const rough = fractal(seed, x, z);
   const mountain = Math.max(0, fractal(seed ^ 0x42b5a31e, x * 0.68 + 231, z * 0.68 - 19));
-  return Math.max(0.04, inland * land.elevationScale * 0.11 +
-    smooth(inland / 22) * (Math.max(0, rough * 9) + Math.pow(mountain, 2) * land.elevationScale * 1.55));
+  // Broad rolling relief before finer undulation. The previous coefficient
+  // created sharp, noisy crumpled-paper terrain even in story/forest valleys.
+  return Math.max(0.04, inland * land.elevationScale * 0.085 +
+    smooth(inland / 32) * (Math.max(0, rough * 5.5) + Math.pow(mountain, 2) * land.elevationScale * 1.2));
 }
 function segmentDistance(x: number, z: number, a: { x: number; z: number }, b: { x: number; z: number }) {
   const dx = b.x - a.x, dz = b.z - a.z;
@@ -138,7 +140,10 @@ function riverPaths(land: GeographicalLandmass, seed: number): RiverPath[] {
     const n = 44;
     const first = pointAt(land, sourceAngle, sourceRadial);
     const inland = Math.max(0, signedCoast(land, seed, first.x, first.z));
-    const sourceWater = Math.max(4.2, Math.min(land.elevationScale * 2, rawElevation(land, seed, first.x, first.z, inland) * 0.55));
+    // Keep headwater near the terrain it originates from. The old clamp
+    // forced ~4 units of water altitude regardless of surrounding hills,
+    // carving unnatural multi-story ravines into nearly every river basin.
+    const sourceWater = Math.max(5.5, rawElevation(land, seed, first.x, first.z, inland) - 1.4);
     for (let i = 0; i <= n; i++) {
       const t = i / n;
       const theta = sourceAngle + Math.sin(t * Math.PI * 2 + index) * Math.sin(Math.PI * t) * 0.11;
@@ -150,7 +155,7 @@ function riverPaths(land: GeographicalLandmass, seed: number): RiverPath[] {
     }
     return {
       id: `${land.id}.river-${index + 1}`, landmassId: land.id,
-      points, halfWidth: 3.4 + (seed % 7) * 0.45,
+      points, halfWidth: 4.2 + (seed % 7) * 0.45,
     };
   });
 }
@@ -239,16 +244,16 @@ export function createGeography(atlas: WorldAtlasManifest, definition: Geography
     for (const anchor of atlas.anchors) {
       if (anchor.landmassId !== land.id) continue;
       const dist = Math.hypot(anchor.position.x - x, anchor.position.z - z);
-      const influence = 1 - smooth((dist - anchor.clearanceRadius) / 20);
-      if (dist <= anchor.clearanceRadius + 20) {
+      const influence = 1 - smooth((dist - anchor.clearanceRadius) / 45);
+      if (dist <= anchor.clearanceRadius + 45) {
         height = lerp(height, anchor.position.y, influence);
       }
     }
     for (const segment of roads) {
       if (segment.a.landmassId !== land.id) continue;
       const closest = segmentDistance(x, z, segment.a.position, segment.b.position);
-      if (closest.distance >= 11) continue;
-      const influence = 1 - smooth((closest.distance - 3.5) / 7.5);
+      if (closest.distance >= 22) continue;
+      const influence = 1 - smooth((closest.distance - 3.5) / 18.5);
       const target = lerp(segment.a.position.y, segment.b.position.y, closest.t);
       height = lerp(height, target, influence);
       road = Math.max(road, Math.round(clamp(1 - closest.distance / 6) * 255));
