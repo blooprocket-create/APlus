@@ -24,6 +24,10 @@ The [combat and progression brief](docs/COMBAT_PROGRESSION.md) collects the acti
 
 The [production roadmap](docs/PRODUCTION_ROADMAP.md) and [Phase 3 Hearthmere integration plan](docs/WORLD_V2_PHASE3_HANDOFF.md) are the active work queue. Phase 2's staged engineering core is merged, but the **existing Hearthmere opening is not yet running on World V2**; exact atlas layout, ships, persistence on V2, distant LOD and physical-device FPS remain open. See [the status matrix](docs/WORLD_V2_STATUS.md) before assigning work.
 
+### Phase 3 — first playable story integration
+
+The [opt-in World V2 story entry](/world-v2-story.html) begins Hearthmere's migration without replacing the live game. Select Brynhildr, Celestia or Akatsuki, walk across compiled V2 terrain with the native close camera, and investigate the first role-specific lead. The same original dialogue and step progression powers this initial `arrival → market` interaction. **It then stops**: the rest of the quest chain, companions' combat AI, NPCs, cinematic sequences and new V2 save/reload are not yet ported. This is a functional **Phase 3.0 prototype**, not the complete Hearthmere quest experience. See the [Phase 3 progress report](docs/WORLD_V2_PHASE3_PROGRESS.md).
+
 ## World Architecture V2
 
 The next engineering program is [World Architecture V2](docs/WORLD_V2_ARCHITECTURE.md): a deterministic canonical procedural world with multiple continents and islands, freely navigable oceans, persistent ships and an open-world Hearthmere rebuilt around story anchors rather than old coordinates. The [Phase 0 legacy audit](docs/WORLD_V2_PHASE0_AUDIT.md) and [dependency inventory](docs/WORLD_V2_DEPENDENCY_INVENTORY.md) documents active assets/quests, legacy systems and retirement boundaries and no-legacy-migration policy. The current game remains playable at `/index.html`; a separate **functional World V2 geography sandbox** now demonstrates close-perspective walking, 3D ground collision, streamed pages and test navigation. That sandbox does not yet run the existing Hearthmere quests.
