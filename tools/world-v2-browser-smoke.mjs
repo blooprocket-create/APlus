@@ -317,6 +317,36 @@ async function main() {
     writeFileSync(path.join(screenshots, 'world-v2-phase3-arrival-mage.png'),
       Buffer.from(storyShot.data, 'base64'));
     console.log('Phase 3 first playable arrival browser smoke passed:', JSON.stringify(storyResult));
+
+    // Exercise the clickable, no-query hero picker and another direct-link
+    // role. Each new V2 story session must start fresh at arrival, without
+    // inheriting Celestia's prior step or sharing mutable session state.
+    await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-story.html?functionalQA=1' });
+    await poll(async () => await cdp.eval(
+      "window.__worldV2Phase3QA?.snapshot()?.role === null && " +
+      "!document.querySelector('#story-choose')?.hidden"
+    ), 'Phase 3 blank hero-choice screen', 30000);
+    await cdp.eval(`document.querySelector('[data-select-hero="warrior"]').click()`);
+    await poll(async () => await cdp.eval(
+      "window.__worldV2Phase3QA?.snapshot()?.groundReady && " +
+      "window.__worldV2Phase3QA?.snapshot()?.role === 'warrior'"
+    ), 'Phase 3 Brynhildr selected and grounded', 35000);
+    const warriorResult = await cdp.eval('window.__worldV2Phase3QA.snapshot()');
+    if (warriorResult.step !== 'arrival' ||
+      warriorResult.companions.join(',') !== 'mage,assassin') {
+      throw new Error('Phase 3 warrior role/companion/session bleed: ' + JSON.stringify(warriorResult));
+    }
+    await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-story.html?role=assassin&functionalQA=1' });
+    await poll(async () => await cdp.eval(
+      "window.__worldV2Phase3QA?.snapshot()?.groundReady && " +
+      "window.__worldV2Phase3QA?.snapshot()?.role === 'assassin'"
+    ), 'Phase 3 Akatsuki selected and grounded', 35000);
+    const assassinResult = await cdp.eval('window.__worldV2Phase3QA.snapshot()');
+    if (assassinResult.step !== 'arrival' ||
+      assassinResult.companions.join(',') !== 'warrior,mage') {
+      throw new Error('Phase 3 assassin role/companion/session bleed: ' + JSON.stringify(assassinResult));
+    }
+    console.log('Phase 3 3/3 roles selected in real browser with isolated arrival sessions.');
     if (cdp.exceptions.length) throw new Error('Browser exceptions: ' + JSON.stringify(cdp.exceptions));
     console.log('Phase 0 Chrome smoke: 3/3 heroes entered the actual playable HUD; screenshots saved.');
     ws.close();
