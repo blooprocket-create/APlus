@@ -288,7 +288,7 @@ function tick(now: number) {
   }
   const origin = renderOriginFor(player, atlas.cellSize);
   const local = { x: player.x - origin.x, y: player.y, z: player.z - origin.z };
-  originUniform.value.copy(origin);
+  originUniform.value.set(origin.x, origin.y, origin.z);
   playerRig.root.position.set(local.x, local.y + .15, local.z);
   playerRig.updateAnimation(dt, {
     isMoving: len > 0, moveSpeedRatio: len > 0 ? 1 : 0,
