@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { beam, loft, piece, smoothLoft } from '../rendering/ArtMesh';
+import { beam, piece, smoothLoft } from '../rendering/ArtMesh';
 import { buildRefugeLodge } from '../rendering/HearthmereRefuge';
 import { disposeObject } from '../rendering/SceneResources';
 import type { WorldPosition } from './WorldCoordinates';
