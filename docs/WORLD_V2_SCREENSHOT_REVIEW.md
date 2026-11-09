@@ -58,6 +58,6 @@ The previous [production smoke screenshot archive](https://github.com/blooprocke
 
 ## Remaining Phase 2 production gates (not waived)
 
-A screenshot-review system is necessary for visual iteration, but it is **not equivalent** to finishing geographic production. We still need the intended world shape approved/locked, a paged **full** geographic atlas and LOD cells beyond the 302-cell test patches, walkable terrain/river/coast collision and continuous companion navigation, river/path crossing and landing-access QA, and physical phone GPU/performance profiling. Original Hearthmere quests/assets are not restaged into the new world until Phase 3; old saves need no migration.
+A screenshot-review system is necessary for visual iteration, but it is **not equivalent** to finishing geographic production. The [functional Stage V2 world](WORLD_V2_PHASE2_RUNTIME.md) now has a complete finite atlas in 72 pages, a close native camera, and bare-ground collision plus pathfinding. Still outstanding: approved canonical geography, distant LOD, integrated hero/companion and authored-object collision, complex river crossings, and physical phone GPU/performance profiling. Original Hearthmere quests/assets are not restaged into the new world until Phase 3; old saves need no migration.
 
 **Workflow to finish Phase 2:** freeze staging-independent world design after screenshots meet art/readability goals; add complete atlas/LOD and physical navigation; then repeat the same fixed screenshot and movement/shoreline QA before marking the phase complete.
