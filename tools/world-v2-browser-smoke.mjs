@@ -175,13 +175,47 @@ async function main() {
 
     // Phase 2: exercise the actual OFFLINE-BAKED geographical profile in
     // Chrome, including island-to-ocean transitions and no cell fetch errors.
-    await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-geography.html' });
+    await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-geography.html?functionalQA=1' });
     await poll(async () => await cdp.eval(
       "(document.querySelector('#status')?.textContent ?? '').includes('baked geography tiles:')"
     ), 'Phase 2 geography lab rendered', 35000);
     await poll(async () => await cdp.eval(
       "Number((document.querySelector('#status')?.textContent ?? '').match(/Resident cells: (\\d+)/)?.[1] ?? 0) > 0"
     ), 'Phase 2 geography tiles loaded', 35000);
+    // Runtime acceptance: the active camera is the SAME perspective used
+    // in Hearthmere and the player actually snaps onto streamed ground.
+    await poll(async () => await cdp.eval(
+      "!!window.__worldV2FunctionalQA && window.__worldV2FunctionalQA.snapshot().groundY !== null"
+    ), 'V2 ground collision ready', 25000);
+    const beforeMovement = await cdp.eval('window.__worldV2FunctionalQA.snapshot()');
+    if (beforeMovement.camera !== 'PerspectiveCamera' ||
+      beforeMovement.cameraDistance < 12 || beforeMovement.cameraDistance > 28 ||
+      beforeMovement.atlasPages < 60 ||
+      Math.abs(beforeMovement.y - beforeMovement.groundY) > 0.3 ||
+      !beforeMovement.walkable) {
+      throw new Error('V2 camera/ground/page contract violation: ' + JSON.stringify(beforeMovement));
+    }
+    const pathProbe = await cdp.eval('window.__worldV2FunctionalQA.pathTo(4, 0)');
+    if (pathProbe.status !== 'complete') {
+      throw new Error('Local baked terrain navigation failed: ' + JSON.stringify(pathProbe));
+    }
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'rawKeyDown', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
+    });
+    await delay(500);
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'keyUp', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
+    });
+    await poll(async () => await cdp.eval(
+      'window.__worldV2FunctionalQA.snapshot().x > 1'
+    ), 'V2 player moving over rendered ground', 8000);
+    const afterMovement = await cdp.eval('window.__worldV2FunctionalQA.snapshot()');
+    if (Math.abs(afterMovement.y - afterMovement.groundY) > 0.3 ||
+      afterMovement.fetchedPages < 1) {
+      throw new Error('V2 movement lost ground lock or bypassed page fetch: ' + JSON.stringify(afterMovement));
+    }
+    console.log('World V2 native camera, grounded movement and A* browser checks passed:',
+      JSON.stringify(afterMovement));
     await cdp.eval("document.querySelector('#geo-jump-island').click()");
     await poll(async () => await cdp.eval(
       "((document.querySelector('#status')?.textContent ?? '').match(/Cell: (-?\\d+), (-?\\d+)/)?.slice(1).join(',') === '21,8')"
