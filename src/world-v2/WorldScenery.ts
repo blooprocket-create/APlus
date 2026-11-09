@@ -39,19 +39,29 @@ function sampleBiome(cell: TerrainCell, x: number, z: number) {
  * Placements are independent of load order and have stable cell-local IDs.
  * Objects are inset from cell edges, so cell boundaries never duplicate them.
  */
-export function makeSceneryPlacements(cell: TerrainCell, worldSeed: string): readonly SceneryPlacement[] {
+export function makeSceneryPlacements(
+  cell: TerrainCell, worldSeed: string,
+  protectedSites: readonly { position: { x: number; z: number }; clearanceRadius: number }[] = [],
+): readonly SceneryPlacement[] {
   if (!cell.geography) return [];
   let state = deriveSeed(worldSeed, 'v2-scenery-review-v1', cell.id) || 1;
   const next = () => { state = randomStep(state); return state / 0x100000000; };
   const entries: SceneryPlacement[] = [];
   const inset = 3;
-  // More attempts than targets to avoid vegetation on water, story pads and roads.
-  for (let index = 0; index < 32; index++) {
+  const phase = deriveSeed(worldSeed, 'scenery-clusters-v1') / 0x100000000 * Math.PI * 2;
+  // Deliberate clearings and woodland clusters instead of even salt-and-pepper
+  // scattering. This density mask is global, so it doesn't follow tile edges.
+  for (let index = 0; index < 28; index++) {
     const x = cell.corner.x + inset + next() * (cell.cellSize - 2 * inset);
     const z = cell.corner.z + inset + next() * (cell.cellSize - 2 * inset);
     const surface = sampleBiome(cell, x, z);
     const roll = next(), size = next(), rotate = next() * Math.PI * 2;
     if (!surface || surface.waterKind !== 0 || surface.road > 30) continue;
+    if (protectedSites.some(site =>
+      Math.hypot(site.position.x - x, site.position.z - z) < site.clearanceRadius + 3)) continue;
+    const canopyPatch = Math.sin(x * 0.032 + phase) * Math.sin(z * 0.027 - phase * 0.71);
+    const patchDensity = Math.max(0.20, Math.min(0.88, 0.58 + canopyPatch * 0.32));
+    if (next() > patchDensity) continue;
     let kind: SceneryKind;
     const biome = surface.biome;
     if (biome === 4) { // woods
