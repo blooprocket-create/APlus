@@ -8,7 +8,7 @@ import { getCompanionClassesForPlayer } from '../src/game/CompanionRoster';
 import {
   PROPOSED_OPENING_SITES, provisionalArrivalPlacement,
   tryInvestigateArrival, validateProposedOpeningSites,
-} from '../src/world-v2/WorldV2OpeningPlan';
+} from '../src/game/WorldV2OpeningPlan';
 
 describe('Phase 3 opening integration contracts', () => {
   const anchors = new StoryAnchorRegistry(stageAtlas.anchors);
