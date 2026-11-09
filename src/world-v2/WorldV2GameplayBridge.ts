@@ -66,8 +66,9 @@ export class WorldV2ArtifactSource {
     await verifySha256(raw, ref.sha256);
     if (signal.aborted) throw new Error('World V2 cell load was cancelled');
     const cell = decodeCompiledCell(JSON.parse(raw) as unknown, this.catalog.atlas, ref, this.catalog.segments);
-    if (this.catalog.profile === 'geography-stage-v1' && !cell.geography) {
-      throw new Error('World V2 geographic cell is missing water/biome/road classifications');
+    if (this.catalog.profile === 'geography-stage-v1' &&
+      (!cell.geography || !cell.navigation)) {
+      throw new Error('World V2 geographic cell must include terrain, water, biome and navigation overlays');
     }
     return cell;
   }
