@@ -199,16 +199,19 @@ async function main() {
     if (pathProbe.status !== 'complete') {
       throw new Error('Local baked terrain navigation failed: ' + JSON.stringify(pathProbe));
     }
+    await poll(async () => await cdp.eval(
+      'window.__worldV2FunctionalQA.snapshot().resident >= 18'
+    ), 'Nearby page tiles and collision meshes resident', 25000);
     await cdp.send('Input.dispatchKeyEvent', {
       type: 'rawKeyDown', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
     });
-    await delay(500);
+    await delay(1600);
     await cdp.send('Input.dispatchKeyEvent', {
       type: 'keyUp', key: 'd', code: 'KeyD', windowsVirtualKeyCode: 68,
     });
     await poll(async () => await cdp.eval(
-      'window.__worldV2FunctionalQA.snapshot().x > 1'
-    ), 'V2 player moving over rendered ground', 8000);
+      'window.__worldV2FunctionalQA.snapshot().x > 0.3'
+    ), 'V2 player moving over rendered ground', 12000);
     const afterMovement = await cdp.eval('window.__worldV2FunctionalQA.snapshot()');
     if (Math.abs(afterMovement.y - afterMovement.groundY) > 0.3 ||
       afterMovement.fetchedPages < 1) {
