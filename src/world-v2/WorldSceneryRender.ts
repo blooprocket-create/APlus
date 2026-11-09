@@ -6,8 +6,11 @@ import type { TerrainCell } from './WorldTerrain';
  * Reusable disposable preview visuals; no downloaded stock assets.
  * Batches similarly shaped props per cell with InstancedMesh to bound drawcalls.
  */
-export function createSceneryMeshes(cell: TerrainCell, seed: string): { group: THREE.Group; count: number } {
-  const placements = makeSceneryPlacements(cell, seed);
+export function createSceneryMeshes(
+  cell: TerrainCell, seed: string,
+  protectedSites: readonly { position: { x: number; z: number }; clearanceRadius: number }[] = [],
+): { group: THREE.Group; count: number } {
+  const placements = makeSceneryPlacements(cell, seed, protectedSites);
   const group = new THREE.Group();
   const centerX = cell.corner.x + cell.cellSize / 2;
   const centerZ = cell.corner.z + cell.cellSize / 2;
