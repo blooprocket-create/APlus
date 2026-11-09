@@ -547,8 +547,8 @@ function tick(now: number) {
   if (artMode) {
     // Deliberately cinematic, lower 3/4 lens for LOOK DEVELOPMENT only.
     // Actual moving-game camera remains the canonical original close isometric.
-    camera.position.set(local.x + 2.6, local.y + 6.7, local.z + 9.6);
-    camera.lookAt(local.x,local.y + 2.2,local.z - 5.1);
+    camera.position.set(local.x + 2.0, local.y + 5.5, local.z + 11.0);
+    camera.lookAt(local.x,local.y + 3.0,local.z - 7.0);
   } else {
     const camX = -offset.z * Math.sin(reviewAngle) * reviewZoom;
     const camZ = offset.z * Math.cos(reviewAngle) * reviewZoom;
