@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "notes": "Staging atlas only; scene positions are review fixtures, not approved world canon.",
+  "shots": [
+    {
+      "id": "hearthmere-arrival",
+      "name": "Hearthmere · arrival site",
+      "focus": "Clearance, foreground silhouettes, readable approaches",
+      "position": {
+        "x": 0,
+        "z": 0
+      },
+      "camera": {
+        "angle": 0.1,
+        "zoom": 1
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "land",
+      "minScenery": 1
+    },
+    {
+      "id": "hearthmere-refuge",
+      "name": "Hearthmere · refuge road",
+      "focus": "Road readability, scene hierarchy, staging flexibility",
+      "position": {
+        "x": 150,
+        "z": 60
+      },
+      "camera": {
+        "angle": -0.26,
+        "zoom": 1
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "land",
+      "minScenery": 1
+    },
+    {
+      "id": "foothill-relief",
+      "name": "Mainland · highland approach",
+      "focus": "Terrain silhouettes and rock/tree variation",
+      "position": {
+        "x": -150,
+        "z": -100
+      },
+      "camera": {
+        "angle": 0.55,
+        "zoom": 1.18
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "land",
+      "minScenery": 1
+    },
+    {
+      "id": "river-basin",
+      "name": "Mainland · river basin",
+      "focus": "Riverbed, continuity, banks and crossings",
+      "position": {
+        "x": 155,
+        "z": 136
+      },
+      "camera": {
+        "angle": 0.25,
+        "zoom": 1.08
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "any",
+      "minScenery": 0
+    },
+    {
+      "id": "mainland-coast",
+      "name": "Mainland · coastal transition",
+      "focus": "Shoreline continuity, land/water contrast, accessible beach shapes",
+      "position": {
+        "x": 505,
+        "z": 8
+      },
+      "camera": {
+        "angle": -0.16,
+        "zoom": 1.13
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "any",
+      "minScenery": 0
+    },
+    {
+      "id": "first-island",
+      "name": "Island A · interior",
+      "focus": "Distinct island ecology and legible natural landmarks",
+      "position": {
+        "x": 1350,
+        "z": 540
+      },
+      "camera": {
+        "angle": 0.1,
+        "zoom": 1.05
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "land",
+      "minScenery": 1
+    },
+    {
+      "id": "island-shore",
+      "name": "Island A · landing approach",
+      "focus": "Safe shore, ocean continuity and coastline gradients",
+      "position": {
+        "x": 1330,
+        "z": 682
+      },
+      "camera": {
+        "angle": 0.22,
+        "zoom": 1.05
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "any",
+      "minScenery": 0
+    },
+    {
+      "id": "open-ocean",
+      "name": "Ocean · off Island A",
+      "focus": "No unloaded-cell rectangles, no tiling, consistent water pattern",
+      "position": {
+        "x": 1330,
+        "z": 760
+      },
+      "camera": {
+        "angle": 0.15,
+        "zoom": 1.2
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "ocean",
+      "minScenery": 0
+    },
+    {
+      "id": "second-continent",
+      "name": "Continent B · interior",
+      "focus": "Biome contrast, terrain layering, large-scale landmark potential",
+      "position": {
+        "x": 2700,
+        "z": 250
+      },
+      "camera": {
+        "angle": -0.25,
+        "zoom": 1.22
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "land",
+      "minScenery": 1
+    },
+    {
+      "id": "remote-island",
+      "name": "Island C · remote shore",
+      "focus": "Small island silhouette versus major continents",
+      "position": {
+        "x": -1350,
+        "z": 640
+      },
+      "camera": {
+        "angle": 0.1,
+        "zoom": 1.16
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "expectWater": "land",
+      "minScenery": 0
+    },
+    {
+      "id": "mobile-island",
+      "name": "Mobile portrait · Island A",
+      "focus": "Portrait framing, hierarchy and terrain density",
+      "position": {
+        "x": 1350,
+        "z": 540
+      },
+      "camera": {
+        "angle": 0.1,
+        "zoom": 1.25
+      },
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "expectWater": "land",
+      "minScenery": 1
+    }
+  ]
+}
