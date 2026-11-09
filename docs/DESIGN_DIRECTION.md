@@ -1,6 +1,8 @@
 # Astral Chronicles — design direction and interview record
 
-Last updated: November 4, 2026.
+Original interview record updated through November 4, 2026. **World V2 implementation-status cross-reference added November 8, 2026.**
+
+**IMPORTANT for coding agents:** This file is the historical **creative decision log**, NOT an assertion that the project remains unimplemented. Start with [AGENTS.md](../AGENTS.md), the [current evidence-backed implementation status](WORLD_V2_STATUS.md), [World V2 decision register](WORLD_V2_DECISIONS.md), [architecture](WORLD_V2_ARCHITECTURE.md), [roadmap](PRODUCTION_ROADMAP.md) and [Phase 3 handoff](WORLD_V2_PHASE3_HANDOFF.md). Phase 0 preflight, Phase 1 engineering and Phase 2 **staging runtime** are implemented and merged; the existing player-facing Hearthmere opening is still separate from V2. The final world atlas, ships, V2 campaign and production performance are NOT shipped.
 
 This is the record of user-confirmed direction and outstanding design decisions for the replacement game. Read it alongside the [story foundation](OPEN_WORLD_STORY.md) and [expanded campaign treatment](CAMPAIGN_TREATMENT.md). Those documents contain creative proposals; this record distinguishes explicit requirements from ideas still under discussion.
 
@@ -10,9 +12,9 @@ The user requested an interview process: the agent asks questions, the user answ
 
 The user explicitly requested clickable questions on November 4, 2026. Use the interactive question tool for subsequent interview rounds rather than requiring typed A/B/C replies. Previously typed selections remain valid and are recorded below.
 
-The user authorized building the Hearthmere crossing playtest during the interview. The full campaign remains in design until the user is ready for implementation. Record major creative choices in this document.
+The user authorized building the Hearthmere crossing playtest during the interview. The **full campaign's content** remains in design, while **World V2 engineering implementation has already started**. Record newly approved creative choices here; refer to the status and phase handoffs for implementation state.
 
-When the interview is complete, consolidate the decisions into an implementation handoff with document reading order, scope, dependencies, milestones, acceptance criteria, and remaining uncertainties. Handoff happens when the user is ready; no implementation handoff has been issued yet.
+A World V2 implementation handoff **has been issued**: [AGENTS.md](../AGENTS.md) gives reading order and coding boundaries, [World V2 status](WORLD_V2_STATUS.md) gives actual code/evidence, and [Phase 3](WORLD_V2_PHASE3_HANDOFF.md) gives the next acceptance plan. Continue interviewing only for **open** creative decisions, not as a prerequisite to working on approved engineering tasks.
 
 ## Confirmed direction
 
@@ -24,7 +26,7 @@ When the interview is complete, consolidate the decisions into an implementation
 | D04 | A full game comparable in completion time to Final Fantasy or Zelda. | Plan a substantial campaign and optional adventures. Exact hour targets remain a proposal until confirmed and eventually measured. |
 | D05 | "i want this game to be a cinematic marvel. the cutscenes should be beautiful." | Cinematic presentation is a core creative requirement. Develop composition, staging, animation, performance, lighting, editing, music, and transitions as part of the design. D22 establishes cel-shaded 3D; precise cinematic grammar and production approach remain undecided. |
 | D06 | "the gameplay abilities, effects, vibe should lean very Anime Over the Top heavy." | Strong anime influence and exaggerated spectacle must shape abilities, effects, and overall presentation. Determine the references, visual language, and escalation through the interview. |
-| D07 | Ask questions, document the answers, then hand all documents to an agent when ready. | Use an explicit decision record and an eventual implementation package. The current phase is design, not implementation. |
+| D07 | Ask questions, document the answers, then hand all documents to an agent when ready. | Use an explicit decision record and an eventual implementation package. The decision-interview entry predates the current World V2 engineering implementation; see the current status document. |
 | D08 | "Final Fantasy with the huge bosses fights" | Use Final Fantasy as the reference for huge boss encounters. Exact entries, creature designs, encounter structure, and frequency remain to be discussed. |
 | D09 | "Solo Leveling epic fight scenes" | Use Solo Leveling as the reference for epic fight presentation. Translate this into original choreography, action staging, and effects. D22 establishes cel-shaded 3D; specific choreography and effect techniques remain open. |
 | D10 | "Last of Us hits the emotional core" | Use The Last of Us as the emotional reference. Build relationships and consequences that make the spectacle matter. D13–D15 establish the emotional tone, central bond, and limits on permanent loss. |

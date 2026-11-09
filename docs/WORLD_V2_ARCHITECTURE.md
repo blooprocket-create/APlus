@@ -1,7 +1,7 @@
 # Astral Chronicles — World Architecture V2
 
 **Status:** Product direction locked 2026-11-08. Phase 1 platform is complete; Phase 2's [geography](WORLD_V2_PHASE2_GEOGRAPHY.md) now has a [functional staging runtime](WORLD_V2_PHASE2_RUNTIME.md): full bounded atlas pages, actual bare-terrain collision, baked walkability/nav paths, and native close gameplay camera. **The five-landmass staging map and Hearthmere replacement coordinates are NOT approved final canon.** Production story integration, ships and iPhone performance profiling remain later phases.  
-**Authority:** The latest user-confirmed direction, then [DESIGN_DIRECTION.md](DESIGN_DIRECTION.md), this specification, [DESIGN_OVERVIEW.md](DESIGN_OVERVIEW.md), and the relevant story/quest briefs.  
+**Authority:** Latest explicit user-approved direction → [decision register](WORLD_V2_DECISIONS.md) and underlying [DESIGN_DIRECTION.md](DESIGN_DIRECTION.md) → this architecture → relevant story briefs. **Implementation evidence:** [current source/status matrix](WORLD_V2_STATUS.md); [Phase 3 next handoff](WORLD_V2_PHASE3_HANDOFF.md).  
 **Execution:** [Phase 0 audit and preservation register](WORLD_V2_PHASE0_AUDIT.md) → [production roadmap](PRODUCTION_ROADMAP.md).
 
 ## 1. Product decisions — locked
@@ -25,7 +25,7 @@ The generated world is not required to preserve player-specific legacy world see
 ## 2. Boundaries: confirmed versus proposed
 
 **Locked product behavior:** Section 1 and existing story/quest continuity.  
-**Proposed implementation direction:** All interface names, manifest formats, generation algorithms, cell dimensions, load budgets, and module boundaries in sections 3–10. They are the preferred engineering starting point, **not additional user-approved game mechanics**.  
+**Implemented engineering:** The atlas identity/anchor/coordinate interfaces, tile/page schemas, offline compiler, streamer, surface and navigation owners are **real staged code**—see [status and source pointers](WORLD_V2_STATUS.md). Their current numbers, algorithm choices and sample places are **not additional user-approved game mechanics**. New/future interfaces described in this document remain proposals unless source/tests verify them.  
 **Not decided:** Atlas extent, exact number or shape of landmasses, sailing speeds, vessel roster, ship condition/repair economy, recovery fees, ocean combat, currents, underwater gameplay, biome catalog, water simulation details, ports, travel costs, and the final Hearthmere geography.
 
 Procedural-first means the system determines most geography and environmental placement from canonical constraints; it does **not** mean randomizing story-critical settings, quest beats, or important characters each time a save loads.
@@ -52,24 +52,17 @@ No giant `GameEngine` replacement in one commit. Introduce small interfaces and 
 
 Use a global coordinate frame spanning continents, islands and ocean; a local floating origin for rendering avoids GPU precision loss during long voyages. Do not serialize local/rebased graphics coordinates as global positions.
 
-A proposed immutable published world manifest:
+**Use actual exported runtime types, not an outdated pseudocode manifest.** The current implemented contracts are:
 
-```ts
-interface WorldAtlasManifest {
-  schemaVersion: number;
-  worldId: string;
-  atlasVersion: string;
-  worldSeed: string;
-  generatorVersion: string;
-  landmasses: Array<{ id: string; manifestRef: string }>;
-  anchorsRef: string;
-  cellCatalogRef: string;
-  contentHash: string;
-}
-type WorldCellId = string;   // namespaced world/landmass-or-ocean/lod/tile
-type WorldAnchorId = string; // e.g. "hearthmere.shipment_square"
-type WorldEntityId = string; // never derived from array index or load order
-```
+| Contract | Authoritative source | Notes |
+| --- | --- | --- |
+| `AtlasDefinition`, `WorldAtlasManifest` | [`src/world-v2/WorldAtlas.ts`](../src/world-v2/WorldAtlas.ts) | Versioned ID/seed/generator, `cellSize`, landmass envelopes, embedded named anchors and normalized `contentHash`. A landmass envelope is a reservation, **not** a final coastline. |
+| `StoryAnchorDeclaration`, `StoryAnchorRegistry` | [`WorldAtlas.ts`](../src/world-v2/WorldAtlas.ts) | Semantic ID, landmass, world position, clearance and connectivity; current sample IDs are not approved. |
+| `WorldPosition`, `WorldCellCoordinate` | [`WorldCoordinates.ts`](../src/world-v2/WorldCoordinates.ts) | JS-double global X/Y/Z, negative-safe indexing and render-local rebasing. |
+| `CompiledAtlasIndex`, `CompiledPageReference`, `CompiledCell` | [`WorldArtifacts.ts`](../src/world-v2/WorldArtifacts.ts) | SHA-verified page and tile references; `geography-stage-v1` is an engineering profile, not a published canonical map. |
+| World/entity ID generation | [`WorldIdentity.ts`](../src/world-v2/WorldIdentity.ts) | Deterministic namespaced identifiers; no load-order or mutable-array-index identity. |
+
+The **future published canonical atlas** will require an explicit seed/version/expansion compatibility policy. Do not copy old proposed `anchorsRef` / `cellCatalogRef` fields into a second competing schema; the current code embeds `anchors` and uses compiled catalog references.
 
 - Generate landmasses from independent, stable sub-seeds. Adding islands/continents must **not** reroll existing geometry or change established anchor IDs.
 - Publish data/versioned cell assets from a development-side world build, then **stream precomputed content** to browsers. Client-side procedural detail is permitted only when it is deterministic and inexpensive.
@@ -139,7 +132,7 @@ The pipeline can iterate between stages as necessary; it must never silently acc
 
 ## 10. Next handoff
 
-**Immediate:** Verify the [functional Phase 2 staging world](WORLD_V2_PHASE2_RUNTIME.md), review the intended world layout with the user, and then connect the existing Hearthmere assets and quest milestones through story anchors in Phase 3. The paged/ground-navigation implementation is available for that integration. The old playable Hearthmere remains intact until migration. **Legacy save migration is out of scope**.  
+**Immediate:** Start the [Phase 3 integration sequence](WORLD_V2_PHASE3_HANDOFF.md) with proposed semantic anchor plans and an opt-in V2 story entrypoint; review the intended world layout with the user before publishing a canonical atlas. Connect existing Hearthmere assets and quest milestones without relying on old positions. The paged/ground-navigation implementation is available for that integration. The old playable Hearthmere remains intact until migration. **Legacy save migration is out of scope**.  
 **Next code task:** Author the confirmed world/anchor blueprint and integrate the live hero, companions and quest encounters against V2 terrain/anchors without hardcoded old route positions. Keep physics overhangs, authored obstacles, LOD/mobile profiling and ship controls as explicit follow-up gates rather than silently claiming them shipped.  
 **No destructive cleanup** until the replacement entrypoint and scenario tests pass. Retirement of old modules requires removing live imports and preserving Hearthmere assets/quest behavior, **not** old-save migration.
 

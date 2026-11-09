@@ -6,5 +6,6 @@ export const OPENING_STEPS = [
 
 export type OpeningStep = (typeof OPENING_STEPS)[number];
 
-/** Legacy v1 snapshots use these 2D positions. V2 migrates them via named anchors. */
+/** Legacy v1 snapshots only; World V2 does NOT migrate old saves (D165).
+ * New V2 sessions use canonical world positions and named story anchors. */
 export interface OpeningPoint { x: number; z: number }

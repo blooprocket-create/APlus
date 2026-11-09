@@ -1,8 +1,8 @@
 # Astral Chronicles — consolidated design overview
 
-November 4, 2026. Start here to review the replacement game's direction. This consolidates the user interview into a readable brief. It is a design package in progress, not a completed implementation handoff or a description of features already built.
+Original overview: November 4, 2026. **World V2 implementation cross-reference: November 8, 2026.** This remains a creative overview, not a snapshot of what code has shipped. Coding agents must start with [AGENTS.md](../AGENTS.md), [current implementation status](WORLD_V2_STATUS.md), [decision register](WORLD_V2_DECISIONS.md), [architecture](WORLD_V2_ARCHITECTURE.md) and [Phase 3 handoff](WORLD_V2_PHASE3_HANDOFF.md).
 
-For the build sequence and the specifications each milestone needs, start with the [production roadmap](PRODUCTION_ROADMAP.md).
+For the build sequence and each milestone's acceptance criteria, use the [current production roadmap](PRODUCTION_ROADMAP.md); the technical work is already underway.
 
 ## What we are making
 
@@ -18,7 +18,7 @@ Minimum **60 fps on iPhone 14 Pro** is a requirement to verify on physical hardw
 
 The latest decisions (D155–D165) establish **procedural-first geographical generation, one canonical shared world, multiple continents/islands, fully explorable oceans, player-controlled ships with accessible action-RPG handling, optional fast travel, a wider isometric sailing camera, physically accessible free landings, and persistent ships with port/shipyard recovery**. Major story locations remain fixed in the published world, but **Hearthmere's current town layout and source coordinates may be completely rebuilt** if its working assets, quests, story outcomes and cinematic functionality are preserved. Legacy saves need not migrate (D165); World V2 gets a fresh save namespace.
 
-The implementation authority is [World Architecture V2](WORLD_V2_ARCHITECTURE.md). The [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) distinguishes current active Hearthmere code from old, still-reachable prototype systems and lists the legacy-retirement and new-world save gates. Proposed terrain, streaming, save, ship and world-builder interfaces are **not yet implemented**; exact landmass geography and scale remain undecided.
+The implementation authority is [World Architecture V2](WORLD_V2_ARCHITECTURE.md). The [Phase 0 audit](WORLD_V2_PHASE0_AUDIT.md) distinguishes current active Hearthmere code from old, still-reachable prototype systems and lists the legacy-retirement and new-world save gates. The **atlas/streaming, offline terrain builder, height/slope collision and navigation services are implemented in a noncanonical Phase 2 staging lab** ([evidence](WORLD_V2_PHASE2_RUNTIME.md)); V2 campaign save/resume and actual ship movement/recovery are **not** implemented. The final landmass geography and scale remain undecided.
 
 ## Emotional and narrative identity
 
@@ -152,7 +152,7 @@ The major direction is established; the next work should produce concrete design
 3. The twelve ability-tree designs, three awakened kits, and hero/gear/form visual briefs.
 4. A technical delivery/persistence/performance plan and a staged implementation handoff with acceptance criteria.
 
-The branching campaign and opening drafts remain story authorities, but the latest technical implementation priority is **World Architecture V2 Phase 1**, following a completed Phase 0 engineering audit and non-destructive extraction. The planned Hearthmere restructuring supersedes any expectation that existing opening-world coordinates must remain fixed. The full campaign and exact landscape are not yet implemented.
+The branching campaign and opening drafts remain story authorities, but the latest technical implementation priority is **World Architecture V2 Phase 3 — Hearthmere integration** after Phase 0, Phase 1 and Phase 2's staging engineering foundation ([status](WORLD_V2_STATUS.md)). The planned Hearthmere restructuring supersedes any expectation that existing opening-world coordinates must remain fixed. The full campaign and exact landscape are not yet implemented.
 
 ## Document map and authority
 
