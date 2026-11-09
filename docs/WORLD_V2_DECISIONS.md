@@ -60,7 +60,7 @@ For detailed story/ending decisions, [DESIGN_DIRECTION.md](DESIGN_DIRECTION.md) 
 | New V2 save/resume and persistent world-state deltas | OPEN | Versioned namespace, reliable checkpoints, reload/defeat tests; **no legacy migration**. |
 | Controllable boats, physical free landing, ship ownership/location, recovery and fast travel | OPEN | Phase 4 end-to-end water → land → water → reload/recovery tests. |
 | Mobile FPS/thermal/memory/draw-call budgets | OPEN | Physical iPhone 14 Pro measurement; optimize until target is met. |
-| Final environment/cinematic art quality | OPEN / DEFERRED | Preserve existing art language now; production-quality region dressing after core gameplay works. |
+| Final environment/cinematic art quality | DIRECTION LOCKED (D166), EXECUTION OPEN | Start original target look-development and composed gameplay scene review in Phase 2.5. Existing painted visual parity is a baseline, not the final target. Large-scale region/cinematic asset production remains Phase 5; exact targets need user approval. |
 
 ## Recording a new decision
 
