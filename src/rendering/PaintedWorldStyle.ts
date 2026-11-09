@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { piece } from './ArtMesh';
 
+/** Original Hearthmere painted-river pigments, shared by the atlas ocean. */
+export const PAINTED_WATER_PALETTE = {
+  deep: 0x254f71,
+  channel: 0x4386a0,
+  shallows: 0x80b7a2,
+  glint: 0xe0f0df,
+} as const;
+
 /**
  * Astral Chronicles' ORIGINAL painted world treatment, extracted verbatim
  * from HearthmereScenery so the procedural atlas uses the same material
