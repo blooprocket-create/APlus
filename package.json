@@ -15,6 +15,7 @@
     "preview": "vite preview --host",
     "test": "vitest run",
     "audit:world": "node tools/world-v2-dependency-audit.mjs",
+    "docs:check": "node tools/world-v2-doc-check.mjs",
     "test:browser": "node tools/world-v2-browser-smoke.mjs",
     "test:visual": "node tools/world-v2-visual-review.mjs"
   },
