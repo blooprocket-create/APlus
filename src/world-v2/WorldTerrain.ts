@@ -58,6 +58,8 @@ export interface TerrainCell {
     readonly biomes: Uint8Array;
     readonly roads: Uint8Array;
   };
+  /** Offline walkability overlay, derived from the same triangles as collision. */
+  readonly navigation?: { readonly gridSize: number; readonly walkable: Uint8Array };
 }
 
 /**
