@@ -8,6 +8,9 @@ import { createSceneryMeshes } from './WorldSceneryRender';
 import { planCells } from './WorldCellStreamer';
 import { addOriginalWorldLighting, addPaintedSky, paintedPalette } from '../rendering/PaintedWorldStyle';
 import { CharacterRig } from '../rendering/CharacterMeshBuilder';
+import { GAMEPLAY_CAMERA_OFFSET, IsometricCameraController } from '../rendering/IsometricCamera';
+import { surfaceAt, traverseTerrain, type TerrainCellStore, type TraversalBlock } from './WorldSurface';
+import { findTerrainPath, type NavigationResult } from './WorldNavigation';
 
 /**
  * Standalone QA-only sandbox: does NOT use Hearthmere's old path generator,
@@ -45,7 +48,10 @@ const originUniform: THREE.IUniform<THREE.Vector3> = { value: new THREE.Vector3(
 const disabledSceneryCutaway = { value: new THREE.Vector4(0, 0, 0, 0) };
 const ocean = createOceanPreview();
 scene.add(ocean.mesh);
-const camera = new THREE.OrthographicCamera(-65, 65, 44, -44, 0.1, 400);
+const cameraController = new IsometricCameraController();
+const camera = cameraController.camera;
+camera.far = 500;
+camera.updateProjectionMatrix();
 // The actual existing hero rig (not the lab's previous orange cone).
 const playerRig = new CharacterRig('warrior');
 scene.add(playerRig.root);
@@ -210,6 +216,32 @@ function height(x: number, z: number): number {
   return sampleCellHeight(resident.resource.cell, x, z);
 }
 
+// Right-click an available terrain surface to inspect cross-cell A* routes.
+// Uses the same baked navigation and slope/water rules as character movement.
+const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
+const pathLineMaterial = new THREE.LineBasicMaterial({ color: 0xffd475 });
+let pathLine: THREE.Line | null = null;
+canvas.addEventListener('contextmenu', event => event.preventDefault());
+canvas.addEventListener('pointerdown', event => {
+  if (event.button !== 2 || reviewMode) return;
+  pointer.set((event.clientX / Math.max(1, canvas.clientWidth)) * 2 - 1,
+    -(event.clientY / Math.max(1, canvas.clientHeight)) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const groundMeshes = streamer.loaded().map(entry => entry.resource.mesh.children[0])
+    .filter(mesh => mesh instanceof THREE.Mesh);
+  const hit = raycaster.intersectObjects(groundMeshes, false)[0];
+  if (!hit) return;
+  const origin = renderOriginFor(player, atlas.cellSize);
+  pathResult = findTerrainPath(tileStore, player,
+    { x: hit.point.x + origin.x, z: hit.point.z + origin.z });
+  if (pathLine) { scene.remove(pathLine); pathLine.geometry.dispose(); pathLine = null; }
+  if (pathResult.status !== 'complete') return;
+  const vertices = pathResult.waypoints.map(p =>
+    new THREE.Vector3(p.x - origin.x, p.y + 0.45, p.z - origin.z));
+  if (vertices.length < 2) return;
+  pathLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(vertices), pathLineMaterial);
+  scene.add(pathLine);
+});
 const movement = new Set<string>();
 for (const [direction, key] of [
   ['up', 'w'], ['left', 'a'], ['down', 's'], ['right', 'd'],
@@ -231,6 +263,17 @@ window.addEventListener('keyup', event => movement.delete(event.key.toLowerCase(
 window.addEventListener('blur', () => movement.clear());
 
 const player = { x: 0, y: 0, z: 0 };
+const tileStore: TerrainCellStore = {
+  cellSize: atlas.cellSize,
+  getCell(address) {
+    return streamer.loaded().find(entry =>
+      entry.resource.cell.coordinate.x === address.x &&
+      entry.resource.cell.coordinate.z === address.z)?.resource.cell;
+  },
+};
+let movementBlocked: TraversalBlock | null = null;
+let pathResult: NavigationResult | null = null;
+let previewWarp = false;
 const jumps: Record<string, { x: number; z: number }> = {
   heart: { x: 0, z: 0 }, coast: { x: 505, z: 8 },
   island: { x: 1350, z: 540 }, continent: { x: 2700, z: 250 },
@@ -241,6 +284,9 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-jump]')
     const target = jumps[button.dataset.jump ?? ''];
     if (!target) return;
     player.x = target.x; player.z = target.z;
+    previewWarp = button.dataset.jump === 'sea';
+    movementBlocked = null;
+    pathResult = null;
     lastStream = -Infinity;
     streamer.update(player);
   });
@@ -256,10 +302,8 @@ const streamOptions = { worldId: atlas.worldId, cellSize: atlas.cellSize,
 function resize() {
   const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
   renderer.setSize(w, h, false);
-  const halfH = 44 * reviewZoom;
-  camera.left = -halfH * (w / h);
-  camera.right = halfH * (w / h);
-  camera.top = halfH; camera.bottom = -halfH;
+  cameraController.updateAspect();
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -277,13 +321,24 @@ function tick(now: number) {
   let dz = Number(down) - Number(up);
   const len = Math.hypot(dx, dz);
   if (len > 0) { dx /= len; dz /= len; }
-  const speed = movement.has('shift') ? 40 : 20;
-  player.x += dx * dt * speed;
-  player.z += dz * dt * speed;
-  player.y = height(player.x, player.z);
+  const speed = movement.has('shift') ? 13 : 7;
+  const oldX = player.x, oldZ = player.z;
+  if (!reviewMode && !previewWarp && len > 0) {
+    const moved = traverseTerrain(tileStore, player, dx * dt * speed, dz * dt * speed);
+    if (moved.moved) {
+      player.x = moved.position.x; player.y = moved.position.y;
+      player.z = moved.position.z;
+      movementBlocked = null;
+    } else movementBlocked = moved.blockedBy;
+  }
+  // Only sample resident, actual generated ground. Do not teleport a player to
+  // Y=0 while waiting for a streamed collision cell to arrive.
+  const ground = surfaceAt(tileStore, player.x, player.z);
+  if (ground && !previewWarp) player.y = ground.y;
+  const actualDx = player.x - oldX, actualDz = player.z - oldZ;
 
   if (now - lastStream > 120) {
-    gameplay.update(player, { x: dx, z: dz });
+    gameplay.update(player, { x: actualDx || dx, z: actualDz || dz });
     lastStream = now;
   }
   const origin = renderOriginFor(player, atlas.cellSize);
@@ -301,6 +356,10 @@ function tick(now: number) {
   for (const river of riverMeshes) {
     river.mesh.position.set(river.originX - origin.x, 0, river.originZ - origin.z);
   }
+  if (pathLine && pathResult?.status === 'complete') {
+    pathLine.geometry.setFromPoints(pathResult.waypoints.map(p =>
+      new THREE.Vector3(p.x - origin.x, p.y + .45, p.z - origin.z)));
+  }
   for (const { resource } of streamer.loaded()) {
     resource.sceneryTime.value = reviewMode ? 0 : now * .001;
     const cell = resource.cell;
@@ -309,10 +368,14 @@ function tick(now: number) {
       cell.corner.z + cell.cellSize / 2 - origin.z,
     );
   }
-  const camX = 35 * Math.cos(reviewAngle) - 48 * Math.sin(reviewAngle);
-  const camZ = 35 * Math.sin(reviewAngle) + 48 * Math.cos(reviewAngle);
-  camera.position.set(local.x + camX, local.y + 54, local.z + camZ);
-  camera.lookAt(local.x, local.y, local.z);
+  // Same perspective, height, pitch and distance as the playable game.
+  // Review zoom scales around the *native* offset, not the old 54-unit aerial
+  // inspection camera. At sea, a later ship view can widen deliberately.
+  const offset = GAMEPLAY_CAMERA_OFFSET;
+  const camX = -offset.z * Math.sin(reviewAngle) * reviewZoom;
+  const camZ = offset.z * Math.cos(reviewAngle) * reviewZoom;
+  camera.position.set(local.x + camX, local.y + .8 + offset.y * reviewZoom, local.z + camZ);
+  camera.lookAt(local.x, local.y + .8, local.z);
   paintedSky.position.copy(camera.position);
   ocean.update(player.x, player.z, local.x, local.z, reviewMode ? 0 : now * 0.001);
   renderer.render(scene, camera);
@@ -334,6 +397,7 @@ function tick(now: number) {
       g.waterKinds[vertexIndex] === 2 ? 'river' : 'land') : 'loading';
     status!.textContent = `World X/Z: ${player.x.toFixed(1)} / ${player.z.toFixed(1)}
 Cell: ${address.x}, ${address.z} · ${biome} · ${waterKind}
+Collision: ${previewWarp ? 'spectator over water' : movementBlocked ?? 'grounded'} · Navigation: ${pathResult?.status ?? 'idle'}
 Resident cells: ${streamer.loaded().length} · failures: ${loadingErrors}
 Geography: ${source.catalog.atlas.landmasses.length} landmasses, ${geoWorld.rivers.length} rivers
 Atlas hash: ${atlas.contentHash} · baked geography tiles: ${source.catalog.cells.length}`;
@@ -353,7 +417,7 @@ declare global {
         ready: boolean; frame: number; expected: number; resident: number;
         loadingErrors: number; scenery: number; worldX: number; worldZ: number;
         atlasHash: string; currentBiome: string; water: string; cellId: string;
-        artPipeline: 'hearthmere-painted-v1';
+        artPipeline: 'hearthmere-painted-v1'; cameraMode: 'native-perspective';
       };
     };
   }
@@ -365,6 +429,7 @@ if (reviewMode) {
       movement.clear();
       player.x = view.x;
       player.z = view.z;
+      previewWarp = true;
       reviewAngle = Number.isFinite(view.angle) ? (view.angle ?? 0) : 0;
       reviewZoom = Number.isFinite(view.zoom) ? Math.max(0.5, Math.min(3.5, view.zoom ?? 1)) : 1;
       resize();
@@ -390,6 +455,7 @@ if (reviewMode) {
         loadingErrors, scenery, worldX: player.x, worldZ: player.z,
         atlasHash: atlas.contentHash,
         artPipeline: 'hearthmere-painted-v1',
+        cameraMode: 'native-perspective',
         currentBiome: BIOME_LABELS[biome.biome],
         water: biome.waterKind === 0 ? 'land' : biome.waterKind === 1 ? 'ocean' : 'river',
         cellId: home?.id ?? 'unloaded',
@@ -401,6 +467,8 @@ requestAnimationFrame(tick);
 window.addEventListener('pagehide', () => {
   active = false;
   gameplay.dispose();
+  if (pathLine) { scene.remove(pathLine); pathLine.geometry.dispose(); }
+  pathLineMaterial.dispose();
   scene.remove(ocean.mesh);
   ocean.mesh.geometry.dispose();
   ocean.mesh.material.dispose();
