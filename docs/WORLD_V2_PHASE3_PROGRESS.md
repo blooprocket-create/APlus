@@ -1,6 +1,6 @@
 # World V2 Phase 3.0 — first playable Hearthmere story integration
 
-**Status:** Work started in [PR #11](https://github.com/blooprocket-create/APlus/pull/11). This is **only an opt-in first-beat vertical slice**—**not** the complete Phase 3 campaign port, and not a claim that the existing full quest engine, NPC AI, cinemas or V2 save system are running on procedural terrain.
+**Status:** First Phase 3.0 integration slice **merged** in [PR #11](https://github.com/blooprocket-create/APlus/pull/11) (commit `800eeead491179c6a162c5bb0c384c0e0b9fd1a9`). [PR branch full CI: SUCCESS](https://github.com/blooprocket-create/APlus/actions/runs/42570055439) — **181/181 tests**, existing opening smoke for all three heroes, selected-role World V2 entry tests and all 11 geometry screenshots. This is **only an opt-in first-beat vertical slice**—**not** the complete Phase 3 campaign port, and not a claim that the existing full quest engine, NPC AI, cinemas or V2 save system are running on procedural terrain.
 
 **Design authority:** [locked world decisions](WORLD_V2_DECISIONS.md), [Phase 3 acceptance plan](WORLD_V2_PHASE3_HANDOFF.md), [World architecture](WORLD_V2_ARCHITECTURE.md), [source owners](../AGENTS.md).
 
@@ -17,10 +17,10 @@
 ## Verification
 
 - The first four Phase 3 unit tests check every 13-step mapping, named anchor validity, hero/companion role coverage, actual role-specific dialogue, proximity/walkability gating and stopping after one beat.
-- The real Chrome smoke is expanded to visit the opt-in new page as **Celestia**, verify warrior + assassin visual roster, actually walk with keyboard input to the lead over streamed ground, press F and validate her **existing** dialogue and transition to `market`. A PNG is included in the same Hearthmere browser smoke archive.
+- The real Chrome smoke visits the opt-in new page as **Celestia**, verifies warrior + assassin visual roster, actually walks with keyboard input to the lead over streamed ground, presses F and validates her **existing** dialogue and transition to `market`. It also tests Brynhildr through the clickable hero picker and Akatsuki through the direct role link, checking fresh `arrival` state and each unique companion pair. A PNG is included in the same Hearthmere browser smoke archive.
 - Existing Hearthmere three-role start, Phase 1 streaming, Phase 2 geography/navigation and screenshot regression tests remain required. A separate new World V2 save is **not** written by this test.
 
-Run `npm run build`, `npm test`, `npm run world:geo:verify`, `npm run audit:world`, `npm run docs:check`, `npm run test:browser` and `npm run test:visual`. The verified result of the PR must be linked in its CI evidence before merge.
+Run `npm run build`, `npm test`, `npm run world:geo:verify`, `npm run audit:world`, `npm run docs:check`, `npm run test:browser` and `npm run test:visual`. [Full PR run 42570055439 passed](https://github.com/blooprocket-create/APlus/actions/runs/42570055439); the prior original game remained covered by the same regression matrix. The normal main-branch post-merge verification is tracked independently.
 
 ## Crucial non-claims and next steps
 
