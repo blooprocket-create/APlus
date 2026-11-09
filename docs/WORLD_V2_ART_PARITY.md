@@ -1,8 +1,8 @@
-# World V2 — Art-direction continuity contract
+# World V2 — Art-direction continuity contract\n> **2026-11-08 direction refinement (D166):** This document describes the **implemented 2026-11-08 technical art-parity baseline**, not the final visual target. The user wants a significant quality upgrade: painterly, lush Ghibli-leaning environments with sharply rendered, dynamic Solo Leveling-feeling anime heroes and combat effects. Implement an original coherent hybrid, not copied IP assets or shots. Preserve and reuse functional shaders where useful, but modernize or replace visual techniques that fail the new target. See [Phase 2.5 look-development and gameplay convergence](WORLD_V2_PHASE2_5_GAMEPLAY_INTEGRATION.md). Current screenshots are **not** proof of beautiful final art.\n
 
 **Status:** Implementation in [PR #8](https://github.com/blooprocket-create/APlus/pull/8). Applies to all geography, biome, shoreline and eventual Hearthmere restaging work. The staged atlas is still provisional geography and is **not** approved as final canon.
 
-## Source of truth: the existing game, not the debugging lab
+## Functional baseline: the existing game, not the debugging lab (not the new quality target)
 
 The original game's painted anime/cel-shaded visual language is already implemented in these existing modules:
 
@@ -13,7 +13,7 @@ The original game's painted anime/cel-shaded visual language is already implemen
 - `src/rendering/EnvironmentBuilder.ts`: established ambient, key sun, shadow settings and cinematic rendering characteristics.
 - `src/rendering/CharacterMeshBuilder.ts`: the real hero rigs, attire and animation visual language.
 
-**Decision:** New World V2 content must extend or reuse those art systems, even when terrain and object placement are procedural. A temporary standalone demo shader, grey primitive tree or default Lambert placeholder is *not* an acceptable production substitute.
+**Phase 2 baseline:** New V2 content reused those functional art systems to restore visual continuity. **New D166 direction:** reuse/extract them where helpful, but do not preserve old shader or mesh quality at the expense of the upgraded original anime art target. A temporary standalone demo shader, grey primitive tree or default Lambert placeholder is *not* an acceptable production substitute.
 
 ## How the current integration restores continuity
 

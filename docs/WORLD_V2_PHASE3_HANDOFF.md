@@ -2,7 +2,7 @@
 
 **Status:** **IN PROGRESS** via the first opt-in arrival integration [PR #11](https://github.com/blooprocket-create/APlus/pull/11), documented in [Phase 3.0 progress](WORLD_V2_PHASE3_PROGRESS.md). Full campaign restaging, companion AI and V2 saving are **NOT implemented**. Baseline before work was merged [PR #9](https://github.com/blooprocket-create/APlus/pull/9). The World V2 terrain/navigation foundation exists; the **real game still launches its older Hearthmere scene**. Read [AGENTS.md](../AGENTS.md), [current status](WORLD_V2_STATUS.md), [user decisions](WORLD_V2_DECISIONS.md), [World V2 architecture](WORLD_V2_ARCHITECTURE.md) and the [Phase 0 legacy audit](WORLD_V2_PHASE0_AUDIT.md) before editing.
 
-## Goal
+> **Priority change, 2026-11-08:** A new [Phase 2.5 — Gameplay & visual foundation convergence](WORLD_V2_PHASE2_5_GAMEPLAY_INTEGRATION.md) must pass before continuing 3.1–3.4. Phase 3.0's merged arrival demonstration remains intact. This Phase 3 document still defines the subsequent STORY/TOWN/CINEMATIC/SAVE work, but **not the prerequisite combat/animation/VFX migration**, which now has its own acceptance gate. The original Hearthmere art pipeline is a functional baseline, not the finished art-quality target (D166).\n\n## Goal
 
 Make the **existing Hearthmere opening truly playable inside World V2**, from arrival through refuge, for any of the three hero choices, while keeping the user's freedom to rebuild the town into a more cinematic landscape. Reuse working assets, characters, quests, cutscene behaviors, dialogue, combat and companion AI; **replace positional/path-specific coupling rather than preserving old X/Z coordinates**.
 
