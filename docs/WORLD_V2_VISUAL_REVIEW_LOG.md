@@ -6,7 +6,8 @@
 | --- | --- | --- | --- |
 | Baseline (before visual audit) | [Earlier Chrome screenshot archive](https://github.com/blooprocket-create/APlus/actions/runs/42537843437) | **Critical:** dark navy square and diagonal water gaps appear as sea tiles unload. **Major:** relatively bare rolling terrain, debug tile grid and HUD obscure the landscape. | Replace per-tile ocean with continuous ocean shader; add first-pass biome-aware original vegetation/rocks; capture unoccluded fixed views. |
 | Visual pass 1 | [11 real screenshots, gallery and diagnostics](https://github.com/blooprocket-create/APlus/actions/runs/42539344764) | **Ocean gaps resolved** in captured open-sea/island-coast views. 11/11 cameras captured; no browser JS or terrain load failures. **Major remaining:** sharp, noisy jagged terrain resembles folded paper; uniform spread of conifers/rocks; deeply incised river canyon; broad grey staging pads lack contextual design. | Correct river headwater altitude clamp, smooth/extend road and stage-pad slope blending, tone down high-frequency terrain relief, cluster vegetation, and enforce anchor clearances. |
-| Visual pass 2 | CI screenshots to be retrieved from the latest PR #7 successful run | Check whether river basin, foothills and stage pads improve **in exactly the same 11 camera views**. Verify ocean continuity remains and skybox/color/shoreline still read well. | Review actual PNGs, not only lint/test results; iterate again if improvements are not visually evident. |
+| Visual pass 2 | [11 screenshots, second-pass gallery](https://github.com/blooprocket-create/APlus/actions/runs/42540145099) | **River gorge and severe story-pad cliffs substantially reduced** at the identical camera positions; forest clusters are less uniformly distributed (e.g. arrival: 537 → 227 nearby scenery instances). **New major defect exposed:** river displayed as a thick turquoise 3D tube now hovering/overlapping the terrain instead of occupying its carved bed. Ocean remains continuous. | Replace river-tube geometry with a world-space surface ribbon at the authoritative river water height. Confirm in the next screenshot set. |
+| Visual pass 3 | Following PR #7 screenshot run | Inspect river-basin and foothill screenshots to confirm no hovering water mesh or new shore/cell gaps. | Document and merge only if build/Chrome/tests and visual review are acceptable. |
 
 ## Explicit review findings
 
@@ -21,3 +22,9 @@
 For each critical/major finding, cite a specific screenshot name (e.g. `river-basin.png`), describe the actual visible problem, identify the source module and intended visual goal, make one bounded change, rerun `npm run test:visual`, inspect the same camera **before and after**, and mark the item resolved only after visually confirming the new image. Maintain tests for deterministic geography, story anchors and old Hearthmere's three-role start.
 
 The visual gallery is a **review aid**; its technical image metrics must never be presented as an automatic aesthetic sign-off.
+
+## Second-pass image review (2026-11-09)
+
+The pairwise comparison was made from **actual screenshots** with the same shot IDs rather than from edited art or rotated camera angles. The corrected river altitude and broader stage-pad blend removed the enormous visible troughs in `river-basin.png` and `hearthmere-arrival.png`. The screenshot immediately revealed that the old debug water overlay was still a round tube drawn at the river centerline; with the canyon gone, it appeared to float *above* the rolling landscape. The third-pass fix builds a flat water surface mesh along the river's monotonic level, with the terrain handling occlusion at the banks. This requires another screenshot pass to verify.
+
+There is still no approval of the five-landmass atlas as **final world canon**, and the instanced preview trees are not a final art-asset replacement.
