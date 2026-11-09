@@ -1,6 +1,6 @@
 # World V2 Phase 2 — Geographic generation and staged atlas
 
-**Status (2026-11-08):** Phase 2 **geography-generator and offline staging slice** implemented in [PR #6](https://github.com/blooprocket-create/APlus/pull/6). This is an inspectable technology/layout proposal, **not the final user-approved canonical map**. The existing playable Hearthmere scene and quests are not relocated by this work.
+**Status (2026-11-08):** Phase 2 **geography-generator and offline staging slice** implemented in [PR #6](https://github.com/blooprocket-create/APlus/pull/6) and extended by the [functional navigation/runtime milestone](WORLD_V2_PHASE2_RUNTIME.md). This is an inspectable technology/layout proposal, **not the final user-approved canonical map**. The existing playable Hearthmere scene and quests are not relocated by this work.
 
 ## What is real and working
 
@@ -22,7 +22,7 @@
 | Geographic sampling | `src/world-v2/WorldGeography.ts` | Independent coast/elevation/biome/river/road sampling from global coordinates; no Three.js and no quest progression |
 | Terrain-cell generation | `src/world-v2/WorldTerrain.ts` | Geography vertex attributes, stable cell boundaries, surface sample helpers |
 | Artifact serialization | `src/world-v2/WorldArtifacts.ts` | Versioned geographic catalog and tile schema validation, array-size/value checking |
-| Offline world builder | `tools/world-v2-compile.mjs --geography` | Reproducible generation + 302 staging tiles, adjacent seam checks, river/mouth and story-site checks, atlas SVG, validation report |
+| Offline world builder | `tools/world-v2-compile.mjs --geography` | Reproducible full staging extent (4,608 cells / 72 pages), ground-nav masks, adjacent seam checks, river/mouth and story-site checks, atlas SVG, validation report |
 | Runtime source | `src/world-v2/WorldV2GameplayBridge.ts` | SHA-256 checked HTTP content, rejects incomplete geographic tiles, opt-in engine adapter |
 | 3D inspection | `world-v2-geography.html`, `src/world-v2/geography-lab.ts` | Baked cell visualization, ocean plane, biome/road coloring, river debug geometry, jumps/stream diagnostics |
 | Automated proof | `tests/worldV2Geography.test.ts`, Chrome workflow | Geographical invariants, seam tests for *all* fields, real browser island/ocean transitions |
@@ -40,7 +40,7 @@ npm run test:browser
 npm run audit:world
 ```
 
-`public/world-v2/geography/` is a **generated directory**, excluded from source control and regenerated during Vite's prebuild. The schema/profile is `geography-stage-v1`. The staging compiler creates **302 streamed terrain cells**, a versioned atlas index, a deterministic `validation-report.json`, an `atlas-overview.svg`, and **9,078 border vertex comparisons**. Both normal and reversed generation orders are checked byte-for-byte. The report includes covered land/ocean/river/road samples, biome counts, validated anchors and rivers.
+`public/world-v2/geography/` is a **generated directory**, excluded from source control and regenerated during Vite's prebuild. The schema/profile is `geography-stage-v1`. The staging compiler creates **4,608 streamed terrain cells across 72 checksummed 8×8 pages**, a versioned atlas index, a deterministic `validation-report.json`, an `atlas-overview.svg`, and **154,224 border vertex comparisons**. Both normal and reversed generation orders are checked byte-for-byte. The report includes covered land/ocean/river/road samples, biome counts, validated anchors and rivers.
 
 ### Screenshot-driven visual QA and first rendering iterations
 
@@ -54,16 +54,16 @@ The browser does **not** run the expensive heightfield generator. It fetches com
 
 **Verified initial run:** [GitHub Actions run 42537341691](https://github.com/blooprocket-create/APlus/actions/runs/42537341691) passed **157 tests / 21 files**, TypeScript/Vite production build, both geographic bake orders, all terrain seam and anchor/river constraints, legacy Hearthmere startup across all three classes, and real Chrome navigation from island to **deep ocean** (5 landmasses, 6 rivers, 302 compiled tiles, no observed cell-load failures). CI uploads screenshots and compiler reports. Later commits require their own green run.
 
-**Terrain physics disclaimer:** A visual/heightfield preview is **not** a full production collision mesh, walkability navmesh, boat-water interaction, or proof that every future coastline is safe to land on. Those are integration requirements rather than accomplished game mechanics. The 60 FPS iPhone 14 Pro target remains unmeasured.
+**Terrain physics disclaimer:** A reusable bare-terrain collision and nav-mask/pathfinding service is now present and exercised in the staged geography lab ([details](WORLD_V2_PHASE2_RUNTIME.md)), but this is **not** a full production physics system for authored meshes, overhangs, bridges, boats, dynamic NPCs or all future coastline shapes. The 60 FPS iPhone 14 Pro target remains unmeasured.
 
 ### What Phase 2 still needs before it could be called production geography
 
 - User review of **actual** continent/island shapes, scale and Hearthmere placement (staging parameters above are not canon).
 - Freeze a versioned **published canonical** atlas/seed and geographic footprints, independent of sample lab settings. Never silently regenerate published landmasses.
-- Bake the **full geographic extent in paged regional catalogs** rather than these deliberately selected 302 test cells. Include multiple terrain LOD meshes, distant silhouettes and map tiles. Today's finite catalog will not stream outside the test patches.
-- Ground/river/shoreline collision and continuous actor/companion navmesh links; verify road and non-road routes through real terrain inclines and accessible beaches.
+- The full **staging** geographic extent is now baked in 72 pages; when the *canonical* world is approved, republish its versioned extent and add low-poly distant LOD silhouettes/map tiles. Avoid pretending the 4,608 current cells include unapproved future expansions.
+- Bare-ground/river/shore collision and A* links now exist in the staging lab; integrate them with actual hero, NPC/companion movement, authored props/structures, bridges and obstacle collision during Phase 3. Use shoreline probes as a precursor to Phase 4 vessel landing.
 - Enhance hydrology beyond constrained radial channels: watershed integrity, river joins, lake/tributary handling, crossings and natural runoff/erosion where desired.
 - Terrain vegetation/material/prop population and quality-checked mobile budgets. Ocean gameplay, controllable ships and ownership belong to Phase 4, not Phase 2.
 - After the geography is approved, **Phase 3** can migrate Hearthmere's **assets, quests and cinematics** onto new anchors. Previous player saves are expressly **not** migrated (D165).
 
-**Recommendation for next iteration:** Review the staging world visually in [the geography lab](../world-v2-geography.html), select or edit the intended landmass layout and Hearthmere's approach/coast, then build the canonical authored anchor/region catalog and physical navigation bake. This keeps the world procedural-first and leaves story beats stable without canonizing today's test coordinates.
+**Recommendation for next iteration:** Review the staging world's FUNCTIONAL movement and accessibility in [the geography lab](../world-v2-geography.html), select or edit the intended landmass layout and Hearthmere's approach/coast, then publish the canonical authored anchor/region catalog and move into Phase 3 story integration. This keeps the world procedural-first and leaves story beats stable without canonizing today's test coordinates.
