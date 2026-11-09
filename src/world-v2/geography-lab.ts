@@ -417,7 +417,7 @@ declare global {
         camera: string; cameraDistance: number; cameraFov: number;
         x: number; y: number; z: number; groundY: number | null;
         walkable: boolean; collision: TraversalBlock | null;
-        resident: number; atlasPages: number; fetchedPages: number;
+        resident: number; frame: number; atlasPages: number; fetchedPages: number;
       };
       pathTo: (x: number, z: number) => NavigationResult;
     };
@@ -443,7 +443,7 @@ if (new URLSearchParams(location.search).get('functionalQA') === '1') {
         x: player.x, y: player.y, z: player.z,
         groundY: ground?.y ?? null, walkable: ground?.walkable ?? false,
         collision: movementBlocked,
-        resident: streamer.loaded().length,
+        resident: streamer.loaded().length, frame: framesRendered,
         atlasPages: source.catalog.pages?.length ?? 0,
         fetchedPages: performance.getEntriesByType('resource')
           .filter(item => item.name.includes('/world-v2/geography/pages/')).length,
