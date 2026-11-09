@@ -116,7 +116,8 @@ describe('World V2 Phase 2 runtime — terrain navigation and future shoreline a
     const right = withTerrainNavigation(flatCell(1,0,-2,true));
     expect(findTerrainPath(store(left), { x: 5,z:5 }, { x: 25,z:5 }).status).toBe('awaiting-cells');
     expect(findTerrainPath(store(left,right),{x:5,z:5},{x:25,z:5}).status).toBe('unreachable');
-    expect(findTerrainPath(store(left,right),{x:5,z:5},{x:7,z:5},{maxVisited:0})).toThrow;
+    expect(() => findTerrainPath(store(left,right),{x:5,z:5},{x:7,z:5},{maxVisited:0}))
+      .toThrow(/search budget/);
   });
   it('rejects diagonal corner cuts and returns a bounded search result', () => {
     const tile = withTerrainNavigation(flatCell(0,0,4));
