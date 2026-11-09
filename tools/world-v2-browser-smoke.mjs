@@ -217,6 +217,11 @@ async function main() {
       afterMovement.fetchedPages < 1) {
       throw new Error('V2 movement lost ground lock or bypassed page fetch: ' + JSON.stringify(afterMovement));
     }
+    const nativeCameraShot = await cdp.send('Page.captureScreenshot', {
+      format: 'png', captureBeyondViewport: false,
+    });
+    writeFileSync(path.join(screenshots, 'world-v2-native-grounded-camera.png'),
+      Buffer.from(nativeCameraShot.data, 'base64'));
     console.log('World V2 native camera, grounded movement and A* browser checks passed:',
       JSON.stringify(afterMovement));
     await cdp.eval("document.querySelector('#geo-jump-island').click()");
