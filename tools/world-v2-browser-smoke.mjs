@@ -215,7 +215,12 @@ async function main() {
     if (cdp?.ws?.readyState === WebSocket.OPEN) cdp.ws.close();
     for (const child of children.reverse()) { try { child.kill('SIGTERM'); } catch {} }
     await delay(200);
-    rmSync(profileDir, { recursive: true, force: true, maxRetries: 12, retryDelay: 250 });
+    try { rmSync(profileDir, { recursive: true, force: true, maxRetries: 12, retryDelay: 250 }); }
+    catch (error) {
+      // CI's ephemeral runner will clean /tmp. A Chromium helper still
+      // writing a profile after SIGTERM must not overturn passing gameplay QA.
+      console.warn('Nonfatal Chrome profile cleanup:', String(error));
+    }
   }
 }
 
