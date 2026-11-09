@@ -237,9 +237,10 @@ canvas.addEventListener('pointerdown', event => {
   if (pathLine) { scene.remove(pathLine); pathLine.geometry.dispose(); pathLine = null; }
   if (pathResult.status !== 'complete') return;
   const vertices = pathResult.waypoints.map(p =>
-    new THREE.Vector3(p.x - origin.x, p.y + 0.45, p.z - origin.z));
+    new THREE.Vector3(p.x, p.y + 0.45, p.z));
   if (vertices.length < 2) return;
   pathLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(vertices), pathLineMaterial);
+  pathLine.position.set(-origin.x, 0, -origin.z);
   scene.add(pathLine);
 });
 const movement = new Set<string>();
@@ -334,7 +335,7 @@ function tick(now: number) {
   // Only sample resident, actual generated ground. Do not teleport a player to
   // Y=0 while waiting for a streamed collision cell to arrive.
   const ground = surfaceAt(tileStore, player.x, player.z);
-  if (ground && !previewWarp) player.y = ground.y;
+  if (ground && (!previewWarp || reviewMode)) player.y = ground.y;
   const actualDx = player.x - oldX, actualDz = player.z - oldZ;
 
   if (now - lastStream > 120) {
@@ -357,8 +358,7 @@ function tick(now: number) {
     river.mesh.position.set(river.originX - origin.x, 0, river.originZ - origin.z);
   }
   if (pathLine && pathResult?.status === 'complete') {
-    pathLine.geometry.setFromPoints(pathResult.waypoints.map(p =>
-      new THREE.Vector3(p.x - origin.x, p.y + .45, p.z - origin.z)));
+    pathLine.position.set(-origin.x, 0, -origin.z);
   }
   for (const { resource } of streamer.loaded()) {
     resource.sceneryTime.value = reviewMode ? 0 : now * .001;
@@ -400,7 +400,8 @@ Cell: ${address.x}, ${address.z} · ${biome} · ${waterKind}
 Collision: ${previewWarp ? 'spectator over water' : movementBlocked ?? 'grounded'} · Navigation: ${pathResult?.status ?? 'idle'}
 Resident cells: ${streamer.loaded().length} · failures: ${loadingErrors}
 Geography: ${source.catalog.atlas.landmasses.length} landmasses, ${geoWorld.rivers.length} rivers
-Atlas hash: ${atlas.contentHash} · baked geography tiles: ${source.catalog.cells.length}`;
+Atlas hash: ${atlas.contentHash} · baked geography tiles: ${source.catalog.cells.length +
+  (source.catalog.pages ?? []).reduce((sum, page) => sum + page.cellCount, 0)}`;
   }
   requestAnimationFrame(tick);
 }
