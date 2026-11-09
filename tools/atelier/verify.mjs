@@ -16,6 +16,10 @@ for(const name of ['garden.glb','celestia.glb','keeper.glb']){
  }
  manifest.assets.push({name,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),meshes:doc.meshes.length,materials:doc.materials.length});
 }
+const portraitBytes=readFileSync('public/art/observatory/portrait.json');
+const portrait=JSON.parse(portraitBytes);
+if(portrait.schemaVersion!==1||portrait.depth.length!==portrait.nx*portrait.ny||!portrait.depth.every(Number.isFinite))throw Error('Invalid sculpt-fitting surface');
+manifest.assets.push({name:'portrait.json',bytes:portraitBytes.length,sha256:createHash('sha256').update(portraitBytes).digest('hex'),source:'Front-surface samples from original landmark sculpt; drives eye/lid fitting'});
 const png=readFileSync('public/art/observatory/pigments.png');
 manifest.assets.push({name:'pigments.png',bytes:png.length,sha256:createHash('sha256').update(png).digest('hex'),source:'Original generated albedo atlas; prompt and use documented in docs/OBSERVATORY_ATELIER.md'});
 if(process.argv.includes('--write'))writeFileSync('public/art/observatory/manifest.json',JSON.stringify(manifest,null,2)+'\n');

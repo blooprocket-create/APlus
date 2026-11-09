@@ -4,16 +4,16 @@
   "assets": [
     {
       "name": "garden.glb",
-      "bytes": 12831856,
-      "sha256": "e2a4b8ac689034c221d7cb2d0ecf615bb1f4bd1480e0019390672a5633d041df",
-      "meshes": 16,
-      "materials": 16
+      "bytes": 13807664,
+      "sha256": "e52eb7e83469812a1cdcb1c1cc49104ae68eb37e5c3e50ea4588cec796964d6c",
+      "meshes": 21,
+      "materials": 21
     },
     {
       "name": "celestia.glb",
-      "bytes": 1659140,
-      "sha256": "bed309cd4dc400944544277d8966a52f449192c90f91cd5ee782ba93189baaa2",
-      "meshes": 38,
+      "bytes": 1836816,
+      "sha256": "2850ef08dfb597dc85bae06fd648f039fc62323c85761b82060efa05a7b4b1fc",
+      "meshes": 37,
       "materials": 8
     },
     {
@@ -22,6 +22,12 @@
       "sha256": "2f0be4bf14b1a16d28282f6d125633817d0d0bb820f91f3ca009e32707ced4a1",
       "meshes": 4,
       "materials": 4
+    },
+    {
+      "name": "portrait.json",
+      "bytes": 74203,
+      "sha256": "67fd44573f1b25f410ff7d8aa7bc678e644e96075dca291327bb20572d0ec9b8",
+      "source": "Front-surface samples from original landmark sculpt; drives eye/lid fitting"
     },
     {
       "name": "pigments.png",

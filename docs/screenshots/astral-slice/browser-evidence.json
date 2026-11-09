@@ -1,5 +1,6 @@
 {
-  "capturedAt": "2026-11-09T17:40:24.072Z",
+  "capturedAt": "2026-11-09T18:27:11.065Z",
+  "capturePrefix": "10-refinement",
   "browser": "Chromium / SwiftShader",
   "viewport": [
     1280,
@@ -9,10 +10,10 @@
     {
       "ready": true,
       "view": 0,
-      "castAge": 10,
-      "frameIntervalMs": 1862.069999999972,
-      "calls": 149,
-      "triangles": 1176916,
+      "castAge": 10.100000000000001,
+      "frameIntervalMs": 2992.86666666662,
+      "calls": 174,
+      "triangles": 1291019,
       "position": [
         -9,
         0,
@@ -24,17 +25,18 @@
         "attackComboStep": 0,
         "attackSwingProgress": 0,
         "isDashing": false,
-        "hitFlashTimer": 0
+        "hitFlashTimer": 0,
+        "charging": false
       },
       "hp": 530
     },
     {
       "ready": true,
       "view": 0,
-      "castAge": 0.5333000000000029,
-      "frameIntervalMs": 3390.0391304347786,
-      "calls": 158,
-      "triangles": 1183638,
+      "castAge": 0.5166000000000058,
+      "frameIntervalMs": 3983.827659574456,
+      "calls": 183,
+      "triangles": 1297741,
       "position": [
         -9,
         0,
@@ -44,11 +46,11 @@
         "isMoving": false,
         "moveSpeedRatio": 0,
         "attackComboStep": 4,
-        "attackSwingProgress": 0.7142857142857145,
+        "attackSwingProgress": 0.7459047619047595,
         "isDashing": false,
         "hitFlashTimer": 0,
-        "skillSlot": "skill1",
-        "charging": false
+        "charging": false,
+        "skillSlot": "skill1"
       },
       "hp": 530
     },
@@ -67,11 +69,11 @@
     {
       "recordedAbility": {
         "ready": true,
-        "view": 0,
-        "castAge": 0.7167000000000046,
-        "frameIntervalMs": 2486.3719999999926,
-        "calls": 158,
-        "triangles": 1183638,
+        "view": 2,
+        "castAge": 0.7497999999999958,
+        "frameIntervalMs": 2698.424137931028,
+        "calls": 187,
+        "triangles": 1298029,
         "position": [
           -9,
           0,
@@ -81,7 +83,7 @@
           "isMoving": false,
           "moveSpeedRatio": 0,
           "attackComboStep": 4,
-          "attackSwingProgress": 0.8888571428571459,
+          "attackSwingProgress": 0.9998095238095198,
           "isDashing": false,
           "hitFlashTimer": 0,
           "charging": false,

@@ -1,8 +1,12 @@
+import { heroReleaseProgress } from './HeroMotion';
+import { AtelierSecondaryMotion } from './AtelierSecondaryMotion';
+import { AtelierPortrait, type PortraitSurface } from './AtelierPortrait';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
@@ -18,6 +22,10 @@ export class ObservatoryAtelier {
   readonly root = new THREE.Group();
   readonly ready: Promise<void>;
   private readonly composer: EffectComposer;
+  private readonly depthOfField:BokehPass;
+  private reflection:THREE.WebGLRenderTarget|null=null;
+  private readonly oldEnvironment:THREE.Texture|null;
+  private readonly oldEnvironmentIntensity:number;
   private readonly distortion: ShaderPass;
   private readonly antialias: ShaderPass;
   private readonly charge: THREE.Mesh;
@@ -32,6 +40,9 @@ export class ObservatoryAtelier {
   private view = 0;
   private width = 0;
   private height = 0;
+  private secondary:AtelierSecondaryMotion|null=null;
+  private portrait:AtelierPortrait|null=null;
+  private loaded=false;
   private disposed=false;
   private keeperArt:THREE.Group|null=null;
   private atlas: THREE.Texture | null = null;
@@ -48,13 +59,14 @@ export class ObservatoryAtelier {
   constructor(private scene: THREE.Scene, private renderer: THREE.WebGLRenderer,
     private camera: IsometricCameraController, private hero: CharacterRig,
     private origin: THREE.Vector3, private keeper:THREE.Group, readonly baseline = false) {
+    this.oldEnvironment=scene.environment;this.oldEnvironmentIntensity=scene.environmentIntensity;
     this.oldBackground = scene.background; this.oldFog = scene.fog; this.oldTone = renderer.toneMapping;
     scene.traverse(o => { if (o instanceof THREE.Light) this.oldLights.push(o); });
     this.oldLights.forEach(l => { l.visible = false; });
     scene.background = new THREE.Color(0x9bb6af);
     scene.fog = new THREE.FogExp2(0x739a9c, .013);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.18;
-    const hemi = new THREE.HemisphereLight(0xc5e4ec, 0x3f4655, 1.1);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.04;
+    const hemi = new THREE.HemisphereLight(0xc5e4ec, 0x3f4655, .85);
     const sun = new THREE.DirectionalLight(0xffd59a, 3.1);
     sun.position.copy(origin).add(new THREE.Vector3(-12, 12, 6)); sun.target.position.copy(origin);
     sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
@@ -64,6 +76,8 @@ export class ObservatoryAtelier {
     this.root.add(hemi, sun, sun.target, rim, this.light); scene.add(this.root);
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera.camera));
+    this.depthOfField=new BokehPass(scene,camera.camera,{focus:3,aperture:.00045,maxblur:.006});
+    this.depthOfField.enabled=false;this.composer.addPass(this.depthOfField);
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(1,1), .24, .55, 1.25));
     this.distortion = new ShaderPass({
       uniforms: { tDiffuse: { value: null }, age: { value: 10 }, center: { value: new THREE.Vector2(.5,.5) } },
@@ -125,8 +139,8 @@ export class ObservatoryAtelier {
     const loader=new GLTFLoader();
     this.atlas=await new THREE.TextureLoader().loadAsync('/art/observatory/pigments.png');
     this.atlas.colorSpace=THREE.SRGBColorSpace;this.atlas.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());
-    const [garden,couture,keeper]=await Promise.all([loader.loadAsync('/art/observatory/garden.glb'),
-      this.baseline ? Promise.resolve(null) : loader.loadAsync('/art/observatory/celestia.glb'),loader.loadAsync('/art/observatory/keeper.glb')]);
+    const [garden,couture,keeper,portrait]=await Promise.all([loader.loadAsync('/art/observatory/garden.glb'),
+      this.baseline ? Promise.resolve(null) : loader.loadAsync('/art/observatory/celestia.glb'),loader.loadAsync('/art/observatory/keeper.glb'),fetch('/art/observatory/portrait.json').then(r=>{if(!r.ok)throw Error('Missing portrait surface');return r.json() as Promise<PortraitSurface>;})]);
     if(this.disposed){disposeObject(garden.scene);if(couture)disposeObject(couture.scene);disposeObject(keeper.scene);this.atlas?.dispose();return;}
     garden.scene.position.copy(this.origin);this.root.add(garden.scene);
     garden.scene.traverse(o=>{
@@ -135,9 +149,9 @@ export class ObservatoryAtelier {
       if(m.name.startsWith('Valley')) {o.castShadow=false;o.receiveShadow=false;o.material=new THREE.MeshBasicMaterial({color:m.color,side:THREE.DoubleSide});return;}
       m.roughness=Math.max(.45,m.roughness);
       if(m.name.startsWith('Heartwood')) m.color.multiplyScalar(.82);
-      const foliage=m.name.startsWith('Foliage');m.side=foliage||m.name.startsWith('Valley')?THREE.DoubleSide:THREE.FrontSide;
+      const foliage=m.name.startsWith('Foliage');m.side=foliage||m.name.startsWith('Valley')||m.name.startsWith('Banner')||m.name.startsWith('Paper')?THREE.DoubleSide:THREE.FrontSide;
       if(foliage){m.emissive.copy(m.color);m.emissiveIntensity=.18;}
-      this.paintMaterial(m,foliage,false);
+      this.paintMaterial(m,foliage||m.name.startsWith('Banner'),false);
     });
     for(const child of this.keeper.children){child.visible=false;this.hidden.push(child);}
     this.keeperArt=keeper.scene;this.keeper.add(keeper.scene);
@@ -145,19 +159,27 @@ export class ObservatoryAtelier {
       if(m.name.startsWith('Opal')){m.emissive.set(0x58c3da);m.emissiveIntensity=.65;}}});
     if(couture){
       this.hero.root.scale.set(1,1.08,1);
+      const hand=this.hero.root.getObjectByName('Celestia’s casting glove') as THREE.SkinnedMesh;
+      if(hand){const glove=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.7});this.paintMaterial(glove,false,true);hand.material=glove;
+        for(const child of hand.children)child.visible=false;}
+      const head=this.hero.root.getObjectByName('Head')!;head.scale.setScalar(.78);
+      const driver=this.hero.root.getObjectByName('Hero expression controls') as THREE.Mesh;
+      driver.visible=false;this.hidden.push(driver);
+      this.portrait=new AtelierPortrait(portrait,driver);head.add(this.portrait.root);
       // Preserve every joint and the existing facial morph mesh. Replace art only.
       for(const anchor of [...couture.scene.children]) {
         if(!anchor.name.startsWith('attach__'))continue;
         const name=anchor.name.slice(8).replace(/(ShoulderPlate|UpperArm|Forearm|Shin)([LR])$/, '$1.$2');const bone=this.hero.root.getObjectByName(name);if(!bone)throw new Error('Missing couture joint '+name);
         for(const art of [...bone.children]) {
-          if(art instanceof THREE.Bone)continue;
-          art.traverse(o=>{if(o instanceof THREE.Mesh && o.geometry.morphAttributes.position?.length) {o.scale.set(.91,.90,1.01);o.material=new THREE.MeshBasicMaterial({vertexColors:true});}
+          if(art instanceof THREE.Bone||art===this.portrait?.root)continue;
+          art.traverse(o=>{if(o instanceof THREE.Mesh && o.geometry.morphAttributes.position?.length) {o.visible=false;}
             if(o instanceof THREE.SkinnedMesh && o.name === 'Weighted sleeves and trousers'){const cloth=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85});this.paintMaterial(cloth,false,true);o.material=cloth;}
             if(o instanceof THREE.Mesh && !o.geometry.morphAttributes.position?.length && o.name !== 'Weighted sleeves and trousers'){o.visible=false;this.hidden.push(o);}});
         }
         const group=new THREE.Group();group.name='atelier_'+name;bone.add(group);this.fitted.push(group);
         for(const child of [...anchor.children])group.add(child);
         group.traverse(o=>{if(o instanceof THREE.Mesh){o.castShadow=true;const m=o.material as THREE.MeshStandardMaterial;m.side=THREE.DoubleSide;this.paintMaterial(m,false,true);}});
+        if(name==='Hair')this.secondary=new AtelierSecondaryMotion(this.hero.root,bone,group);
         if(name==='Coat') {
           const hem=this.hero.root.getObjectByName('Coat.Hem') as THREE.Bone;
           const skeleton=new THREE.Skeleton([bone as THREE.Bone,hem]);
@@ -181,7 +203,8 @@ export class ObservatoryAtelier {
     const mm=new THREE.PointsMaterial({color:0xffe6a9,size:.035,transparent:true,opacity:.55,depthWrite:false});
     const pollen=new THREE.Points(motes,mm);pollen.name='atelier_pollen';pollen.position.copy(this.origin);this.root.add(pollen);
     this.addAtmosphere();
-    this.setView(0);
+    this.buildReflectionProbe();
+    this.loaded=true;this.setView(0);
   }
 
   private addAtmosphere():void {
@@ -221,6 +244,18 @@ export class ObservatoryAtelier {
         fragmentShader:'varying vec2 vUv;void main(){float edge=pow(sin(vUv.x*3.14159),3.);float fade=sin(vUv.y*3.14159);gl_FragColor=vec4(.8,.73,.44,edge*fade*.028);}'});
       const ray=new THREE.Mesh(new THREE.PlaneGeometry(.65+i*.16,13),m);ray.position.copy(this.origin).add(new THREE.Vector3(-6+i*1.8,6,-4-i*.4));ray.rotation.z=-.42;this.root.add(ray);
     }
+  }
+
+  private buildReflectionProbe():void {
+    // Original analytic sky and a broad warm key. No downloaded HDR environment.
+    const probe=new THREE.Scene();
+    const dome=new THREE.Mesh(new THREE.SphereGeometry(20,24,16),new THREE.ShaderMaterial({side:THREE.BackSide,
+      vertexShader:'varying vec3 p;void main(){p=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+      fragmentShader:'varying vec3 p;void main(){float h=normalize(p).y;vec3 c=mix(vec3(.10,.16,.13),vec3(.42,.65,.76),smoothstep(-.4,.8,h));gl_FragColor=vec4(c,1.);}'}));probe.add(dome);
+    const key=new THREE.Mesh(new THREE.PlaneGeometry(8,7),new THREE.MeshBasicMaterial({color:new THREE.Color(2.2,1.65,1.05),side:THREE.DoubleSide}));
+    key.position.set(-8,9,4);key.lookAt(0,0,0);probe.add(key);
+    const pmrem=new THREE.PMREMGenerator(this.renderer);this.reflection=pmrem.fromScene(probe,.04,.1,100);pmrem.dispose();disposeObject(probe);
+    this.scene.environment=this.reflection.texture;this.scene.environmentIntensity=.55;
   }
 
   private paintMaterial(m:THREE.MeshStandardMaterial,wind:boolean,hero:boolean):void {
@@ -269,20 +304,24 @@ export class ObservatoryAtelier {
   }
   setView(view:number):void {
     this.view=view%3;
-    const shots=[{cameraOffset:{x:7,y:7.2,z:12.8},lookAtOffset:{x:-.7,y:2.4,z:-2}},
-      {cameraOffset:{x:1.8,y:1.7,z:4.1},lookAtOffset:{x:0,y:1.05,z:0}},null];
+    const shots=[{cameraOffset:{x:4.5,y:4.3,z:8.8},lookAtOffset:{x:-1.1,y:1.65,z:-2.5}},
+      {cameraOffset:{x:.95,y:1.42,z:2.9},lookAtOffset:{x:0,y:1.27,z:0}},null];
+    this.depthOfField.enabled=this.view===1;
     this.camera.setCutsceneShot(shots[this.view],this.hero.root.position);
     if(this.view===2)this.camera.snapToIsometricFollow(this.hero.root.position);
   }
   nextView():void{this.setView(this.view+1);}
   update(dt:number,state:CharacterAnimationState):void {
+    this.portrait?.update();this.secondary?.update(dt,this.clock);
     this.clock+=dt;this.uniforms.time.value=this.clock;this.castAge+=dt;
     if(this.keeperArt)this.keeperArt.position.y=Math.sin(this.clock*1.7)*.065;
     this.distortion.uniforms.age.value=this.castAge;
-    const winding=state.attackComboStep===4 && state.skillSlot==='skill1' && state.attackSwingProgress<.64;
+    const casting=state.attackComboStep===4 && state.skillSlot==='skill1';
+    const marker=casting?heroReleaseProgress(this.hero.classId,state):1;
+    const winding=casting && state.attackSwingProgress<marker;
     this.charge.visible=winding;
     if(winding){const palm=this.hero.getSpellEmitter(false);if(palm)this.charge.position.copy(palm);
-      this.charge.scale.setScalar(.2+state.attackSwingProgress*2.4);}
+      this.charge.scale.setScalar(.2+state.attackSwingProgress/marker*1.1);}
     
     this.cast.visible=this.castAge<2.65;
     this.halo.material.uniforms.age.value=this.castAge;
@@ -293,11 +332,12 @@ export class ObservatoryAtelier {
     this.light.intensity=this.castAge<2.6?Math.sin(Math.min(1,this.castAge/.3)*Math.PI*.5)*14*Math.max(0,1-this.castAge/2.6):0;
     const pollen=this.root.getObjectByName('atelier_pollen');if(pollen)pollen.rotation.y=this.clock*.008;
     // Layered follow-through complements the authored hair follower and coat bones.
-    for(const g of this.fitted){if(g.name==='atelier_Hair')g.rotation.z=Math.sin(this.clock*1.8)*.035;
+    for(const g of this.fitted){
       if(g.name==='atelier_Coat')g.rotation.x=Math.sin(this.clock*1.4)*.018+(state.isMoving?.07:0);}
   }
   render():void{
     const now=performance.now();if(this.frameAt){this.intervals.push(now-this.frameAt);if(this.intervals.length>90)this.intervals.shift();}this.frameAt=now;
+    if(this.depthOfField.enabled){const focus=this.hero.root.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,1.65,0));(this.depthOfField.uniforms as Record<string,THREE.IUniform>).focus.value=this.camera.camera.position.distanceTo(focus);}
     const size=this.renderer.getSize(new THREE.Vector2());
     if(size.x!==this.width||size.y!==this.height){this.width=size.x;this.height=size.y;this.composer.setSize(size.x,size.y);const ratio=this.renderer.getPixelRatio();this.antialias.uniforms.resolution.value.set(1/(size.x*ratio),1/(size.y*ratio));}
     this.renderer.info.autoReset=false;this.renderer.info.reset();
@@ -305,13 +345,16 @@ export class ObservatoryAtelier {
     this.frameStats={calls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles};
     this.renderer.info.autoReset=true;
   }
-  diagnostics(){return {ready:this.fitted.length>0,view:this.view,castAge:this.castAge,frameIntervalMs:this.intervals.length?this.intervals.reduce((a,b)=>a+b,0)/this.intervals.length:null,calls:this.frameStats.calls,triangles:this.frameStats.triangles};}
+  diagnostics(){return {ready:this.loaded,view:this.view,castAge:this.castAge,frameIntervalMs:this.intervals.length?this.intervals.reduce((a,b)=>a+b,0)/this.intervals.length:null,calls:this.frameStats.calls,triangles:this.frameStats.triangles};}
   dispose():void{
     if(this.disposed)return;this.disposed=true;
+    this.secondary?.dispose();
+    if(this.portrait){this.portrait.root.removeFromParent();disposeObject(this.portrait.root);}
     if(this.keeperArt){this.keeperArt.removeFromParent();disposeObject(this.keeperArt);}
     this.hidden.forEach(o=>{o.visible=true;});this.fitted.forEach(g=>{g.removeFromParent();disposeObject(g);});
     this.hero.root.scale.setScalar(1);this.oldLights.forEach(l=>{l.visible=true;});this.scene.background=this.oldBackground;this.scene.fog=this.oldFog;
     this.renderer.toneMapping=this.oldTone;this.renderer.toneMappingExposure=1;this.camera.setCutsceneShot(null);
+    this.scene.environment=this.oldEnvironment;this.scene.environmentIntensity=this.oldEnvironmentIntensity;this.reflection?.dispose();
     this.atlas?.dispose();this.root.removeFromParent();disposeObject(this.root);this.composer.passes.forEach(p=>p.dispose());this.composer.dispose();
   }
 }

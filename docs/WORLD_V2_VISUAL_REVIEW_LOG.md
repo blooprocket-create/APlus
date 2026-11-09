@@ -69,3 +69,12 @@ Owner-requested art work; **not World V2 geography/campaign acceptance**. [Full 
 The candidate demonstrates a distinct offline model/material pipeline, original fitted art and release-linked VFX. It still falls short of a high-end anime RPG, especially facial/anatomical sophistication, authored performance, environment density/composition and production finish. Physical mobile performance and visual approval remain unverified.
 
 Verification follow-up: existing browser regression passes 3/3 heroes and 3/3 arrival roles; existing World V2 visual audit passes **11/11 frames / zero issues** against the final production-build server on port 4191. Earlier capture infrastructure failures and their diagnosis are recorded in the atelier document. This does not raise the art candidate to production acceptance.
+
+
+### Continued pass — not an artistic sign-off
+
+The [rejected portrait](screenshots/astral-slice/continuation/07-portrait.png) exposes profile-interpolation terraces and a startled expression. The [corrected portrait](screenshots/astral-slice/continuation/08-portrait.png) removes those bands and matures the eyes; the [scene pass](screenshots/astral-slice/continuation/08-scene.png) adds an authored observatory kit. The current [hero](screenshots/astral-slice/09-refinement-hero.png) and [environment](screenshots/astral-slice/09-refinement-garden.png) show the improved material/feature treatment. They still look like a stylized prototype rather than the requested high-end anime RPG. Inherited hands/limbs, garment construction, environmental forms and performance need original production art work. The goal is not accepted as complete.
+
+Contact-occlusion experiment rejected: pass 09 roughly doubled draws for a weak visible gain and slowed the capture harness. The retained pass 10 removes that pass, keeps portrait-only depth of field, fixes the banner's two-sided surface, adds an instrument cradle and a woven crescent, and corrects mirrored gaze direction. None of these changes meets or signs off the requested high-end art target.
+
+Retained final capture: [scene](screenshots/astral-slice/10-refinement-garden.png), [portrait](screenshots/astral-slice/10-refinement-hero.png), [native camera](screenshots/astral-slice/10-refinement-gameplay.png), [actual ability](screenshots/astral-slice/10-refinement-ability.png). Browser review verifies movement and release/damage with no exceptions. These are engineering/visual-review artifacts, **not high-end visual acceptance**.

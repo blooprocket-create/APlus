@@ -27,7 +27,7 @@ for iz in range(-5,6):
   x=ix*.87+random.uniform(-.28,.28);z=iz*.87+random.uniform(-.28,.28)
   if x*x+z*z<24:sites.append((x,z))
 for x,z in sites:
- poly=[(math.cos(a)*5,math.sin(a)*5) for a in [i*math.tau/80 for i in range(80)]]
+ poly=[(math.cos(a)*(4.9+.32*math.sin(a*3)+.16*math.sin(a*7)),math.sin(a)*(4.9+.32*math.sin(a*3)+.16*math.sin(a*7))) for a in [i*math.tau/80 for i in range(80)]]
  for xx,zz in sites:
   if (x,z)==(xx,zz):continue
   poly=clip(poly,xx-x,zz-z,(xx*xx+zz*zz-x*x-z*z)*.5)
@@ -83,13 +83,13 @@ def leaf(p,l,w,a,tilt,idx):
  for j in range(5):
   t=j/4; sw=math.sin(math.pi*t)**.8*w
   for s in [-1,0,1]:
-   u=s*sw;v=t*l;vs.append((p[0]+u*math.cos(a)+v*math.sin(a),p[1]+math.sin(t*math.pi)*l*.18+v*tilt-abs(s)*w*.16,p[2]-u*math.sin(a)+v*math.cos(a)))
+   u=s*sw;v=t*l;vs.append((p[0]+u*math.cos(a)+v*math.sin(a),p[1]+math.sin(t*math.pi)*l*.18+v*tilt-abs(s)*w*.24,p[2]-u*math.sin(a)+v*math.cos(a)))
  for j in range(4):
   for s in range(2):q=start+j*3+s;fs.append((q,q+1,q+4,q+3))
 for center,sz in [((-9,8,-5.5),(4,1.6,2.7)),((-8.5,10,-8.5),(4,1.5,3)),((-3.5,11,-7.3),(4.4,1.5,3)),((.7,10.6,-6.7),(3.7,1.3,3)),((-1.2,8.3,-10),(3.4,1.1,2.5))]:
  for k in range(1250):
   # Disciplined canopy masses with small sky openings.
-  a=random.uniform(0,math.tau);r=math.sqrt(random.random());p=(center[0]+math.cos(a)*r*sz[0],center[1]+random.uniform(-1,1)*sz[1]*(1-r*.5),center[2]+math.sin(a)*r*sz[2]);leaf(p,random.uniform(.32,.75),random.uniform(.11,.24),random.uniform(0,math.tau),random.uniform(-.2,.3),random.choices(range(5),[3,5,5,3,1])[0])
+  a=random.uniform(0,math.tau);r=math.sqrt(random.random());p=(center[0]+math.cos(a)*r*sz[0],center[1]+random.uniform(-1,1)*sz[1]*(1-r*.5),center[2]+math.sin(a)*r*sz[2]);leaf(p,random.uniform(.32,.75),random.uniform(.11,.24),random.uniform(0,math.tau),random.uniform(-.75,.4),random.choices(range(5),[3,5,5,3,1])[0])
 # Understory: fern fronds grow as alternating pointed leaflets.
 for i in range(135):
  x=random.uniform(-14,12);z=random.uniform(-16,9)
@@ -128,6 +128,8 @@ for x,z in [(-4,2),(4.8,-2),(-2.8,-6),(5,-10)]:
  sweep('Lantern carved pedestal',[(x,.1,z),(x,.45,z),(x,.68,z)],[.24,.15,.23],stone,12,1)
  rock('Lantern amber glass',(x,.84,z),(.16,.23,.16),gold)
  slab('Lantern shelter',(x,1.16,z),.62,.62,.12)
+from observatory_relics import build_relics
+build_relics(mesh,sweep,slab,mat,stone,dark,gold,moss)
 # Distant layered valley silhouettes; authored ridgelines establish depth.
 for layer,z0 in enumerate([-37,-50,-67]):
  pigment=mat('Valley haze '+str(layer),['466f73','64878b','8ba5a4'][layer]);vs=[];fs=[]
