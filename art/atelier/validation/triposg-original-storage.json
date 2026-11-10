@@ -1,0 +1,28 @@
+{
+  "scope": "First conditional and unconditional velocity at sigma=1; unchanged original FP16 source values, F32 operators, layer-dependent weight casts",
+  "referenceSeconds": 80.45,
+  "streamedSeconds": 132.25,
+  "results": {
+    "unconditional": {
+      "bitwiseEqual": true,
+      "maxAbsoluteError": 0.0,
+      "relativeL2": 0.0
+    },
+    "conditional": {
+      "bitwiseEqual": true,
+      "maxAbsoluteError": 0.0,
+      "relativeL2": 0.0
+    }
+  },
+  "model": "VAST-AI/TripoSG",
+  "modelRevision": "2c1c516d22d58db486a058d98d31bb6177344e06",
+  "portableExport": "cgb/triposg-onnx-webgpu",
+  "exportRevision": "4db41a2fec8b5785e3f7ec721a2c4b703943b57c",
+  "source": "art/atelier/references/celestia-apose.png",
+  "sourceSHA256": "e93aceabda38bad2f4bd73dea8ae1a08efed4fc18801850d04b122b3bd918991",
+  "seed": 42,
+  "rng": "NumPy PCG64",
+  "method": "Original portable FP16 weights held in storage; activation-dependent reshape/cast into unchanged F32 computation. No dynamic-int8 weights.",
+  "environment": "CPU-only managed workspace, 2 CPU quota, 8 GiB RAM. Generation timings, not game FPS.",
+  "limitations": "First conditional/unconditional velocity only. Completed sculpture and actual renderer still require visual review."
+}

@@ -104,3 +104,73 @@ The [rejected portrait](screenshots/astral-slice/continuation/07-portrait.png) e
 Contact-occlusion experiment rejected: pass 09 roughly doubled draws for a weak visible gain and slowed the capture harness. The retained pass 10 removes that pass, keeps portrait-only depth of field, fixes the banner's two-sided surface, adds an instrument cradle and a woven crescent, and corrects mirrored gaze direction. None of these changes meets or signs off the requested high-end art target.
 
 Retained final capture: [scene](screenshots/astral-slice/10-refinement-garden.png), [portrait](screenshots/astral-slice/10-refinement-hero.png), [native camera](screenshots/astral-slice/10-refinement-gameplay.png), [actual ability](screenshots/astral-slice/10-refinement-ability.png). Browser review verifies movement and release/damage with no exceptions. These are engineering/visual-review artifacts, **not high-end visual acceptance**.
+
+### Original reconstruction and paint pipeline — passes 11–24
+
+The [detailed source and failed-pass review](OBSERVATORY_ATELIER.md) continues
+beyond the earlier spline candidate. Original paintings became editable UV
+sculptures rather than stock meshes or scene image planes. The
+[pass-24 portrait](screenshots/astral-slice/24-golden-canopy-portrait.png) has a
+substantially more coherent original design than pass 10. The
+[scene](screenshots/astral-slice/24-golden-canopy-garden.png) adds the original
+carved gate, reconstructed elder, porous crown and cliff vista; the
+[ability](screenshots/astral-slice/24-golden-canopy-ability.png) uses an original
+Blender performance and painted energy strokes tied to actual damage.
+
+Visible limits remain: the face is soft and faceted, some neural carvings are
+muddy, broad ground surfaces are weak, and the landscape lacks a finished
+production composition. These are reasons to improve the sources, not to call
+weights prohibited or the art accepted. [Pass-24 evidence](screenshots/astral-slice/24-golden-canopy-evidence.json)
+records real movement/damage and zero browser exceptions.
+
+### Passes 25–26 — closer staging and carved-light comparison
+
+[Pass 25 opening](screenshots/astral-slice/25-motion-composition-garden.png)
+gives the hero a stronger foreground silhouette and makes the architecture more
+substantial, but its caption overlaps the character. The
+[windup](screenshots/astral-slice/25-motion-composition-windup.png) and
+[impact follow-through](screenshots/astral-slice/25-motion-composition-ability.png)
+are the same real cast. A restrained, short instrument exposure follows the
+canonical Weapon joint rather than an invented animation path. It is a subtle
+motion addition; it is not the principal artistic improvement.
+[Live evidence](screenshots/astral-slice/25-motion-composition-evidence.json)
+reports zero errors, keyboard movement Z=11 → 11.671616, and keeper health
+1600 → 1420 from an actual critical hit.
+
+[Pass 26 opening](screenshots/astral-slice/26-carved-light-garden.png)
+moves the caption clear of the hero and uses a more frontal, less orange key
+with reduced local character fill. Gate relief and the elder's form read more
+clearly. The [portrait](screenshots/astral-slice/26-carved-light-portrait.png)
+still exposes a lumpy face and coarse face shadows; lighting cannot supply the
+missing sculpt detail. The next source experiment therefore allocates a
+separate portrait-scale reconstruction to the head, keeping reviewed body
+weights and the canonical animator intact.
+[Pass-26 evidence](screenshots/astral-slice/26-carved-light-evidence.json)
+is explicitly a paused static comparison, with no repeated gameplay claim.
+The native isometric camera remains available and unchanged.
+
+### Passes 27–28 — reject weak additions, retain the verified scene
+
+[Pass 27 portrait](screenshots/astral-slice/27-character-shadow-portrait.png)
+tested a tighter character shadow projection with unchanged illumination.
+It compiled and rendered without errors, but the visible improvement was too
+small for the extra shadow pass. The implementation was removed. Low-resolution
+face geometry remains the primary visible problem.
+
+[Pass 28 scene](screenshots/astral-slice/28-retained-stage-garden.png),
+[portrait](screenshots/astral-slice/28-retained-stage-portrait.png) and
+[native camera](screenshots/astral-slice/28-retained-stage-gameplay.png) capture
+the retained default without the extra shadow. Its
+[windup](screenshots/astral-slice/28-retained-stage-windup.png),
+[contact](screenshots/astral-slice/28-retained-stage-contact.png) and
+[follow-through](screenshots/astral-slice/28-retained-stage-ability.png) document
+one actual cast, including keeper health 1600 → 1414. The
+[browser evidence](screenshots/astral-slice/28-retained-stage-evidence.json)
+records zero errors and keyboard movement Z=11 → 11.575424.
+
+The separate integer-weight portrait source failed clay geometry review before
+it reached the game; both its coarse and refined fields were malformed. A close
+first-prediction numerical match did not predict usable art. The unchanged
+reference-computation follow-up remains separate until its geometry and actual
+game views can be reviewed. Neither a larger model nor successful inference is
+being treated as visual acceptance.

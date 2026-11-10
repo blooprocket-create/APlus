@@ -59,7 +59,11 @@ export class ReconstructedHero {
       source.frustumCulled=false;source.castShadow=true;source.receiveShadow=true;paint(source);
       for(const value of Object.values(source.material))if(value instanceof THREE.Texture)this.textures.add(value);
       this.decorateFace(source.material as THREE.MeshStandardMaterial,fit);this.meshes.push(source);
-      this.hairFollowers.push(new AtelierSecondaryMotion(hero.root,hero.root.getObjectByName('Hair')!,source));
+      const hair=hero.root.getObjectByName('Hair') as THREE.Bone,hairIndex=source.skeleton.bones.indexOf(hair);
+      const skinIndices=source.geometry.getAttribute('skinIndex'),skinWeights=source.geometry.getAttribute('skinWeight');
+      let weightedHair=false;
+      if(hairIndex>=0)for(let i=0;i<skinIndices.count&&!weightedHair;i++)for(let c=0;c<4;c++)if(skinIndices.getComponent(i,c)===hairIndex&&skinWeights.getComponent(i,c)>.20){weightedHair=true;break;}
+      if(weightedHair)this.hairFollowers.push(new AtelierSecondaryMotion(hero.root,hair,source));
     }
     rotations.forEach((q,b)=>b.quaternion.copy(q));hero.root.updateMatrixWorld(true);
     const anchor=couture.children.find(o=>o.name==='attach__Weapon');
@@ -73,24 +77,34 @@ export class ReconstructedHero {
   }
   private decorateFace(material:THREE.MeshStandardMaterial,fit:ReconstructedHeroFit):void{
     const previous=material.onBeforeCompile,oldKey=material.customProgramCacheKey();
+    const projection=new THREE.Matrix4().fromArray(fit.sourceProjection);
+    const left=new THREE.Vector3(...fit.face.eyeL).applyMatrix4(projection),right=new THREE.Vector3(...fit.face.eyeR).applyMatrix4(projection);
+    const gazeScale=THREE.MathUtils.clamp(left.distanceTo(right)*.05,.001,.02);
     material.onBeforeCompile=(shader,renderer)=>{
       previous(shader,renderer);shader.uniforms.heroBlink=this.blink;shader.uniforms.heroGaze=this.gaze;
       shader.uniforms.heroSource={value:this.sourcePaint};shader.uniforms.heroProjection={value:new THREE.Matrix4().fromArray(fit.sourceProjection)};
       shader.uniforms.heroEyeL={value:new THREE.Vector3(...fit.face.eyeL)};shader.uniforms.heroEyeR={value:new THREE.Vector3(...fit.face.eyeR)};
+      shader.uniforms.heroGazeScale={value:gazeScale};
       shader.uniforms.heroSkin={value:new THREE.Color(0xe0b39d)};
       shader.vertexShader='varying vec3 heroRest;varying vec2 heroPaintUv;uniform mat4 heroProjection;\n'+shader.vertexShader;
       shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
         heroRest=position;vec4 paintPoint=heroProjection*vec4(position,1.);heroPaintUv=paintPoint.xy/paintPoint.w;`);
-      shader.fragmentShader='varying vec3 heroRest;varying vec2 heroPaintUv;uniform sampler2D heroSource;uniform float heroBlink;uniform float heroGaze;uniform vec3 heroEyeL;uniform vec3 heroEyeR;uniform vec3 heroSkin;\n'+shader.fragmentShader;
+      shader.fragmentShader='varying vec3 heroRest;varying vec2 heroPaintUv;uniform sampler2D heroSource;uniform float heroBlink;uniform float heroGaze;uniform float heroGazeScale;uniform vec3 heroEyeL;uniform vec3 heroEyeR;uniform vec3 heroSkin;\n'+shader.fragmentShader;
       shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
         for(int eye=0;eye<2;eye++){
           vec3 center=eye==0?heroEyeL:heroEyeR;vec2 p=heroRest.xy-center.xy;
           float mask=exp(-pow(p.x/.038,4.)-pow(p.y/.017,4.))*smoothstep(center.z-.040,center.z-.005,heroRest.z);
-          vec3 gazePaint=texture2D(heroSource,heroPaintUv+vec2(heroGaze*.0025,0.)).rgb;
+          vec3 gazePaint=texture2D(heroSource,heroPaintUv+vec2(heroGaze*heroGazeScale,0.)).rgb;
           diffuseColor.rgb=mix(diffuseColor.rgb,gazePaint,mask*(1.-heroBlink));
           diffuseColor.rgb=mix(diffuseColor.rgb,heroSkin,mask*heroBlink);
           float lash=exp(-pow((p.y-abs(p.x)*.10)/.0018,2.))*(1.-smoothstep(.020,.037,abs(p.x)));
           diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.025,.018,.032),lash*mask*heroBlink*.9);
+        }`);
+      shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
+        for(int eye=0;eye<2;eye++){
+          vec3 center=eye==0?heroEyeL:heroEyeR;vec2 p=heroRest.xy-center.xy;
+          float lid=exp(-pow(p.x/.038,4.)-pow(p.y/.017,4.))*smoothstep(center.z-.040,center.z-.005,heroRest.z);
+          roughnessFactor=mix(roughnessFactor,.82,lid*heroBlink);
         }`);
     };
     material.customProgramCacheKey=()=>oldKey+'-original-sculpt-face';

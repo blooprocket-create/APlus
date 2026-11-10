@@ -2,6 +2,12 @@
 
 **2026-11-09 owner-requested art investigation:** an isolated [Observatory vertical-slice pipeline](OBSERVATORY_ATELIER.md) explores reference-led UV couture, continuous original sculptures, baked geometric occlusion, painted material/sky authoring and a marker-linked original Blender ability. This is an explicit visual-priority exception for this branch, not a change to Phase 3 completion requirements. Production art acceptance and hardware profiling remain open.
 
+November 10 evidence retains pass 28 after actual browser movement, damage and
+three ability phases; local checks pass 189 tests. A finer shadow pass was
+rejected for weak visible gain, and a malformed portrait source was rejected
+before fitting. The full-precision portrait follow-up remains a source experiment.
+These findings do not complete the high-end art target or any World V2 gate.
+
 The later investigation changes the upstream asset source: original authored
 images → offline reconstruction → calibrated multi-view UV paint → editable
 weighted Blender source → the existing live rig. It materially improves the

@@ -1,4 +1,5 @@
 import {ReconstructedHero,type ReconstructedHeroFit} from './ReconstructedHero';
+import {AtelierWeaponTrail} from './AtelierWeaponTrail';
 import { heroReleaseProgress } from './HeroMotion';
 import { AtelierSecondaryMotion } from './AtelierSecondaryMotion';
 import { AtelierPortrait, type PortraitSurface } from './AtelierPortrait';
@@ -45,6 +46,7 @@ export class ObservatoryAtelier {
   private view = 0;
   private combatShot=false;
   private reconstructedHero:ReconstructedHero|null=null;
+  private instrumentTrail:AtelierWeaponTrail|null=null;
   private readonly sculptTree=new URLSearchParams(location.search).get('tree')!=='growth';
   private readonly porousTree=!['sculpt','sealed','growth'].includes(new URLSearchParams(location.search).get('tree')??'');
   private readonly sculptGate=new URLSearchParams(location.search).get('gate')!=='legacy';
@@ -52,6 +54,8 @@ export class ObservatoryAtelier {
   private readonly importedTextures=new Set<THREE.Texture>();
   private readonly heroImpact={value:0};private readonly keeperImpact={value:0};
   private readonly sculptHero=new URLSearchParams(location.search).get('hero')!=='couture';
+  private readonly closeComposition=new URLSearchParams(location.search).get('composition')!=='wide';
+  private readonly frontLighting=new URLSearchParams(location.search).get('lighting')!=='back';
   private readonly sculptKeeper=new URLSearchParams(location.search).get('keeper')!=='corolla';
   private width = 0;
   private height = 0;
@@ -99,9 +103,10 @@ export class ObservatoryAtelier {
     scene.fog = new THREE.FogExp2(0x87afaa, .012);
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.04;
     const hemi = new THREE.HemisphereLight(0xc5e4ec, 0x3f4655, .35);
-    const sun = new THREE.DirectionalLight(0xffd59a, 4.4);
+    const sun = new THREE.DirectionalLight(this.frontLighting?0xffe8c9:0xffd59a, this.frontLighting?3.5:4.4);
     this.keyLight=sun;sun.shadow.autoUpdate=false;sun.shadow.needsUpdate=true;
-    sun.position.copy(origin).add(new THREE.Vector3(-6, 15, -12)); sun.target.position.copy(origin);
+    sun.position.copy(origin).add(this.frontLighting?new THREE.Vector3(-10,12,7):new THREE.Vector3(-6,15,-12)); sun.target.position.copy(origin);
+    if(this.frontLighting)this.characterFill.intensity=1.8;
     sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 15, bottom: -15, near: .5, far: 60 });
     sun.shadow.bias = -.00012; sun.shadow.normalBias = .008; sun.shadow.radius = 2;
@@ -346,6 +351,9 @@ export class ObservatoryAtelier {
 #include <colorspace_fragment>}`
     }));falls.position.copy(this.origin).add(new THREE.Vector3(8,-2.5,-60));falls.visible=!this.sculptVista;this.root.add(falls);
     this.addAtmosphere();
+    if(new URLSearchParams(location.search).get('trail')!=='off'){
+      this.instrumentTrail=new AtelierWeaponTrail(this.hero.root.getObjectByName('Weapon')!,this.energyAtlas!);this.root.add(this.instrumentTrail.mesh);
+    }
     this.buildReflectionProbe();
     this.keyLight.shadow.needsUpdate=true;
     this.loaded=true;this.setView(0);
@@ -515,7 +523,8 @@ export class ObservatoryAtelier {
   setView(view:number,cut=true):void {
     this.renderDirty=true;
     this.combatShot=false;this.view=view%6;
-    const shots=[{cameraOffset:{x:5.4,y:4.2,z:10.5},lookAtOffset:{x:-1.4,y:2.6,z:-3.8}},
+    const opening=this.closeComposition?{cameraOffset:{x:4.5,y:2.6,z:4.8},lookAtOffset:{x:1,y:2,z:-3.8}}:{cameraOffset:{x:5.4,y:4.2,z:10.5},lookAtOffset:{x:-1.4,y:2.6,z:-3.8}};
+    const shots=[opening,
       {cameraOffset:{x:.95,y:this.sculptHero?1.52:1.42,z:this.sculptHero?3.3:2.9},lookAtOffset:{x:0,y:this.sculptHero?1.35:1.27,z:0}},null,
       {cameraOffset:{x:.76,y:this.sculptHero?1.95:1.70,z:1.04},lookAtOffset:{x:0,y:this.sculptHero?1.80:1.55,z:0}},
       this.keeperInspectionShot(),{cameraOffset:{x:6,y:7.6,z:17},lookAtOffset:{x:-2,y:4,z:-4}}];
@@ -546,6 +555,7 @@ export class ObservatoryAtelier {
       this.camera.setCutsceneShot({cameraOffset:{x:4.4,y:2.8,z:5.4},lookAtOffset:{x:0,y:1.2,z:-3.1}});
     }else if(this.view===0&&this.combatShot&&!casting&&this.castAge>=2.65)this.setView(0,false);
     const marker=casting?heroReleaseProgress(this.hero.classId,state):1;
+    this.instrumentTrail?.update(this.clock,dt,casting&&state.attackSwingProgress>.16&&state.attackSwingProgress<marker+.16);
     const winding=casting && state.attackSwingProgress<marker;
     this.charge.visible=winding;
     if(winding){const palm=this.hero.getSpellEmitter(false);if(palm)this.charge.position.copy(palm);
@@ -584,10 +594,11 @@ export class ObservatoryAtelier {
     this.frameStats={calls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles};
     this.renderer.info.autoReset=true;
   }
-  diagnostics(){return {ready:this.loaded,view:this.view,simulationTime:this.clock,tree:this.sculptTree?(this.porousTree?'sculpt-conditioned porous foliage':'original reconstructed elder'):'authored growth',hero:this.sculptHero?'original fitted reconstruction':'UV couture',keeperArt:this.sculptKeeper?'original reconstruction':'authored corolla',castAge:this.castAge,frameIntervalMs:this.intervals.length?this.intervals.reduce((a,b)=>a+b,0)/this.intervals.length:null,calls:this.frameStats.calls,triangles:this.frameStats.triangles};}
+  diagnostics(){return {ready:this.loaded,view:this.view,simulationTime:this.clock,tree:this.sculptTree?(this.porousTree?'sculpt-conditioned porous foliage':'original reconstructed elder'):'authored growth',hero:this.sculptHero?'original fitted reconstruction':'UV couture',composition:this.closeComposition?'close':'wide',lighting:this.frontLighting?'front':'back',weaponTrail:!!this.instrumentTrail,keeperArt:this.sculptKeeper?'original reconstruction':'authored corolla',castAge:this.castAge,frameIntervalMs:this.intervals.length?this.intervals.reduce((a,b)=>a+b,0)/this.intervals.length:null,calls:this.frameStats.calls,triangles:this.frameStats.triangles};}
   inspectArt(){return this.reconstructedHero?.inspect();}
   dispose():void{
     if(this.disposed)return;this.disposed=true;
+    this.instrumentTrail?.dispose();this.keyLight.shadow.dispose();
     this.reconstructedHero?.dispose();this.secondary?.dispose();
     if(this.portrait){this.portrait.root.removeFromParent();disposeObject(this.portrait.root);}
     if(this.keeperArt){this.keeperArt.removeFromParent();disposeObject(this.keeperArt);}

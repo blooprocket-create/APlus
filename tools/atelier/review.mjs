@@ -6,6 +6,10 @@ import {spawn} from 'node:child_process';
 import {mkdirSync,writeFileSync,mkdtempSync,rmSync,readFileSync,existsSync} from 'node:fs';
 import os from 'node:os';
 const base=process.argv[2]||'http://127.0.0.1:5173';const recordOnly=process.argv.includes('--record-only');
+const staticReview=process.argv.includes('--stills-only');
+if(staticReview&&(recordOnly||process.env.ART_REVIEW_RECORD==='1'))throw Error('Choose static comparison or gameplay recording');
+const captureViews=new Set((process.env.ART_REVIEW_VIEWS||'0,1,2,3,4,5').split(',').map(Number));
+if([...captureViews].some(v=>!Number.isInteger(v)||v<0||v>5))throw Error('Invalid review camera selection');
 const prefix=process.env.ART_REVIEW_PREFIX||'05-final';
 const sceneUrl=base+'/atelier.html'+(process.env.ART_REVIEW_QUERY?'?'+process.env.ART_REVIEW_QUERY:'');
 const width=Number(process.env.ART_REVIEW_WIDTH||1280),height=Math.round(width*.625);
@@ -28,19 +32,30 @@ try{
  await send('Page.navigate',{url:sceneUrl});
  await poll(()=>evaluate('window.__atelier?.snapshot()?.ready'),'slice assets');
  if(!recordOnly){
- await evaluate('window.__atelier.freeze(true)');await shot(prefix+'-garden');logs.push(await evaluate('window.__atelier.snapshot()'));
- await view(5);await shot(prefix+'-wide');
- await view(1);await shot(prefix+'-hero');
- await view(3);await shot(prefix+'-portrait');
- await view(4);await shot(prefix+'-keeper');
+ await evaluate('window.__atelier.freeze(true)');if(captureViews.has(0))await shot(prefix+'-garden');logs.push(await evaluate('window.__atelier.snapshot()'));
+ if(captureViews.has(5)){await view(5);await shot(prefix+'-wide');}
+ if(captureViews.has(1)){await view(1);await shot(prefix+'-hero');}
+ if(captureViews.has(3)){await view(3);await shot(prefix+'-portrait');}
+ if(captureViews.has(4)){await view(4);await shot(prefix+'-keeper');}
  // Native gameplay view is the existing isometric follow controller.
- await view(2);await shot(prefix+'-gameplay');
+ if(captureViews.has(2)){await view(2);await shot(prefix+'-gameplay');}
+ if(!staticReview){
  await view(0);await evaluate("window.__atelier.freeze(false);document.querySelector('#cast').click()");
+ if(process.env.ART_REVIEW_WINDUP==='1'){
+  await poll(()=>evaluate('window.__atelier.snapshot().animation.attackComboStep===4 && window.__atelier.snapshot().animation.attackSwingProgress>=.30 && window.__atelier.snapshot().animation.attackSwingProgress<.52'),'authored windup');
+  await evaluate('window.__atelier.freeze(true)');await shot(prefix+'-windup');logs.push(await evaluate('window.__atelier.snapshot()'));await evaluate('window.__atelier.freeze(false)');
+ }
+ if(process.env.ART_REVIEW_CONTACT==='1'){
+  await poll(()=>evaluate('window.__atelier.snapshot().castAge>=.06 && window.__atelier.snapshot().castAge<.20'),'damage-linked contact accent');
+  await evaluate('window.__atelier.freeze(true)');await shot(prefix+'-contact');logs.push(await evaluate('window.__atelier.snapshot()'));await evaluate('window.__atelier.freeze(false)');
+ }
  await poll(()=>evaluate('window.__atelier.snapshot().castAge>=.50 && window.__atelier.snapshot().castAge<1.3'),'ability release');
  await evaluate('window.__atelier.freeze(true)');await shot(prefix+'-ability');logs.push(await evaluate('window.__atelier.snapshot()'));
  await evaluate('window.__atelier.freeze(false)');
  }
+ }
  // Verify motion through the existing input handler, without changing positions by script.
+ if(!staticReview){
  await send('Page.bringToFront');
  const before=await evaluate('window.__atelier.snapshot().position');
  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'s',code:'KeyS',windowsVirtualKeyCode:83});
@@ -61,10 +76,11 @@ try{
   await delay(2000);await evaluate('window.__stopRecording();true');
   const data=await evaluate('window.__recording');writeFileSync(output+'/gameplay.webm',Buffer.from(data,'base64'));
  }
+ }
  if(recordOnly&&existsSync(output+'/browser-evidence.json'))logs.unshift(...JSON.parse(readFileSync(output+'/browser-evidence.json','utf8')).logs);
- const evidence=JSON.stringify({capturedAt:new Date().toISOString(),capturePrefix:prefix,browser:'Chromium / SwiftShader',viewport:[width,height],logs,errors},null,2);
+ const evidence=JSON.stringify({capturedAt:new Date().toISOString(),capturePrefix:prefix,mode:staticReview?'paused static comparison':'gameplay input and art review',inputVerified:!staticReview,selectedViews:[...captureViews],browser:'Chromium / SwiftShader',viewport:[width,height],logs,errors},null,2);
  writeFileSync(output+'/browser-evidence.json',evidence);writeFileSync(output+'/'+prefix+'-evidence.json',evidence);
  if(errors.length)throw Error('Browser errors: '+JSON.stringify(errors));
- console.log('Art evidence captured; inspect the PNGs. Gameplay input verified.');
+ console.log(staticReview?'Art stills captured; inspect the PNGs. Gameplay input was not repeated for this static comparison.':'Art evidence captured; inspect the PNGs. Gameplay input verified.');
 }catch(error){writeFileSync(output+'/'+prefix+'-failure.json',JSON.stringify({capturedAt:new Date().toISOString(),capturePrefix:prefix,logs,errors,failure:String(error)},null,2));throw error;
 }finally{ws?.close();chrome.kill();setTimeout(()=>{try{rmSync(profile,{recursive:true,force:true});}catch{}},500);}

@@ -1,0 +1,46 @@
+{
+  "type": "Offline source geometry review, NOT a game screenshot",
+  "status": "REJECTED before paint/rig fitting; not included in the game",
+  "finding": "Vertical artifacts and floating fragments; coarse field is malformed too",
+  "generation": {
+    "sourceImage": "/tmp/astral-celestia-portrait/source.png",
+    "sourceSHA256": "839e2c9884fbec1202a50c590ac0aa3b85485a74184bfa6779ca8f7002ff26f2",
+    "method": "TripoSG via CPU ONNX, streamed shared initializers; original paint authored separately",
+    "model": "VAST-AI/TripoSG",
+    "modelRevision": "2c1c516d22d58db486a058d98d31bb6177344e06",
+    "export": "cgb/triposg-onnx-webgpu",
+    "exportRevision": "4db41a2fec8b5785e3f7ec721a2c4b703943b57c",
+    "license": "MIT; DINOv2 encoder Apache-2.0",
+    "steps": 24,
+    "seed": 42,
+    "rng": "NumPy PCG64",
+    "denoisePrecision": "dynamic-int8-dense/f32-attention",
+    "coarse": 64,
+    "resolution": 256,
+    "vertices": 69929,
+    "triangles": 139502,
+    "seconds": 471.08,
+    "status": "UNREVIEWED original sculpture; compare actual live renderer before adoption"
+  },
+  "originalSourcePreparation": {
+    "source": "art/atelier/references/celestia-apose.png",
+    "sourceSHA256": "e93aceabda38bad2f4bd73dea8ae1a08efed4fc18801850d04b122b3bd918991",
+    "crop": [
+      350,
+      15,
+      680,
+      307
+    ],
+    "conditioningSHA256": "839e2c9884fbec1202a50c590ac0aa3b85485a74184bfa6779ca8f7002ff26f2",
+    "backSource": "art/atelier/references/celestia-back-paint.png",
+    "backSourceSHA256": "9042a4f9913df5432b4ccd3fdf5f85fa6f6485e88c1f8fd020914b6e5c5ffe17",
+    "backCrop": [
+      470,
+      175,
+      790,
+      470
+    ],
+    "backCropSHA256": "2415d2eb89505a7ec01681a756f0962e4a839c2d7d969f7086377819b938b452",
+    "method": "Unretouched original pixels for portrait-scale 3D conditioning; same original identity, no new painted details"
+  }
+}

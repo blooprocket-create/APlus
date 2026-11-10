@@ -2,6 +2,13 @@
 
 **Optional art stage (2026-11-09):** [Observatory atelier](OBSERVATORY_ATELIER.md) is a lazy-loaded rendering presentation attached to the existing engine and internal moat fixture. It owns imported art/materials/postprocessing and presentation fit. An optional `motionProfile` selects an original baked ability through the existing `HeroMotion` player and release-marker contract; existing combat, input, sentinel AI and camera own behavior. No pure world imports or atlas/collision/save contracts change. It is not a second world/gameplay runtime or campaign cutover.
 
+The November 10 continuation adds presentation-only instrument exposure sampled
+from the canonical Weapon joint and shared stage time. Camera/light comparisons
+remain within that stage. Optional CPU reconstruction, source crops, geometry
+review and resumable field evaluation live offline under `tools/atelier/`;
+normal builds and authored Blender exports require no inference service or
+weights. Rejected geometry never becomes a runtime actor or a new rig owner.
+
 Original reconstructed skinned art uses `ReconstructedHero` and a reversible
 `CharacterRig.fitVisualRestPose` fit. Imported armatures are export carriers;
 runtime skinning references the canonical bones, while `HeroMotion` retargets

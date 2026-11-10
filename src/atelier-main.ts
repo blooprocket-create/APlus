@@ -4,6 +4,7 @@ import { PersistenceManager } from './persistence/PersistenceManager';
 import { InMemoryStorageAdapter } from './persistence/StorageAdapter';
 
 async function main(){
+  document.querySelector<HTMLElement>('#atelier-ui')!.dataset.composition=new URLSearchParams(location.search).get('composition')??'close';
   const p = new PersistenceManager(new InMemoryStorageAdapter());await p.init();
   const hero=await p.createCharacter({accountId:'atelier',slotIndex:0,name:'Celestia',classId:'mage'});
   let activeEngine:GameEngine|null=null;

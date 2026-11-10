@@ -5,7 +5,7 @@
 The continued art branch adds original reconstruction/paint sources, reversible
 rig fitting, a marker-linked performance and configurable bounds on that same
 fixture. It does not add a world/physics/save owner or approve any new atlas
-geography. The current test suite has 187 passing tests; art acceptance remains
+geography. The current test suite has 189 passing tests; art acceptance remains
 a separate screenshot/gameplay review.
 
 

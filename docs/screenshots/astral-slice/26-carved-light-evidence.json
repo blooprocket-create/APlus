@@ -1,0 +1,49 @@
+{
+  "capturedAt": "2026-11-10T02:40:56.925Z",
+  "capturePrefix": "26-carved-light",
+  "mode": "paused static comparison",
+  "inputVerified": false,
+  "browser": "Chromium / SwiftShader",
+  "viewport": [
+    960,
+    600
+  ],
+  "logs": [
+    {
+      "ready": true,
+      "view": 0,
+      "simulationTime": 0.06669999999999981,
+      "tree": "sculpt-conditioned porous foliage",
+      "hero": "original fitted reconstruction",
+      "keeperArt": "original reconstruction",
+      "castAge": 10.0667,
+      "frameIntervalMs": 7237.14999999851,
+      "calls": 115,
+      "triangles": 2151524,
+      "position": [
+        -9,
+        0,
+        11
+      ],
+      "animation": {
+        "isMoving": false,
+        "moveSpeedRatio": 0,
+        "attackComboStep": 0,
+        "attackSwingProgress": 0,
+        "isDashing": false,
+        "hitFlashTimer": 0,
+        "motionProfile": "observatory",
+        "charging": false
+      },
+      "hp": 530,
+      "maxHp": 530,
+      "cooldown": 0,
+      "keeper": {
+        "name": "The Orrery Keeper",
+        "hp": 1600,
+        "maxHp": 1600
+      }
+    }
+  ],
+  "errors": []
+}

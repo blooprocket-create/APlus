@@ -79,7 +79,46 @@ still exposes broad simple terrain, soft foliage masses and weak ruin design.
 These are visible production shortcomings, not permission blockers or a reason
 to declare high-end acceptance.
 
-### Retained live candidate — pass 24
+### Retained live candidate — pass 28
+
+[Scene](screenshots/astral-slice/28-retained-stage-garden.png) ·
+[portrait](screenshots/astral-slice/28-retained-stage-portrait.png) ·
+[native camera](screenshots/astral-slice/28-retained-stage-gameplay.png) ·
+[windup](screenshots/astral-slice/28-retained-stage-windup.png) ·
+[contact](screenshots/astral-slice/28-retained-stage-contact.png) ·
+[follow-through](screenshots/astral-slice/28-retained-stage-ability.png) ·
+[actual input/damage evidence](screenshots/astral-slice/28-retained-stage-evidence.json).
+
+The closer opening gives the hero a stronger foreground silhouette. A frontal,
+less orange key reveals the gate's relief; the caption now clears the character.
+The instrument's short exposure follows the canonical animated Weapon joint.
+Gaze scale derives from the source projection's eye spacing, and blinking makes
+the eyelid surface matte. The native isometric follow remains view 2.
+`?composition=wide&lighting=back&trail=off` restores the earlier presentation for
+comparison. These are stage controls, not new gameplay owners.
+
+Pass 28 reports zero browser errors, actual movement Z=11 → 11.575424, and
+keeper health 1600 → 1414 from the same real cast shown at windup, contact and
+follow-through. Local tests pass **189 / 28 files**. The face still has visible
+sculpt limitations; this is the retained comparison, **not high-end acceptance**.
+The short movie and raw recording below retain the earlier pass-24 lighting;
+they show the same authored performance, not a new pass-28 recording.
+
+The optional local character shadow projection was rendered in
+[pass 27](screenshots/astral-slice/27-character-shadow-portrait.png) and rejected:
+the gain was too small for its extra rendering cost. It has been removed.
+The 24-step integer-weight portrait reconstruction also failed source geometry
+review before paint/rig work ([offline source front](screenshots/astral-slice/source-studies/portrait-int8-front.png),
+[side](screenshots/astral-slice/source-studies/portrait-int8-side.png),
+[source evidence](screenshots/astral-slice/source-studies/portrait-int8.json)).
+These are clay diagnostics, not game screenshots. It is not included in the running game. Its coarse
+and refined fields both contained severe artifacts. A full-precision follow-up
+uses the identical input and seed; a revised memory-efficient weight loader
+[matched the working reference's first two predictions bit for bit](../art/atelier/validation/triposg-original-storage.json).
+That numerical check does not establish a finished character. See the
+[optional tooling notes](../tools/atelier/reconstruction/README.md).
+
+### Retained source comparison — pass 24
 
 [Scene](screenshots/astral-slice/24-golden-canopy-garden.png) ·
 [portrait](screenshots/astral-slice/24-golden-canopy-portrait.png) ·
