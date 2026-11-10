@@ -26,6 +26,8 @@ The [production roadmap](docs/PRODUCTION_ROADMAP.md) and [Phase 3 Hearthmere int
 
 ### Phase 3 — first playable story integration
 
+The [open-world gameplay playtest](/world-v2-gameplay.html) now runs the real GameEngine on baked terrain with the original heroes, existing abilities, two AI companions and a small combat encounter. It shares the improved environmental assets with Hearthmere. Progress resets on exit; full cinematic story and V2 saving are still pending. See [Phase 2.5 progress](docs/WORLD_V2_PHASE2_5_PROGRESS.md).
+
 The [opt-in World V2 story entry](/world-v2-story.html) begins Hearthmere's migration without replacing the live game. Select Brynhildr, Celestia or Akatsuki, walk across compiled V2 terrain with the native close camera, and investigate the first role-specific lead. The same original dialogue and step progression powers this initial `arrival → market` interaction. **It then stops**: the rest of the quest chain, companions' combat AI, NPCs, cinematic sequences and new V2 save/reload are not yet ported. This is a functional **Phase 3.0 prototype**, not the complete Hearthmere quest experience. See the [Phase 3 progress report](docs/WORLD_V2_PHASE3_PROGRESS.md).
 
 ## World Architecture V2

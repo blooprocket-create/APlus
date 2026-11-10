@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Mobile-first 3D Anime Action RPG with per-account 3-character persistence",
   "scripts": {
+    "predev": "node tools/world-v2-compile.mjs && node tools/world-v2-compile.mjs --geography",
     "dev": "vite --host",
     "prebuild": "node tools/world-v2-compile.mjs && node tools/world-v2-compile.mjs --geography",
     "build": "tsc --noEmit && vite build",

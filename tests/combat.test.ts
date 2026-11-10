@@ -11,6 +11,12 @@ import { FieldPlan } from '../src/game/FieldActivities';
 import { NpcActor, PortalTrigger } from '../src/types/world';
 import { HearthmereOpening, HEARTHMERE_COVER, HEARTHMERE_REFUGE, HEARTHMERE_WAYSTATION } from '../src/game/HearthmereOpening';
 import { type HearthmereSave, readHearthmereSave } from '../src/persistence/HearthmereSave';
+import { IsometricCameraController } from '../src/rendering/IsometricCamera';
+import type { WorldV2GameSession } from '../src/game/WorldV2GameSession';
+import { buildGeographyTerrainCell } from '../src/world-v2/WorldTerrain';
+import { stageGeography } from '../src/world-v2/WorldGeographyStage';
+import { surfaceAt, type TerrainCellStore } from '../src/world-v2/WorldSurface';
+import { moveWorldActor } from '../src/world-v2/WorldActorSurface';
 import type { VfxSystem } from '../src/rendering/VfxSystem';
 
 // Keep the real world, input, combat, loot, and persistence logic. Stub only browser rendering.
@@ -897,5 +903,58 @@ describe('gameplay integration', () => {
     expect(char.currentHp).toBe(123);
     expect(char.gold).toBe(snapshot.gold + 50);
   });
+  it.each(['warrior','mage','assassin'] as const)('runs the real %s kit and companions on V2 ground without legacy saves',async role=>{
+    const character=await persistence.createCharacter({accountId:'v2-test',classId:role,name:'V2 Hero'});
+    const cells:ReturnType<typeof buildGeographyTerrainCell>[]=[];
+    for(let z=-1;z<=1;z++) for(let x=-1;x<=1;x++) cells.push(buildGeographyTerrainCell(stageGeography,{x,z}));
+    const store:TerrainCellStore={cellSize:64,getCell:a=>cells.find(c=>c.coordinate.x===a.x&&c.coordinate.z===a.z)};
+    const ground=surfaceAt(store,0,0)!;
+    const world:WorldV2GameSession={
+      group:new THREE.Group(),spawn:{x:0,y:ground.y,z:0},
+      encounters:[{kind:'slime',position:{x:0,y:ground.y,z:-2}}],
+      surface:(x,z)=>surfaceAt(store,x,z),move:(from,dx,dz)=>moveWorldActor(store,[],from,dx,dz),
+      prepareSpawn:async()=>{},update:vi.fn(),frame:vi.fn(),dispose:vi.fn(),renderOrigin:p=>p,
+      resolveAnchor:()=>{throw new Error('Not used by this fixture');},
+    };
+    const save=vi.spyOn(persistence,'saveCharacter');
+    const browserWrite=vi.spyOn(localStorage,'setItem');
+    engine.startGameplayWithCharacter(character,[],false,undefined,world);
+    expect(engine.isWorldV2).toBe(true);expect(state.playerPos.y).toBeCloseTo(18);
+    expect(state.companions).toHaveLength(2);
+    expect(state.enemies[0].bundle.root.position.y).toBeCloseTo(18);
+    engine.input.triggerAction('basic');
+    for(let i=0;i<15;i++) state.updateGameplay(.05);
+    expect(state.enemies.length===0||state.enemies[0].hp<state.enemies[0].maxHp).toBe(true);
+    engine.input.triggerAction('skill1');state.updateGameplay(.05);
+    expect(state.cooldowns.skill1).toBeGreaterThan(0);
+    for(let i=0;i<20;i++) state.updateGameplay(.05);
+    engine.input.triggerAction('skill2');state.updateGameplay(.05);
+    expect(state.cooldowns.skill2).toBeGreaterThan(0);
+    for(let i=0;i<25;i++) state.updateGameplay(.05);
+    state.activeCharacter.ultimateEnergy=100;
+    engine.input.triggerAction('ultimate');
+    for(let i=0;i<35;i++) state.updateGameplay(.05);
+    expect(state.cooldowns.ultimate).toBeGreaterThan(0);
+    // Real movement crosses the former safe-zone radius and a streamed-cell boundary.
+    vi.spyOn(engine.input,'update').mockImplementation(()=>{engine.input.moveVector.set(1,0);});
+    for(let i=0;i<220;i++) state.updateGameplay(.05);
+    expect(state.playerPos.x).toBeGreaterThan(64);
+    expect(state.playerPos.y).toBeCloseTo(world.surface(state.playerPos.x,state.playerPos.z)!.y);
+    await engine.saveActiveCharacterNow();
+    expect(save).not.toHaveBeenCalled();expect(browserWrite).not.toHaveBeenCalled();
+    expect(latestHud.worldV2).toBe(true);expect(latestHud.lastSavedText).toBe('Session only');
+    engine.setPreviewCharacter(null);
+    expect(world.dispose).toHaveBeenCalledTimes(1);expect(engine.isWorldV2).toBe(false);
+  });
+
+  it('keeps the isometric camera above elevated terrain on snap and follow',()=>{
+    const camera=new IsometricCameraController();
+    const actor=new THREE.Vector3(50,18,50);
+    camera.snapToIsometricFollow(actor);
+    expect(camera.camera.position.y).toBeCloseTo(33.3);
+    for(let i=0;i<30;i++) camera.updateIsometricFollow(.05,actor,new THREE.Vector2());
+    expect(camera.camera.position.y).toBeGreaterThan(actor.y+14);
+  });
+
 });
 

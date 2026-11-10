@@ -1,5 +1,7 @@
 # Astral Chronicles — World Architecture V2
 
+**Latest visual authority — D167 (2026-11-10):** The user chose the current live game's art direction, with substantially greater polish, for the open-world anime action RPG and cinematic story conversion. Reference production commit: `92c0de443594733cdc19881ff4b986b63c99609e`, [live game](https://astralcronicles.vercel.app/). Apply D166's inspiration qualities within that established direction. This is a visual continuity clarification, not an architecture, camera, geography, phase-order or shipped-status change. See [decision register](WORLD_V2_DECISIONS.md).
+
 **Status:** Product direction locked 2026-11-08. Phase 1 platform is complete; Phase 2's [geography](WORLD_V2_PHASE2_GEOGRAPHY.md) now has a [functional staging runtime](WORLD_V2_PHASE2_RUNTIME.md): full bounded atlas pages, actual bare-terrain collision, baked walkability/nav paths, and native close gameplay camera. **The five-landmass staging map and Hearthmere replacement coordinates are NOT approved final canon.** Production story integration, ships and iPhone performance profiling remain later phases.  
 **Authority:** Latest explicit user-approved direction → [decision register](WORLD_V2_DECISIONS.md) and underlying [DESIGN_DIRECTION.md](DESIGN_DIRECTION.md) → this architecture → relevant story briefs. **Implementation evidence:** [current source/status matrix](WORLD_V2_STATUS.md); [Phase 3 next handoff](WORLD_V2_PHASE3_HANDOFF.md).  
 **Execution:** [Phase 0 audit and preservation register](WORLD_V2_PHASE0_AUDIT.md) → [production roadmap](PRODUCTION_ROADMAP.md).
@@ -47,6 +49,10 @@ Procedural-first means the system determines most geography and environmental pl
 **Dependency direction:** world definition → generated data → runtime spatial services → gameplay and presentation. Quests resolve location IDs through an anchor service. Navigation and physics consume terrain/collision services. No UI or quest module should import the procedural path generator to determine where the player can walk.
 
 No giant `GameEngine` replacement in one commit. Introduce small interfaces and move ownership incrementally, preserving a runnable app at every phase gate.
+
+### Implemented integration seam — November 10, 2026
+
+`src/game/WorldV2GameSession.ts` defines scene/spatial services for the existing GameEngine. `src/rendering/WorldV2GameWorld.ts` owns the opt-in session's baked terrain loading/rendering and disposal. `src/world-v2/WorldActorSurface.ts` supplies swept terrain/scenery movement; `WorldTerrainRender.ts` is shared by the geography lab and real gameplay entry. GameEngine retains combat, hero/companion AI, input, animation, audio and HUD ownership. This first fixture renders global coordinates directly; floating-origin presentation, full actor residency/path planning and V2 persistence remain open. See [scope/evidence](WORLD_V2_PHASE2_5_PROGRESS.md).
 
 ## 4. Canonical atlas and stable identifiers (proposed)
 

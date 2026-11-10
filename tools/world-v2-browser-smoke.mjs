@@ -141,6 +141,31 @@ async function main() {
       }
       console.log('Browser smoke passed:', JSON.stringify(status));
     }
+    // Phase 2.5: the real gameplay owner on baked V2 terrain (not the lab mover).
+    for (const role of ['warrior','mage','assassin']) {
+      await cdp.send('Page.navigate',{url:serverUrl+'world-v2-gameplay.html?functionalQA=1'});
+      await poll(()=>cdp.eval("!!document.querySelector('#hearthmere-entry')"),'V2 hero selection',30000);
+      const savesBefore=await cdp.eval("JSON.stringify(Object.keys(localStorage).filter(k=>k.startsWith('astral_hearthmere')).sort().map(k=>[k,localStorage.getItem(k)]))");
+      await cdp.eval(`(()=>{const select=document.querySelector('#hearthmere-hero');select.value='${role}';select.dispatchEvent(new Event('change'));document.querySelector('#hearthmere-entry').requestSubmit();})()`);
+      await poll(()=>cdp.eval('!!window.__worldV2GameQA?.snapshot()'),role+' integrated world',45000);
+      const initial=await cdp.eval('window.__worldV2GameQA.snapshot()');
+      if(initial.role!==role||initial.companions.length!==2||initial.groundY===null||Math.abs(initial.position.y-initial.groundY)>.02) {
+        throw new Error('V2 hero/ground/companion startup failed: '+JSON.stringify(initial));
+      }
+      await cdp.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'d',code:'KeyD',windowsVirtualKeyCode:68});
+      try {
+        await poll(()=>cdp.eval(`window.__worldV2GameQA.snapshot().position.x > ${initial.position.x+.4}`),role+' real input movement',30000);
+      } finally {await cdp.send('Input.dispatchKeyEvent',{type:'keyUp',key:'d',code:'KeyD',windowsVirtualKeyCode:68});}
+      await cdp.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81});
+      await cdp.send('Input.dispatchKeyEvent',{type:'keyUp',key:'q',code:'KeyQ',windowsVirtualKeyCode:81});
+      await poll(()=>cdp.eval('window.__worldV2GameQA.snapshot().cooldowns.skill1>0'),role+' real skill release',30000);
+      const actual=await cdp.eval('window.__worldV2GameQA.snapshot()');
+      const savesAfter=await cdp.eval("JSON.stringify(Object.keys(localStorage).filter(k=>k.startsWith('astral_hearthmere')).sort().map(k=>[k,localStorage.getItem(k)]))");
+      if(savesBefore!==savesAfter||Math.abs(actual.position.y-actual.groundY)>.02) throw new Error('V2 touched old saves or lost ground lock');
+      const shot=await cdp.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+      writeFileSync(path.join(screenshots,`world-v2-gameplay-${role}.png`),Buffer.from(shot.data,'base64'));
+      console.log('V2 GameEngine browser smoke passed:',JSON.stringify(actual));
+    }
     // Phase 1: verify the separate lab actually renders and crosses a cell
     // boundary, not merely that a TypeScript heightfield unit test passes.
     await cdp.send('Page.navigate', { url: serverUrl + 'world-v2-lab.html' });

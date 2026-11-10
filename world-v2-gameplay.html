@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0b0e1a" />
+    <meta name="description" content="Choose one of three heroes and survive the attack on Hearthmere in Astral Chronicles: The Starforged Crown." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/astral.svg" />
+    <title>Astral Chronicles · Open-world playtest</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas" aria-label="3D Game Viewport"></canvas>
+      <div id="damage-layer" class="damage-layer"></div>
+      <div id="ui-root" class="ui-root"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { beam, loft, panel, piece, smoothLoft } from './ArtMesh';
+import { beam, loft, panel, piece } from './ArtMesh';
+import { buildStorybookTree } from './StorybookNature';
 
 const point = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -274,84 +275,13 @@ export function buildRefugeBridge(parent: THREE.Group, paint: (color: number) =>
 }
 
 export function buildRefugeGrove(parent: THREE.Group, paint: (color: number) => THREE.Material): THREE.Mesh[] {
-  const bark = paint(0x675444);
-  const barkLight = paint(0x8d7050);
-  const leafMaterial = paint(0xffffff);
-  const palettes = [
-    [0x416454, 0x648762, 0x94a870],
-    [0x4d664e, 0x768c58, 0xa9ad71],
-    [0x446555, 0x6f8f70, 0x94ad81],
-  ].map(colors => colors.map(color => new THREE.Color(color)));
   const trees = [
-    [21.05, -6.25, 1.22, .23, 0], [24, 10, .96, -1.2, 1], [28.2, -4.0, 1.34, .8, 2],
-    [34, 2, .81, 2.51, 1], [36.6, 10.3, 1.04, -1.8, 2], [36, -7, 1.22, 1.98, 0],
+    [21.05,-6.25,1.22,.23,0], [24,10,.96,-1.2,1], [28.2,-4,1.34,.8,2],
+    [34,2,.81,2.51,1], [36.6,10.3,1.04,-1.8,2], [36,-7,1.22,1.98,0],
   ];
-  const trunks: THREE.Mesh[] = [];
-  const clump = (tree: THREE.Group, x: number, y: number, z: number, width: number,
-    height: number, depth: number, rotation: number, palette: THREE.Color[]) => {
-    const geometry = smoothLoft([[-.72,.16,.16,.04],[-.57,.62,.61,.10],[-.30,.91,.87,.10],[-.03,1,.96,.056],
-      [.23,.92,.83,-.04],[.47,.71,.64,-.10],[.65,.43,.39,-.16],[.72,.12,.12,-.21]], 22);
-    const points = geometry.getAttribute('position');
-    const colors = new Float32Array(points.count * 3);
-    const color = new THREE.Color();
-    const [shade, leaf, sun] = palette;
-    for (let i = 0; i < points.count; i++) {
-      const px = points.getX(i), py = points.getY(i), pz = points.getZ(i);
-      const angle = Math.atan2(px, pz);
-      const scallop = 1 + .081 * Math.sin(angle * 5.0 + py * 2.4) + .064 * Math.cos(angle * 3.0 - py * 4.0);
-      const daub = Math.sin(px * 5.0 + pz * 3.3) * Math.cos(pz * 5.8 - px * 2.3);
-      const lighting = py - px * .15 - pz * .08 + daub * .22;
-      color.copy(shade).lerp(leaf, THREE.MathUtils.smoothstep(lighting, -.44, .16))
-        .lerp(sun, THREE.MathUtils.smoothstep(lighting, .24, .68) * .80)
-        .toArray(colors, i * 3);
-      points.setXYZ(i, px * scallop - .11 * py, py + .073 * daub, pz * scallop);
-    }
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geometry.computeVertexNormals();
-    const crown = piece(tree, geometry, leafMaterial, x, y, z);
-    crown.scale.set(width, height, depth);
-    crown.rotation.y = rotation;
-    crown.castShadow = crown.receiveShadow = true;
-  };
-  const branch = (tree: THREE.Group, start: THREE.Vector3, end: THREE.Vector3, radius: number) => {
-    const length = start.distanceTo(end);
-    const bough = piece(tree, loft([[0, radius, radius*.84], [length*.51,radius*.79,radius*.66,.036],
-      [length,radius*.33,radius*.36,.06]], 8), bark);
-    bough.position.copy(start);
-    bough.quaternion.setFromUnitVectors(point(0, 1, 0), end.clone().sub(start).normalize());
-    bough.castShadow = bough.receiveShadow = true;
-  };
-  for (const [index, [x, z, scale, rotation, family]] of trees.entries()) {
-    const tree = new THREE.Group();
-    tree.position.set(x, 0, z);
-    tree.scale.setScalar(scale);
-    tree.rotation.y = rotation;
-    parent.add(tree);
-    const trunk = piece(tree, smoothLoft([[0,.32,.28,.014], [.18,.26,.23], [.62,.16,.18,.022],
-      [1.5,.14,.15,.081,-.079], [2.1,.13,.13,.13,-.057], [2.73,.078,.084,.22,.11], [3.15,.042,.045,.29,.22]],
-    12), bark);
-    trunk.castShadow = trunk.receiveShadow = true;
-    trunks.push(trunk);
-    for (const angle of [-.39, 1.16, 2.72, 4.21]) {
-      const root = point(Math.cos(angle) * .64, .035, Math.sin(angle) * .55);
-      branch(tree, point(0, .43, 0), root, .106);
-    }
-    for (const [i, [dx, y, dz, width]] of [
-      [-.89,2.72,-.46,.93], [.80,2.99,-.42,1.07], [-.71,3.20,.45,1.07], [.65,3.22,.43,.91],
-      [.05,3.61,-.20,1.21],
-    ].entries()) {
-      const rise = Math.sin(i * 4 + index) * .23;
-      branch(tree, point(-.08, 1.44 + (i % 3) * .26, .11), point(dx, y + rise, dz), .12 + (i % 2) * .016);
-      clump(tree, dx, y + rise, dz, width * 1.11, .57 + i * .035, width * .92, i * 1.7, palettes[family]);
-      if (i < 4) {
-        const reach = i % 2 ? .31 : -.37;
-        clump(tree, dx + reach * 1.5, y + rise + .18, dz + Math.sign(dz) * .35, width * .57,
-          .35 + (i % 2) * .10, width * .63, i * .7, palettes[family]);
-      }
-    }
-    const barkSplit = piece(tree, panel([[-.041,.10], [.004,.41], [-.031,.90], [-.087,1.32],
-      [-.046,.89], [.035,.44], [.016,.18]], .004), barkLight, 0, 0, .174);
-    barkSplit.receiveShadow = true;
-  }
-  return trunks;
+  return trees.map(([x,z,scale,rotation,family]) => {
+    const tree=new THREE.Group(); tree.position.set(x,0,z);
+    tree.scale.setScalar(scale); tree.rotation.y=rotation; parent.add(tree);
+    return buildStorybookTree(tree,paint,family);
+  });
 }

@@ -371,7 +371,7 @@ export class VfxSystem {
     strength = 1,
   ): void {
     const group = new THREE.Group();
-    group.position.set(center.x, 0.05, center.z);
+    group.position.set(center.x, center.y + 0.05, center.z);
 
     const ringGeo = new THREE.RingGeometry(0.7, 1.0, 36);
     ringGeo.rotateX(-Math.PI / 2);
@@ -617,7 +617,7 @@ export class VfxSystem {
       depthWrite: false,
     });
     const ghost = new THREE.Mesh(geo, mat);
-    ghost.position.set(position.x, 0.75, position.z);
+    ghost.position.set(position.x, position.y + 0.75, position.z);
     this.scene.add(ghost);
 
     this.activeMeshes.push({

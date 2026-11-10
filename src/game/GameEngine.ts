@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { WorldV2GameSession } from './WorldV2GameSession';
 import type { WorldV2GameplayPort } from '../world-v2/WorldV2GameplayBridge';
 import { getViewportProfile } from '../platform/Viewport';
 import { dressGuardian } from '../rendering/GuardianRegalia';
@@ -179,6 +180,7 @@ export interface ExpeditionReport {
 }
 
 export interface HudTelemetry {
+  worldV2?: boolean;
   map: MapSnapshot;
   boss: { name: string; hp: number; maxHp: number; enraged: boolean } | null;
   flaskCharges: number;
@@ -237,6 +239,8 @@ export class GameEngine {
   private environment: EnvironmentBuilder;
   /** Optional V2 residency/anchor port. Never enabled for legacy Hearthmere. */
   private worldV2Port: WorldV2GameplayPort | null = null;
+  private worldV2Session: WorldV2GameSession | null = null;
+  private worldV2PlayerSafe = new THREE.Vector3();
   private worldV2LastTick = -Infinity;
   private worldV2PreviousPosition: { x: number; z: number } | null = null;
   private minimapTerrain: MinimapTerrainCapture | null = null;
@@ -345,6 +349,17 @@ export class GameEngine {
   }
 
   public get isFinishing(): boolean { return this.finisher !== null; }
+  public worldV2Snapshot() {
+    const world=this.worldV2Session;
+    if(!world) return null;
+    return {role:this.activeCharacter?.classId,position:{x:this.playerPos.x,y:this.playerPos.y,z:this.playerPos.z},
+      groundY:world.surface(this.playerPos.x,this.playerPos.z)?.y ?? null,
+      companions:this.companions.map(c=>({role:c.classId,x:c.position.x,y:c.position.y,z:c.position.z,attacks:c.attackCount})),
+      enemies:this.enemies.map(e=>({hp:e.hp,y:e.bundle.root.position.y})),
+      cooldowns:{...this.cooldowns},paused:this.isPaused};
+  }
+
+  public get isWorldV2(): boolean { return this.worldV2Session !== null; }
   public get isSlice(): boolean { return this.slice !== null; }
   public get isOpening(): boolean { return this.opening !== null; }
   public skipBossFinisher(): void { this.finisher?.finish(); }
@@ -585,6 +600,17 @@ export class GameEngine {
     } else if (this.slice) {
       this.clearZoneCombatEntities();
       this.resetSliceAtCamp();
+    } else if (this.worldV2Session) {
+      const world=this.worldV2Session;
+      this.setPaused('world-load',true);
+      void world.prepareSpawn().then(()=>{
+        if(this.worldV2Session!==world) return;
+        this.clearZoneCombatEntities();this.resetWorldV2Encounter();this.emitHudTelemetry();
+      }).catch(()=>{
+        if(this.worldV2Session!==world) return;
+        this.defeated=true;this.callbacks.onDefeated?.();
+        this.callbacks.onBannerNotification('THE ROAD NEEDS A MOMENT','The arrival ground could not load. Try returning to the clearing again.');
+      }).finally(()=>this.setPaused('world-load',false));
     } else this.enterZone('starting_town');
     this.emitHudTelemetry();
   }
@@ -728,7 +754,8 @@ export class GameEngine {
     character: CharacterSaveData,
     accountRoster: CharacterSaveData[] = [],
     playableSlice = false,
-    openingSave?: HearthmereSave
+    openingSave?: HearthmereSave,
+    worldV2?: WorldV2GameSession
   ): void {
     this.clearGameplayEntities();
     if (this.previewRig) {
@@ -745,6 +772,8 @@ export class GameEngine {
     }
 
     this.mode = 'playing';
+    this.worldV2Session = worldV2 ?? null;
+    if (worldV2) this.attachWorldV2Port(worldV2);
     this.slice = playableSlice ? new MoatSlice() : null;
     this.opening = openingSave ? new HearthmereOpening(character.classId, openingSave.step) : null;
     this.openingSaveFailed = false;
@@ -764,7 +793,7 @@ export class GameEngine {
     this.activeCharacter = structuredClone(character);
     // Hearthmere and the internal moat slice do not use the retired Long Dawn
     // campaign or Riftscar quest state. Keep normalization in legacy entrypoints.
-    if (!this.opening && !this.slice) {
+    if (!this.opening && !this.slice && !this.worldV2Session) {
       ensureCampaign(this.activeCharacter);
       this.activeCharacter.questState = normalizeQuestState(this.activeCharacter.questState);
     }
@@ -787,6 +816,20 @@ export class GameEngine {
     this.cooldowns = { basic: 0, dash: 0, skill1: 0, skill2: 0, ultimate: 0 };
     this.hitComboCount = 0;
     this.autoSaveTimer = 0;
+
+    if (worldV2) {
+      this.currentZone = 'stomping_grounds'; // Existing combat rules, no legacy route or quests.
+      this.currentPathLayout = null;
+      this.activePortals = []; this.activeNpcs = []; this.chronicleSites = [];
+      this.nearbyPortal = null; this.nearbyNpc = null; this.nearbyChronicleSite = null;
+      this.fieldPlan = null; this.currentPathProgress = 0;
+      if (this.compassGroup) this.compassGroup.visible = false;
+      this.environment.buildSlice(this.scene,worldV2.group,0xa5ccdc);
+      this.scene.fog = new THREE.Fog(0xa5ccdc,55,125);
+      this.resetWorldV2Encounter();
+      this.emitHudTelemetry();
+      return;
+    }
 
     if (this.slice || this.opening) {
       this.currentZone = 'starting_town';
@@ -817,6 +860,29 @@ export class GameEngine {
     const journey = this.activeCharacter.journeyState;
     this.enterZone(initialZone, undefined, journey?.seed ?? undefined, journey?.zone === initialZone ? journey : undefined);
     this.emitHudTelemetry();
+  }
+
+  /** Repeatable integration fixture; geography and encounters remain staging. */
+  private resetWorldV2Encounter(): void {
+    const world=this.worldV2Session!;
+    this.playerPos.set(world.spawn.x,world.spawn.y,world.spawn.z);
+    this.worldV2PlayerSafe.copy(this.playerPos);
+    this.playerYaw=Math.PI;
+    this.playerRig!.root.position.copy(this.playerPos);
+    this.pendingAttack=null; this.attackRetreat=null; this.sliceWindup=0;
+    this.dashTimer=0; this.activeAttackTimer=0;
+    this.animState.attackComboStep=0; this.flaskCharges=FLASK_CAPACITY;
+    for(const c of this.companions) {
+      const moved=world.move(world.spawn,c.wingSide*1.9,1.8);
+      c.position.set(moved.position.x,moved.position.y,moved.position.z);
+      c.rig.root.position.copy(c.position); c.pendingAttack=undefined;
+      c.activeAttackTimer=0; c.animState.attackComboStep=0;
+    }
+    for(const encounter of world.encounters) {
+      this.spawnEnemyAtPosition(encounter.kind,encounter.position.x,encounter.position.z,1);
+    }
+    this.expedition={total:this.enemies.length,defeated:0,seconds:0,gold:0,damageTaken:0};
+    this.input.resetAll(); this.cameraController.snapToIsometricFollow(this.playerPos);
   }
 
   private restoreOpening(snapshot: HearthmereSave): void {
@@ -1642,7 +1708,7 @@ export class GameEngine {
   }
 
   public async saveActiveCharacterNow(): Promise<boolean> {
-    if (this.slice) return true;
+    if (this.slice || this.worldV2Session) return true;
     if (!this.activeCharacter || this.mode !== 'playing') return false;
     if (this.opening) {
       const character = this.activeCharacter;
@@ -1739,6 +1805,7 @@ export class GameEngine {
 
   private clearGameplayEntities(): void {
     this.attachWorldV2Port(null);
+    this.worldV2Session = null;
     if (this.playerRig) {
       this.removeSceneObject(this.playerRig.root);
       this.playerRig = null;
@@ -1785,7 +1852,7 @@ export class GameEngine {
     scale: number
   ): void {
     const bundle = buildEnemyMesh(kind);
-    bundle.root.position.set(x, 0, z);
+    bundle.root.position.set(x, this.worldV2Session?.surface(x,z)?.y ?? 0, z);
     this.scene.add(bundle.root);
 
     scale *= 1 + Math.max(0, (this.activeCharacter?.level ?? 1) - 1) * 0.1;
@@ -1897,6 +1964,7 @@ export class GameEngine {
     if (this.mode === 'playing' && !this.isPaused && document.visibilityState !== 'hidden') {
       this.minimapTerrain?.update(this.renderer, this.scene, this.environment.minimapWorldRoot, this.playerPos, now);
     }
+    this.worldV2Session?.frame(now*.001,this.playerPos,this.cameraController.camera);
     this.renderer.render(this.scene, this.cameraController.camera);
 
     requestAnimationFrame(this.loop);
@@ -1999,7 +2067,7 @@ export class GameEngine {
 
     // Process Action Inputs (Dash, Ultimate, Skill 2, Skill 1, Basic Attack)
     const dodgePressed = this.input.consumeAction('dash');
-    const usesCommittedActions = slice !== null || this.opening !== null;
+    const usesCommittedActions = slice !== null || this.opening !== null || this.isWorldV2;
     if (this.attackCommitted || (usesCommittedActions && (playerVaulting || this.dashTimer > 0))) {
       for (const action of ['ultimate', 'skill2', 'skill1', 'basic'] as const) this.input.consumeAction(action);
       if (this.sliceWindup > 0) {
@@ -2139,7 +2207,7 @@ export class GameEngine {
       }
       if (event.hit) this.damagePlayer(Math.ceil(stats.maxHp * 0.46));
       if (event.changed) void this.saveActiveCharacterNow();
-    } else {
+    } else if (!this.worldV2Session) {
       this.updateFieldObjective(dt);
       if (this.environment.biomeWalkable) {
         this.environment.updateBiomeMotion(dt, this.playerRig!.root,
@@ -2289,7 +2357,9 @@ export class GameEngine {
 
       if (comp.pendingAttack) stepIntoStrike(comp.pendingAttack, comp.animState.attackSwingProgress, comp.position, comp.yaw);
       // The belllands are explorable landscapes; the tutorial retains its corridor bounds.
-      if (this.environment.biomeWalkable) {
+      if (this.worldV2Session) {
+        this.constrainWorldV2Actor(comp.position,previousX,previousZ);
+      } else if (this.environment.biomeWalkable) {
         this.constrainBiomeActor(comp.position, previousX, previousZ);
       } else if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(
@@ -2501,7 +2571,19 @@ export class GameEngine {
     }
   }
 
+  private constrainWorldV2Actor(position: THREE.Vector3,x:number,z:number,radius=.35):void {
+    const world=this.worldV2Session!;
+    const from={x,y:world.surface(x,z)?.y ?? position.y,z};
+    const result=world.move(from,position.x-x,position.z-z,radius);
+    position.set(result.position.x,result.position.y,result.position.z);
+  }
+
   private clampPlayerToZone(restore = false): void {
+    if(this.worldV2Session) {
+      this.constrainWorldV2Actor(this.playerPos,this.worldV2PlayerSafe.x,this.worldV2PlayerSafe.z);
+      this.worldV2PlayerSafe.copy(this.playerPos);
+      return;
+    }
     if (this.opening) {
       this.opening.constrainPlayer(this.playerPos);
       return;
@@ -3401,7 +3483,7 @@ export class GameEngine {
 
   private detonateStarlight(projectile: ProjectileEntity, knockback: number): void {
     const { position, shape, explodeRadius, colorHex, accentHex, damageMultiplier, energyGain, colorCss } = projectile;
-    const ground = new THREE.Vector3(position.x, 0, position.z);
+    const ground = new THREE.Vector3(position.x, this.worldV2Session?.surface(position.x,position.z)?.y ?? 0, position.z);
     if (shape === 'comet') this.vfx.spawnNovaBurst(ground, explodeRadius, colorHex, accentHex);
     else this.vfx.spawnShockwaveRing(ground, explodeRadius, colorHex, accentHex, .28);
     this.dealAreaDamage(ground, explodeRadius, damageMultiplier, energyGain, colorCss, knockback);
@@ -3423,12 +3505,13 @@ export class GameEngine {
     const effect = opts.visualStyle === 'vortex'
       ? buildGravitySingularity(opts.radius, opts.colorHex, opts.accentHex)
       : buildDeathmark(opts.radius, opts.colorHex, opts.accentHex);
-    effect.mesh.position.set(opts.position.x, .06, opts.position.z);
+    const groundY=this.worldV2Session?.surface(opts.position.x,opts.position.z)?.y ?? 0;
+    effect.mesh.position.set(opts.position.x, groundY+.06, opts.position.z);
     this.scene.add(effect.mesh);
     this.groundHazards.push({
       id: `haz_${Date.now()}_${Math.random()}`,
       mesh: effect.mesh,
-      position: new THREE.Vector3(opts.position.x, 0, opts.position.z),
+      position: new THREE.Vector3(opts.position.x, groundY, opts.position.z),
       radius: opts.radius,
       damageMultiplier: opts.damageMultiplier,
       energyGain: opts.energyGain,
@@ -3608,6 +3691,11 @@ export class GameEngine {
     this.hitStop = Math.max(this.hitStop, 0.045);
     if (this.opening) {
       void this.saveActiveCharacterNow();
+      return;
+    }
+    if (this.worldV2Session) {
+      if(this.enemies.length===0) this.callbacks.onBannerNotification('THE CLEARING IS QUIET',
+        'Keep exploring beyond the road. Your companions will follow.');
       return;
     }
     if (this.slice) {
@@ -3853,7 +3941,7 @@ export class GameEngine {
           pos.addScaledVector(dir, enemy.speed * (enemy.enraged ? 1.25 : 1) * dt);
         } else if (enemy.attackCooldown <= 0) {
           enemy.attackTarget.copy(enemy.kind === 'boss_knight' && this.currentZone !== 'ember_coast' && this.currentZone !== 'world_heart' ? pos : this.playerPos);
-          enemy.attackTarget.y = 0.06;
+          enemy.attackTarget.y = (this.worldV2Session?.surface(enemy.attackTarget.x,enemy.attackTarget.z)?.y ?? 0) + .06;
           enemy.attackPattern = pattern;
           enemy.windup = pattern.windup;
           const group = new THREE.Group();
@@ -3888,13 +3976,16 @@ export class GameEngine {
           const otherPosition = other.bundle.root.position;
           const { x, z } = otherPosition;
           otherPosition.sub(push);
-          if (this.environment.biomeWalkable) this.constrainBiomeActor(otherPosition, x, z);
+          if (this.worldV2Session) this.constrainWorldV2Actor(otherPosition,x,z,other.radius);
+          else if (this.environment.biomeWalkable) this.constrainBiomeActor(otherPosition, x, z);
           else this.opening?.constrainMovement(otherPosition, x, z);
         }
       }
 
       // Clamp enemy to the procedural path if in a procedural corridor zone
-      if (this.environment.biomeWalkable) {
+      if (this.worldV2Session) {
+        this.constrainWorldV2Actor(pos,previousX,previousZ,enemy.radius);
+      } else if (this.environment.biomeWalkable) {
         this.constrainBiomeActor(pos, previousX, previousZ);
       } else if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(pos.x, pos.z, this.currentPathLayout, 0.65);
@@ -4029,6 +4120,14 @@ export class GameEngine {
         isComplete: this.opening.step === 'complete', companionBanter: null,
       });
     }
+    if (this.worldV2Session) {
+      zoneTitle='HEARTHMERE FOOTHILLS'; zoneSubtitle='The Starforged Crown · Open-world playtest';
+      Object.assign(questView, {chapterTitle:'THE LANDS BEYOND',stage:'chronicle',stepNumber:1,totalSteps:1,
+        objectiveTitle:this.enemies.length?'Clear the foothills':'Explore beyond the road',
+        objectiveHint:'Move freely across the hills. Your triad fights alongside you.',
+        progressText:this.enemies.length?`${this.enemies.length} threats nearby`:'The clearing is safe. Explore the landscape.',
+        isComplete:false,companionBanter:null,actionButtonLabel:undefined});
+    }
     if (isChronicleRegion(this.currentZone)) {
       const chapter = currentChapter(char);
       zoneTitle = REGION_NAMES[chapter.region].toUpperCase();
@@ -4106,7 +4205,8 @@ export class GameEngine {
           total: classDef.skills.ultimate.cooldown,
         },
       },
-      lastSavedText: this.openingSaveFailed ? 'Save failed' : this.slice ? 'Playtest session' : secsAgo <= 1 ? 'Saved just now' : `Saved ${secsAgo}s ago`,
+      worldV2: this.isWorldV2,
+      lastSavedText: this.isWorldV2 ? 'Session only' : this.openingSaveFailed ? 'Save failed' : this.slice ? 'Playtest session' : secsAgo <= 1 ? 'Saved just now' : `Saved ${secsAgo}s ago`,
       slice: this.slice ? {
         bossAvailable: Boolean(boss), bossLocked: Boolean(this.sliceBossLock),
         committed: this.attackCommitted, canUseLever: this.slice.canLowerBridge(this.sliceActors()),
