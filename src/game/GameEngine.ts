@@ -1,3 +1,4 @@
+import type { ObservatoryAtelier } from '../rendering/ObservatoryAtelier';
 import * as THREE from 'three';
 import type { WorldV2GameplayPort } from '../world-v2/WorldV2GameplayBridge';
 import { getViewportProfile } from '../platform/Viewport';
@@ -231,6 +232,7 @@ export interface GameEngineCallbacks {
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
+  private atelier: ObservatoryAtelier | null = null;
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private cameraController: IsometricCameraController;
@@ -650,6 +652,40 @@ export class GameEngine {
     });
 
     requestAnimationFrame(this.loop);
+  }
+
+  /** Isolated art slice; reuses the internal moat combat sandbox and all live simulation. */
+  public async startObservatoryAtelier(character: CharacterSaveData, baseline = false): Promise<void> {
+    this.startGameplayWithCharacter(character, [], true);
+    this.slice!.configureArena({x:SLICE_CAMP.x,z:SLICE_CAMP.z-1,radiusX:6.2,radiusZ:5.9});
+    if(!baseline)this.animState.motionProfile='observatory';
+    this.slice!.group.visible = false;
+    for (const c of this.companions) this.removeSceneObject(c.rig.root);
+    this.companions = [];
+    for (const e of this.enemies) this.removeSceneObject(e.bundle.root);
+    this.enemies = [];
+    this.spawnEnemyAtPosition('sentinel', SLICE_CAMP.x, SLICE_CAMP.z - 4.8, .9);
+    this.enemies[0].name = 'The Orrery Keeper';
+    this.enemies[0].maxHp = this.enemies[0].hp = 1600;
+    this.expedition = { total: 1, defeated: 0, seconds: 0, gold: 0, damageTaken: 0 };
+    this.playerYaw = .30;
+    this.playerRig!.root.rotation.y = this.playerYaw;
+    this.setPaused('atelier-loading', true);
+    try {
+      const { ObservatoryAtelier } = await import('../rendering/ObservatoryAtelier');
+      this.atelier = new ObservatoryAtelier(this.scene, this.renderer, this.cameraController,
+        this.playerRig!, SLICE_CAMP.clone(), this.enemies[0].bundle.root,this.enemies[0].bundle.bodyMesh, baseline);
+      await this.atelier.ready;
+    } finally { this.setPaused('atelier-loading', false); }
+  }
+  public atelierView(): void { this.atelier?.nextView(); }
+  public atelierInspectArt(): unknown { return this.atelier?.inspectArt(); }
+  public atelierSkill(): void { if (this.atelier && !this.isPaused && this.cooldowns.skill1 <= 0) this.executeSkill('skill1'); }
+  public atelierDiagnostics(): unknown {
+    return { ...this.atelier?.diagnostics(), position: this.playerPos.toArray(),
+      animation: { ...this.animState }, hp: this.activeCharacter?.currentHp,
+      maxHp:this.effectiveStats?.maxHp, cooldown:this.cooldowns.skill1,
+      keeper:this.enemies[0]?{name:this.enemies[0].name,hp:this.enemies[0].hp,maxHp:this.enemies[0].maxHp}:null };
   }
 
   private buildPreviewPedestal(): void {
@@ -1738,6 +1774,7 @@ export class GameEngine {
   }
 
   private clearGameplayEntities(): void {
+    this.atelier?.dispose(); this.atelier = null;
     this.attachWorldV2Port(null);
     if (this.playerRig) {
       this.removeSceneObject(this.playerRig.root);
@@ -1894,10 +1931,13 @@ export class GameEngine {
     this.vfx.update(this.isPaused ? 0 : dt, this.cameraController.camera);
     this.opening?.setSceneryFocus(this.cameraController.camera,
       this.mode === 'playing' && !this.pauseReasons.has('cutscene') ? this.playerPos : null);
-    if (this.mode === 'playing' && !this.isPaused && document.visibilityState !== 'hidden') {
+    if (!this.atelier && this.mode === 'playing' && !this.isPaused && document.visibilityState !== 'hidden') {
       this.minimapTerrain?.update(this.renderer, this.scene, this.environment.minimapWorldRoot, this.playerPos, now);
     }
-    this.renderer.render(this.scene, this.cameraController.camera);
+    if (this.atelier) {
+      this.atelier.update(this.isPaused ? 0 : dt, this.animState, this.enemies[0]?.hitFlashTimer ?? 0);
+      this.atelier.render();
+    } else this.renderer.render(this.scene, this.cameraController.camera);
 
     requestAnimationFrame(this.loop);
   };
@@ -2088,7 +2128,8 @@ export class GameEngine {
       ? this.animState.attackComboStep >= 4
       : this.animState.attackComboStep <= 3
         || this.animState.attackComboStep === 5
-        || (char.classId === 'assassin' && this.animState.skillSlot === 'skill2');
+        || (char.classId === 'assassin' && this.animState.skillSlot === 'skill2')
+        || (this.animState.motionProfile === 'observatory' && this.animState.skillSlot === 'skill1');
     this.playerRig!.updateAnimation(dt, released && exactContact
       ? { ...this.animState, attackSwingProgress: attack.releaseAt }
       : this.animState);
@@ -2985,7 +3026,7 @@ export class GameEngine {
     const ultimate = skillKey === 'ultimate';
     const heavensfall = ultimate && char.classId === 'warrior';
     const shadowExecution = ultimate && char.classId === 'assassin';
-    const duration = ultimate ? { warrior: .68, assassin: .64, mage: .58 }[char.classId] : .38;
+    const duration = this.atelier && skillKey === 'skill1' ? (this.animState.motionProfile==='observatory'?1.6:1.05) : ultimate ? { warrior: .68, assassin: .64, mage: .58 }[char.classId] : .38;
     this.startHeroAttack(ultimate ? 5 : 4, duration,
       () => this.releaseSkill(skillKey, skillLevelBonus, nearest, forward), ultimate ? undefined : skillKey);
     if (heavensfall) {
@@ -3135,7 +3176,8 @@ export class GameEngine {
           ? nearest.bundle.root.position.clone()
           : this.playerPos.clone().addScaledVector(forward, 4.8);
         const palm = this.playerRig!.getSpellEmitter(false);
-        if (palm) this.vfx.spawnGravityCast(palm, targetPos, this.playerYaw, skill.colorHex, skill.accentHex);
+        if (this.atelier) this.atelier.release(targetPos, skill.aoeRadius);
+        else if (palm) this.vfx.spawnGravityCast(palm, targetPos, this.playerYaw, skill.colorHex, skill.accentHex);
         this.spawnGroundHazard({
           position: targetPos,
           radius: skill.aoeRadius,
@@ -3423,6 +3465,7 @@ export class GameEngine {
     const effect = opts.visualStyle === 'vortex'
       ? buildGravitySingularity(opts.radius, opts.colorHex, opts.accentHex)
       : buildDeathmark(opts.radius, opts.colorHex, opts.accentHex);
+    if (this.atelier && opts.visualStyle === 'vortex') effect.mesh.visible = false;
     effect.mesh.position.set(opts.position.x, .06, opts.position.z);
     this.scene.add(effect.mesh);
     this.groundHazards.push({
@@ -3894,7 +3937,9 @@ export class GameEngine {
       }
 
       // Clamp enemy to the procedural path if in a procedural corridor zone
-      if (this.environment.biomeWalkable) {
+      if(this.atelier&&this.slice){
+        this.slice.constrainActor(pos,previousX,previousZ);
+      } else if (this.environment.biomeWalkable) {
         this.constrainBiomeActor(pos, previousX, previousZ);
       } else if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(pos.x, pos.z, this.currentPathLayout, 0.65);

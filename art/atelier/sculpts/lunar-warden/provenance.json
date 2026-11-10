@@ -1,0 +1,13 @@
+{
+  "sourceImage": "art/atelier/references/lunar-warden.png",
+  "method": "TripoSR + CPU scikit-image surface extraction",
+  "upstream": "https://github.com/VAST-AI-Research/TripoSR",
+  "upstreamCommit": "107cefdc244c39106fa830359024f6a2f1c78871",
+  "model": "stabilityai/TripoSR",
+  "resolution": 128,
+  "vertices": 21350,
+  "triangles": 42652,
+  "seconds": 315.4,
+  "status": "Reviewed candidate: calibrated front paint improves live sculpture; rear relief remains soft. Not production art acceptance.",
+  "modelRevision": "5b521936b01fbe1890f6f9baed0254ab6351c04a"
+}

@@ -1,0 +1,57 @@
+{
+  "capturedAt": "2026-11-10T07:07:34.189Z",
+  "capturePrefix": "27-character-shadow",
+  "mode": "paused static comparison",
+  "inputVerified": false,
+  "selectedViews": [
+    0,
+    3
+  ],
+  "browser": "Chromium / SwiftShader",
+  "viewport": [
+    960,
+    600
+  ],
+  "logs": [
+    {
+      "ready": true,
+      "view": 0,
+      "simulationTime": 0.10000000000000182,
+      "tree": "sculpt-conditioned porous foliage",
+      "hero": "original fitted reconstruction",
+      "composition": "close",
+      "lighting": "front",
+      "portraitShadow": true,
+      "weaponTrail": true,
+      "keeperArt": "original reconstruction",
+      "castAge": 10.100000000000003,
+      "frameIntervalMs": 5278.5,
+      "calls": 137,
+      "triangles": 2737923,
+      "position": [
+        -9,
+        0,
+        11
+      ],
+      "animation": {
+        "isMoving": false,
+        "moveSpeedRatio": 0,
+        "attackComboStep": 0,
+        "attackSwingProgress": 0,
+        "isDashing": false,
+        "hitFlashTimer": 0,
+        "motionProfile": "observatory",
+        "charging": false
+      },
+      "hp": 530,
+      "maxHp": 530,
+      "cooldown": 0,
+      "keeper": {
+        "name": "The Orrery Keeper",
+        "hp": 1600,
+        "maxHp": 1600
+      }
+    }
+  ],
+  "errors": []
+}

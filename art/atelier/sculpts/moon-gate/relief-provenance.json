@@ -1,0 +1,10 @@
+{
+  "source": "Original calibrated albedo.png and UV chart mask",
+  "method": "Illustrated high-frequency relief; broad lighting removed; chart-gutter suppression",
+  "strength": 9.0,
+  "textureSize": [
+    3072,
+    3072
+  ],
+  "limitation": "Material suggestion, not recovered physical depth or a sculpt-normal bake"
+}

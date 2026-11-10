@@ -1,6 +1,32 @@
 # World V2 — Screenshot-based visual iteration log
 
-**Scope:** Phase 2 staged geography only. Screenshots depict actual browser/Three.js rendering from reproducible camera coordinates, not the finalized Astral Chronicles art direction or canonical world layout. This log records the actual image evidence and resulting code changes, rather than declaring a world visually complete because tests pass.
+**Scope:** Phase 2 staged geography and the separately identified opt-in art investigation below. Screenshots depict actual browser/Three.js rendering, not approved canonical geography or final production art. This log records image evidence and resulting code changes; tests do not establish visual acceptance.
+
+## Original asset-production investigation — 2026-11-09–10
+
+The atelier runs on the existing game/animation/combat/camera systems. It is not
+a World V2 campaign cutover. The initial spline/detail passes remained a basic
+prototype; the later passes changed the actual upstream asset source.
+
+| Pass | Actual evidence and critical finding | Underlying correction |
+| --- | --- | --- |
+| 11–14 | [UV couture](screenshots/astral-slice/11-couture-hero.png), [rejected ravine winding](screenshots/astral-slice/12-sculpt-garden.png), [canopy](screenshots/astral-slice/14-canopy-garden.png). Better material alignment still left mannequin anatomy, regular landscape forms and weak plant structure. Pass 13's ability capture timed out; it is not counted as a completed review. | Original design-led fitting, oriented continuous ravine patches, authored vegetation shoots, painted material/sky sources and a canonical-rig Blender action. |
+| 15–17 | [Guardian and painted flow](screenshots/astral-slice/17-painted-flow-keeper.png), [ability](screenshots/astral-slice/17-painted-flow-ability.png). Original reconstruction improves the carved design; raw neural paint lost much of its character. | Calibrated original paint projection onto actual UV geometry, editable material masks, cliff extent correction, asymmetric painted energy strokes. |
+| 18–19 | [Rejected shoulder spikes](screenshots/astral-slice/18-fitted-hero-portrait.png) → [smoothed binding](screenshots/astral-slice/19-smooth-binding-portrait.png). Stronger face/costume identity, but hard semantic weights damaged shoulders. | Spatial hair selection plus welded adjacency smoothing. Keep the reviewed weighted Blender source authoritative; painting no longer regenerates the skin. |
+| 20 | [Reconstructed elder](screenshots/astral-slice/20-painted-elder-garden.png). Connected trunk/root silhouette improves; sealed crown lobes remain visibly soft. | Preserve the sculpture and replace the sealed green outer surface with porous painted blades conditioned on its shape. |
+| 21–22 | [Carved ruin and reflected water](screenshots/astral-slice/21-carved-sanctuary-garden.png) → [porous crown](screenshots/astral-slice/22-porous-crown-garden.png). Better negative space and ruin identity; a perfect paving platform and empty vista still dominate. | Replace the wedge arch with an original carved sculpture; actual planar reflection; porous crown; tighter contact shadows and closer cinematic framing. |
+| 23 | [Riven vista / broken court](screenshots/astral-slice/23-sculpted-vista-garden.png), [live ability](screenshots/astral-slice/23-sculpted-vista-ability.png). The gate now frames an authored landmark. Broad illumination still flattens forms. | Original cliff reconstruction and surface-fitted animated water; authored collapse scars in paving; damped followers extend only the existing Hair influence; existing fixture gains bounded sparring space. |
+| 24 | [Scene](screenshots/astral-slice/24-golden-canopy-garden.png), [portrait](screenshots/astral-slice/24-golden-canopy-portrait.png), [guardian](screenshots/astral-slice/24-golden-canopy-keeper.png), [native view](screenshots/astral-slice/24-golden-canopy-gameplay.png), [ability](screenshots/astral-slice/24-golden-canopy-ability.png). Stronger shadow structure and stone/brass separation. Reconstructed geometry still softens fine forms; production facial topology and deformation remain unfinished. | Move the sun to stage canopy shadows, reduce global fill, preserve character readability with local fill; fix a material mask that treated warm ivory as metal. Further geometry-backend investigation remains separate from this retained candidate. |
+
+[Pass 24 browser evidence](screenshots/astral-slice/24-golden-canopy-evidence.json)
+records zero exceptions, actual keyboard movement Z=11 → 11.576, and real ability
+damage to the existing sentinel. The unretimed canvas recording is 172.59 seconds
+on CPU SwiftShader; it is not a hardware performance demonstration. A separate
+frame-stepped animation-study tool preserves canonical engine updates and labels
+simulation time explicitly. Asset integrity, 187 tests and screenshots are
+different forms of evidence; none alone certifies the requested high-end bar.
+
+## Earlier World V2 geography review
 
 | Pass | Evidence | Observed result | Action |
 | --- | --- | --- | --- |
@@ -53,3 +79,98 @@ There is still no approval of the five-landmass atlas as **final world canon**, 
 - These are still staged landmass positions and temporary biome populations, not user-approved final map or gameplay geography.
 
 **Disposition:** The off-style prototype-renderer defect is corrected in code and improved in verified screenshots. **Do not mark the entire Phase 2 geography or final art polish complete.** Keep the shared renderer as the standard for future region authoring and run the screenshot gallery alongside the playable original after every major environment change.
+
+
+## 2026-11-09 — isolated Observatory atelier investigation
+
+Owner-requested art work; **not World V2 geography/campaign acceptance**. [Full audit, pipeline, verification and candid limitations](OBSERVATORY_ATELIER.md). All images below are browser captures of the real Three.js game. The atlas is used only as a material map.
+
+- [Baseline hero](screenshots/astral-slice/00-baseline-lobby.png) and [baseline opening](screenshots/astral-slice/00-baseline-game.png): useful animation foundation, small segmented forms and weak material separation.
+- [Pass 01](screenshots/astral-slice/01-garden.png): rejected for inward faces, pale pigments and incomplete fitting.
+- [Pass 02 environment](screenshots/astral-slice/02-materials.png) / [hero](screenshots/astral-slice/02-hero.png): rejected for repeated paving, disconnected roots, hidden weighted limbs and excessive foreground haze.
+- [Pass 03](screenshots/astral-slice/03-sculpt.png): continuous fused tree and fitted court improve form; synthetic surface patterns, empty hills and weak framing remain.
+- [Pass 04 environment](screenshots/astral-slice/04-painted.png) / [hero](screenshots/astral-slice/04-hero.png): original painted atlas improves material character; ground noise, distant shadow artifacts and harsh skin lighting require correction.
+- [Current cinematic](screenshots/astral-slice/05-final-garden.png), [hero](screenshots/astral-slice/05-final-hero.png), [native gameplay camera](screenshots/astral-slice/05-final-gameplay.png), [ability](screenshots/astral-slice/05-final-ability.png): inspect these as the candidate result, not an automatic visual pass. [Browser diagnostics](screenshots/astral-slice/browser-evidence.json) and [actual canvas recording](screenshots/astral-slice/gameplay.webm) accompany the captures.
+
+The candidate demonstrates a distinct offline model/material pipeline, original fitted art and release-linked VFX. It still falls short of a high-end anime RPG, especially facial/anatomical sophistication, authored performance, environment density/composition and production finish. Physical mobile performance and visual approval remain unverified.
+
+Verification follow-up: existing browser regression passes 3/3 heroes and 3/3 arrival roles; existing World V2 visual audit passes **11/11 frames / zero issues** against the final production-build server on port 4191. Earlier capture infrastructure failures and their diagnosis are recorded in the atelier document. This does not raise the art candidate to production acceptance.
+
+
+### Continued pass — not an artistic sign-off
+
+The [rejected portrait](screenshots/astral-slice/continuation/07-portrait.png) exposes profile-interpolation terraces and a startled expression. The [corrected portrait](screenshots/astral-slice/continuation/08-portrait.png) removes those bands and matures the eyes; the [scene pass](screenshots/astral-slice/continuation/08-scene.png) adds an authored observatory kit. The current [hero](screenshots/astral-slice/09-refinement-hero.png) and [environment](screenshots/astral-slice/09-refinement-garden.png) show the improved material/feature treatment. They still look like a stylized prototype rather than the requested high-end anime RPG. Inherited hands/limbs, garment construction, environmental forms and performance need original production art work. The goal is not accepted as complete.
+
+Contact-occlusion experiment rejected: pass 09 roughly doubled draws for a weak visible gain and slowed the capture harness. The retained pass 10 removes that pass, keeps portrait-only depth of field, fixes the banner's two-sided surface, adds an instrument cradle and a woven crescent, and corrects mirrored gaze direction. None of these changes meets or signs off the requested high-end art target.
+
+Retained final capture: [scene](screenshots/astral-slice/10-refinement-garden.png), [portrait](screenshots/astral-slice/10-refinement-hero.png), [native camera](screenshots/astral-slice/10-refinement-gameplay.png), [actual ability](screenshots/astral-slice/10-refinement-ability.png). Browser review verifies movement and release/damage with no exceptions. These are engineering/visual-review artifacts, **not high-end visual acceptance**.
+
+### Original reconstruction and paint pipeline — passes 11–24
+
+The [detailed source and failed-pass review](OBSERVATORY_ATELIER.md) continues
+beyond the earlier spline candidate. Original paintings became editable UV
+sculptures rather than stock meshes or scene image planes. The
+[pass-24 portrait](screenshots/astral-slice/24-golden-canopy-portrait.png) has a
+substantially more coherent original design than pass 10. The
+[scene](screenshots/astral-slice/24-golden-canopy-garden.png) adds the original
+carved gate, reconstructed elder, porous crown and cliff vista; the
+[ability](screenshots/astral-slice/24-golden-canopy-ability.png) uses an original
+Blender performance and painted energy strokes tied to actual damage.
+
+Visible limits remain: the face is soft and faceted, some neural carvings are
+muddy, broad ground surfaces are weak, and the landscape lacks a finished
+production composition. These are reasons to improve the sources, not to call
+weights prohibited or the art accepted. [Pass-24 evidence](screenshots/astral-slice/24-golden-canopy-evidence.json)
+records real movement/damage and zero browser exceptions.
+
+### Passes 25–26 — closer staging and carved-light comparison
+
+[Pass 25 opening](screenshots/astral-slice/25-motion-composition-garden.png)
+gives the hero a stronger foreground silhouette and makes the architecture more
+substantial, but its caption overlaps the character. The
+[windup](screenshots/astral-slice/25-motion-composition-windup.png) and
+[impact follow-through](screenshots/astral-slice/25-motion-composition-ability.png)
+are the same real cast. A restrained, short instrument exposure follows the
+canonical Weapon joint rather than an invented animation path. It is a subtle
+motion addition; it is not the principal artistic improvement.
+[Live evidence](screenshots/astral-slice/25-motion-composition-evidence.json)
+reports zero errors, keyboard movement Z=11 → 11.671616, and keeper health
+1600 → 1420 from an actual critical hit.
+
+[Pass 26 opening](screenshots/astral-slice/26-carved-light-garden.png)
+moves the caption clear of the hero and uses a more frontal, less orange key
+with reduced local character fill. Gate relief and the elder's form read more
+clearly. The [portrait](screenshots/astral-slice/26-carved-light-portrait.png)
+still exposes a lumpy face and coarse face shadows; lighting cannot supply the
+missing sculpt detail. The next source experiment therefore allocates a
+separate portrait-scale reconstruction to the head, keeping reviewed body
+weights and the canonical animator intact.
+[Pass-26 evidence](screenshots/astral-slice/26-carved-light-evidence.json)
+is explicitly a paused static comparison, with no repeated gameplay claim.
+The native isometric camera remains available and unchanged.
+
+### Passes 27–28 — reject weak additions, retain the verified scene
+
+[Pass 27 portrait](screenshots/astral-slice/27-character-shadow-portrait.png)
+tested a tighter character shadow projection with unchanged illumination.
+It compiled and rendered without errors, but the visible improvement was too
+small for the extra shadow pass. The implementation was removed. Low-resolution
+face geometry remains the primary visible problem.
+
+[Pass 28 scene](screenshots/astral-slice/28-retained-stage-garden.png),
+[portrait](screenshots/astral-slice/28-retained-stage-portrait.png) and
+[native camera](screenshots/astral-slice/28-retained-stage-gameplay.png) capture
+the retained default without the extra shadow. Its
+[windup](screenshots/astral-slice/28-retained-stage-windup.png),
+[contact](screenshots/astral-slice/28-retained-stage-contact.png) and
+[follow-through](screenshots/astral-slice/28-retained-stage-ability.png) document
+one actual cast, including keeper health 1600 → 1414. The
+[browser evidence](screenshots/astral-slice/28-retained-stage-evidence.json)
+records zero errors and keyboard movement Z=11 → 11.575424.
+
+The separate integer-weight portrait source failed clay geometry review before
+it reached the game; both its coarse and refined fields were malformed. A close
+first-prediction numerical match did not predict usable art. The unchanged
+reference-computation follow-up remains separate until its geometry and actual
+game views can be reviewed. Neither a larger model nor successful inference is
+being treated as visual acceptance.

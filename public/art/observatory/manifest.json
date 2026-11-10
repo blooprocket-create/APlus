@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "artDirection": "proposed / isolated visual target",
+  "assets": [
+    {
+      "name": "garden.glb",
+      "bytes": 18256256,
+      "sha256": "383767115cd41c0b42cf3fc9e7e79ea73b5c2a98fa5d5a72f10c80718789041f",
+      "meshes": 22,
+      "materials": 22
+    },
+    {
+      "name": "celestia.glb",
+      "bytes": 6210384,
+      "sha256": "64e0f0207e8b327d793b952a1792316335d1197eea451cafb59b515d4652e2d0",
+      "meshes": 41,
+      "materials": 11
+    },
+    {
+      "name": "keeper.glb",
+      "bytes": 409548,
+      "sha256": "2f0be4bf14b1a16d28282f6d125633817d0d0bb820f91f3ca009e32707ced4a1",
+      "meshes": 4,
+      "materials": 4
+    },
+    {
+      "name": "keeper-sculpt.glb",
+      "bytes": 5678924,
+      "sha256": "0b9a7c94101edfbbc331de40641e7f3c9b33c0c2888f2ede75dcd2a9e8b0cecd",
+      "meshes": 1,
+      "materials": 1
+    },
+    {
+      "name": "celestia-sculpt.glb",
+      "bytes": 6488940,
+      "sha256": "40a33dcb47ba1798bfe43bbc6c39bb79a15e4bbe8e7a123195b51ab8db1d248c",
+      "meshes": 1,
+      "materials": 1
+    },
+    {
+      "name": "elder-tree.glb",
+      "bytes": 16728656,
+      "sha256": "f64464b9333202d543051455d684642829eba18af3bc4340b052fc47b76eb7d2",
+      "meshes": 1,
+      "materials": 1
+    },
+    {
+      "name": "elder-tree-porous.glb",
+      "bytes": 18749288,
+      "sha256": "7d6fb25ad2900c2a93cf4e7a3baa3dcd47d420bfe79651622dd055dffc78c2b6",
+      "meshes": 2,
+      "materials": 2
+    },
+    {
+      "name": "moon-gate.glb",
+      "bytes": 16766516,
+      "sha256": "a5d043a29ed5a5c058bf1b0811cb323e715fb6b664cbf2b0b4a63dcca294b1e6",
+      "meshes": 1,
+      "materials": 1
+    },
+    {
+      "name": "riven-cliff.glb",
+      "bytes": 16699444,
+      "sha256": "31cbcbca0e80bd0f272ef953abcb5496f21fe4d07e1a594f68dff25ae9490ddd",
+      "meshes": 1,
+      "materials": 1
+    },
+    {
+      "name": "portrait.json",
+      "bytes": 74174,
+      "sha256": "8d2b53c6d8bf0e6363df76b099c6ebac7176d36520acb844b114f9f62a55cff0",
+      "source": "Front-surface samples from original landmark sculpt; drives eye/lid fitting"
+    },
+    {
+      "name": "pigments.png",
+      "bytes": 3272304,
+      "sha256": "f66bc7b5b10544ae5fa24505a931c2cc5a09dd7363b6fce24a2d8c5341f43b77",
+      "source": "Original generated albedo/flow source; prompt and use documented in docs/OBSERVATORY_ATELIER.md"
+    },
+    {
+      "name": "couture.png",
+      "bytes": 2976747,
+      "sha256": "c65f4e7a0dcf0511f2f2615967f9990017cd317e491c270cfd03d910401f02f2",
+      "source": "Original generated albedo/flow source; prompt and use documented in docs/OBSERVATORY_ATELIER.md"
+    },
+    {
+      "name": "leaves.png",
+      "bytes": 1203754,
+      "sha256": "4b157d1e713874868a6949fa16732b7c37806d36d8eaf3f88a2b5af10814c634",
+      "source": "Original generated albedo/flow source; prompt and use documented in docs/OBSERVATORY_ATELIER.md"
+    },
+    {
+      "name": "face.png",
+      "bytes": 1581941,
+      "sha256": "86605fe128bfd81f404c1a8063a4cf653f9f7afac769d7e88dd8b664a4ab206e",
+      "source": "Original generated albedo/flow source; prompt and use documented in docs/OBSERVATORY_ATELIER.md"
+    },
+    {
+      "name": "sky.png",
+      "bytes": 1754774,
+      "sha256": "9484ab2e84ae63c5ac3f8a7b3190a85853a2049d410cbdd7b97cca7ddc991ec3",
+      "source": "Original generated albedo/flow source; prompt and use documented in docs/OBSERVATORY_ATELIER.md"
+    },
+    {
+      "name": "energy.png",
+      "bytes": 1844858,
+      "sha256": "8e4b45561ce11a5cea411c209de3f962f8a7eedcdfd4dcd821286de412eda569",
+      "source": "Original generated albedo/flow source; prompt and use documented in docs/OBSERVATORY_ATELIER.md"
+    },
+    {
+      "name": "hero-source-paint.png",
+      "bytes": 1852622,
+      "sha256": "91b6194757b3af6fade93f19eb485dcc37f95cc7be79a7774572d182ffa5e5cb",
+      "source": "Original front paint; calibrated reference on the 3D face surface for gaze/blink, never a scene billboard"
+    },
+    {
+      "name": "celestia-sculpt-fit.json",
+      "bytes": 3821,
+      "sha256": "23bbdc951cdad2740dc945963082bfc2c4737bf58dfb03e7949e8ed0cf1ab40e",
+      "source": "Reviewed original sculpt proportions; existing canonical skeleton and animator retain ownership"
+    },
+    {
+      "name": "riven-cliff-flow.json",
+      "bytes": 1653,
+      "sha256": "141a776d8f64d5823522d471b84c050eda87df3f78b33c386564411b2180c097",
+      "source": "Original annotated pixels ray-fitted to sculpture; visual watercourse only, never gameplay navigation"
+    },
+    {
+      "name": "observatoryAbility.json",
+      "bytes": 14895,
+      "sha256": "7eb14319af31da463d7217c12b0588c96bf44129c2fd31e9e3c13b3167685186",
+      "source": "Bundled src/data module, original Blender action on canonical rig"
+    }
+  ]
+}

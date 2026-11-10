@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { CharacterClassId } from '../types/game';
 import type { CharacterAnimationState } from './CharacterMeshBuilder';
 import animation from '../data/heroAnimationClips.json';
+import observatory from '../data/observatoryAbility.json';
 import { CASTING_JOINTS } from './HeroHands';
-import { applyFootPlants, createFootPlant, type PlantWindows } from './HeroFootPlants';
+import { applyFootPlants, createFootPlant, solveFootTarget, type PlantWindows } from './HeroFootPlants';
 
 const JOINTS = [
   'Hips', 'Head', 'Hair', 'Coat', 'Weapon',
@@ -23,6 +24,7 @@ interface Clip { seconds: number; samples: Int16Array; frames: number; frameSize
 
 const PACKED_CLIPS: Record<CharacterClassId, Record<ClipName, PackedClip>> = animation.roles;
 const CLIPS: Record<CharacterClassId, Partial<Record<ClipName, Clip>>> = { warrior: {}, mage: {}, assassin: {} };
+let observatoryClip:Clip|undefined;
 const QUANTIZATION = 1 / 32767;
 const RUN_CADENCE = { warrior: 2.46, mage: 2.62, assassin: 2.92 };
 const IDLE_PLAYBACK = { warrior: .52, mage: .46, assassin: .55 };
@@ -46,6 +48,7 @@ export interface HeroMotion {
   next: THREE.Quaternion;
   hipsOffset: THREE.Vector3;
   blendOffset: THREE.Vector3;
+  visualRest?: {hipHeight:number;legs:{thigh:THREE.Object3D;shin:THREE.Object3D;foot:THREE.Object3D;oldThigh:THREE.Vector3;oldShin:THREE.Vector3;oldFoot:THREE.Vector3;ankleDelta:THREE.Vector3}[]};
   feet?: readonly ReturnType<typeof createFootPlant>[];
 }
 
@@ -73,10 +76,11 @@ export function createHeroMotion(role: CharacterClassId, root: THREE.Group): Her
   };
 }
 
-function getClip(role: CharacterClassId, name: ClipName): Clip {
-  const cached = CLIPS[role][name];
+function getClip(role: CharacterClassId, name: ClipName, profile?:CharacterAnimationState['motionProfile']): Clip {
+  const variant=role==='mage'&&name==='skill1'&&profile==='observatory';
+  const cached = variant?observatoryClip:CLIPS[role][name];
   if (cached) return cached;
-  const packed = PACKED_CLIPS[role][name];
+  const packed:PackedClip = variant?observatory.clip:PACKED_CLIPS[role][name];
   const binary = atob(packed.samples);
   const samples = new Int16Array(binary.length / 2);
   for (let index = 0; index < samples.length; index++) {
@@ -85,7 +89,7 @@ function getClip(role: CharacterClassId, name: ClipName): Clip {
   const frameSize = 3 + 4 * (JOINTS.length + (role === 'mage' ? CASTING_JOINTS.length : 0));
   const clip = { seconds: packed.seconds, samples, frames: samples.length / frameSize, frameSize,
     heightScale: packed.heightScale ?? 1 };
-  CLIPS[role][name] = clip;
+  if(variant)observatoryClip=clip;else CLIPS[role][name] = clip;
   return clip;
 }
 
@@ -131,7 +135,7 @@ function strikeClip(state: CharacterAnimationState): ClipName | null {
 
 export function heroReleaseProgress(role: CharacterClassId, state: CharacterAnimationState): number {
   const clip = strikeClip(state);
-  const release = clip && PACKED_CLIPS[role][clip].release;
+  const release = clip && (role==='mage'&&clip==='skill1'&&state.motionProfile==='observatory'?observatory.clip:PACKED_CLIPS[role][clip]).release;
   if (typeof release !== 'number') throw new Error(`Missing release marker for ${role} ${clip}`);
   return release;
 }
@@ -170,7 +174,7 @@ export function animateHero(rig: HeroMotion, dt: number, state: CharacterAnimati
   const blendDuration = action === 'locomotion' ? 0.095 : action === 'charge' ? 0.062 : 0.023;
   rig.transition = Math.min(1, rig.transition + dt / blendDuration);
   const transition = THREE.MathUtils.smoothstep(rig.transition, 0, 1);
-  const clip = getClip(role, action === 'locomotion' ? 'idle' : action);
+  const clip = getClip(role, action === 'locomotion' ? 'idle' : action,state.motionProfile);
   const time = action === 'lobby' || action === 'locomotion'
     ? (rig.clock * IDLE_PLAYBACK[role] / clip.seconds + (state.lobbyPhase ?? 0)) % 1
     : action === 'evade' ? rig.evadeElapsed / EVADE_LENGTH[role]
@@ -193,8 +197,20 @@ export function animateHero(rig: HeroMotion, dt: number, state: CharacterAnimati
     sampleOffset(run, rig.blendOffset, 1);
     rig.hipsOffset.lerp(rig.blendOffset, rig.locomotion);
   }
+  if(rig.visualRest)rig.hipsOffset.y+=rig.visualRest.hipHeight-BASE_HIP_HEIGHT;
   if (transition < 1) bones[0].position.copy(rig.fromPosition).lerp(rig.hipsOffset, transition);
   else bones[0].position.copy(rig.hipsOffset);
+  if(rig.visualRest){
+    const height=rig.visualRest.hipHeight-BASE_HIP_HEIGHT;
+    const inverseHip=bones[0].quaternion.clone().invert();
+    for(const leg of rig.visualRest.legs){
+      const rotation=leg.thigh.quaternion.clone().multiply(leg.shin.quaternion);
+      const desired=leg.oldFoot.clone().applyQuaternion(rotation).add(leg.oldShin.clone().applyQuaternion(leg.thigh.quaternion)).add(leg.oldThigh);
+      desired.x+=leg.ankleDelta.x;desired.z+=leg.ankleDelta.z;
+      desired.add(new THREE.Vector3(0,-height+leg.ankleDelta.y,0).applyQuaternion(inverseHip));
+      solveFootTarget(leg.thigh,leg.shin,leg.foot,desired);
+    }
+  }
   if (rig.feet) applyFootPlants(bones[0], rig.feet,
     action === 'locomotion' ? undefined : PACKED_CLIPS[role][action].plants, time, actionChanged, state.isMoving);
   rig.evadeElapsed += dt;

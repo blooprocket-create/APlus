@@ -1,0 +1,19 @@
+{
+  "source": "art/atelier/references/elder-tree.png",
+  "view": "front",
+  "cameraModel": "perspective",
+  "materialKind": "organic",
+  "camera": [
+    2.2999558993897753,
+    32.506668608817996,
+    4.847055179568114,
+    -0.4691931926708359,
+    -0.007145015496143226,
+    -0.00320830440750316
+  ],
+  "silhouetteError": 0.17843001543294063,
+  "textureSize": 3072,
+  "frontPaintFraction": 0.19419914510273154,
+  "seconds": 29.55,
+  "status": "UNREVIEWED texture projection; inspect distortion and seams in live renderer"
+}

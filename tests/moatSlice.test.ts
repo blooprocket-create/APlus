@@ -23,6 +23,14 @@ function startPuzzle(playerClass: CharacterClassId) {
 }
 
 describe('Hearthmere crossing', () => {
+  it('uses the existing swept collision owner for an optional art arena and restores the moat rules',()=>{
+    const slice=new MoatSlice();slice.configureArena({x:-9,z:10,radiusX:6.2,radiusZ:5.9});
+    const player=SLICE_CAMP.clone();player.x+=50;player.z+=20;slice.constrainPlayer(player);
+    expect(slice.walkable(player.x,player.z)).toBe(true);expect(player.x).toBeLessThan(-2.7);
+    const enemy=new Vector3(30,0,40);slice.constrainActor(enemy,-9,10);
+    expect(slice.walkable(enemy.x,enemy.z)).toBe(true);expect(enemy.distanceTo(new Vector3(-9,0,10))).toBeLessThan(6.3);
+    slice.configureArena(null);expect(slice.walkable(-8,-25)).toBe(false);expect(slice.walkable(-8,11)).toBe(true);
+  });
   it('lets the warrior vault and break the crate while companions handle the key and lever', () => {
     const { slice, actors, positions, tick } = startPuzzle('warrior');
     expect(slice.useUtility(actors)).toBe(true);

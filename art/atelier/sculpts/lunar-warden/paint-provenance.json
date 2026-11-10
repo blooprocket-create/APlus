@@ -1,0 +1,16 @@
+{
+  "source": "art/atelier/references/lunar-warden.png",
+  "camera": [
+    2.0497277802530585,
+    36.1103451752397,
+    2.5311155509901306,
+    3.1420040108896075,
+    -0.0005317609814782554,
+    -0.0028086212773134277
+  ],
+  "silhouetteError": 0.10883392576005552,
+  "textureSize": 2048,
+  "frontPaintFraction": 0.24680404567234562,
+  "seconds": 24.21,
+  "status": "UNREVIEWED texture projection; inspect distortion and seams in live renderer"
+}

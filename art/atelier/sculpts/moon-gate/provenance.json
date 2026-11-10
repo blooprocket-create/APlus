@@ -1,0 +1,14 @@
+{
+  "sourceImage": "art/atelier/references/moon-gate.png",
+  "method": "TripoSR + CPU scikit-image surface extraction",
+  "upstream": "https://github.com/VAST-AI-Research/TripoSR",
+  "upstreamCommit": "107cefdc244c39106fa830359024f6a2f1c78871",
+  "model": "stabilityai/TripoSR",
+  "modelRevision": "5b521936b01fbe1890f6f9baed0254ab6351c04a",
+  "sourceSHA256": "4a6280d0d2bb3f8b0be9af3a4a13a1d9c050c3b726220afa2dfed7e46be5ebb4",
+  "resolution": 192,
+  "vertices": 35985,
+  "triangles": 71922,
+  "seconds": 112.69,
+  "status": "UNREVIEWED original reconstruction; not accepted production art"
+}

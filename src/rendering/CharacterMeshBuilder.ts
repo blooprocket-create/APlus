@@ -21,6 +21,8 @@ export interface CharacterAnimationState {
   hitFlashTimer: number;
   charging?: boolean;
   skillSlot?: 'skill1' | 'skill2';
+  /** Optional isolated art performance, played by the same canonical animator. */
+  motionProfile?: 'observatory';
 }
 
 const WARDROBE: Record<CharacterClassId, { textile: number; trim: number; hair: number; skin: number }> = {
@@ -275,6 +277,26 @@ export class CharacterRig {
     this.motion = animate ? createHeroMotion(classId, this.root) : null;
     this.updateAnimation(1 / 30, { isMoving: false, moveSpeedRatio: 0, attackComboStep: 0,
       attackSwingProgress: 0, isDashing: false, hitFlashTimer: 0 });
+  }
+
+  /** Presentation-only rest-pose fit. The canonical animator still owns poses,
+   * while the shared two-link solver preserves its foot paths on new proportions. */
+  public fitVisualRestPose(offsets:Record<string,[number,number,number]>):()=>void {
+    for(const [name,value] of Object.entries(offsets))if(!this.root.getObjectByName(name)||value.length!==3||!value.every(Number.isFinite))throw Error('Invalid visual rest joint '+name);
+    const saved=new Map<THREE.Object3D,THREE.Vector3>();
+    const oldRest=this.motion?.visualRest;
+    const legs=['L','R'].map(side=>{
+      const thigh=this.root.getObjectByName('Thigh.'+side)!,shin=this.root.getObjectByName('Shin.'+side)!,foot=this.root.getObjectByName('Foot.'+side)!;
+      return {thigh,shin,foot,oldThigh:thigh.position.clone(),oldShin:shin.position.clone(),oldFoot:foot.position.clone(),ankleDelta:new THREE.Vector3()};
+    });
+    for(const [name,value] of Object.entries(offsets)){const bone=this.root.getObjectByName(name);if(!bone)throw Error('Unknown visual fit joint '+name);saved.set(bone,bone.position.clone());bone.position.fromArray(value);}
+    const hipHeight=this.root.getObjectByName('Hips')!.position.y;
+    for(const leg of legs){
+      const old=leg.oldThigh.clone().add(leg.oldShin).add(leg.oldFoot);old.y+=.87;
+      leg.ankleDelta.copy(leg.thigh.position).add(leg.shin.position).add(leg.foot.position);leg.ankleDelta.y+=hipHeight;leg.ankleDelta.sub(old);
+    }
+    if(this.motion)this.motion.visualRest={hipHeight,legs};
+    return ()=>{for(const [bone,position] of saved)bone.position.copy(position);if(this.motion)this.motion.visualRest=oldRest;};
   }
 
   public updateAnimation(dt: number, state: CharacterAnimationState): void {

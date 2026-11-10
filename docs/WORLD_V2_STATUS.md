@@ -1,5 +1,8 @@
 # Astral Chronicles — World V2 implementation status
 
+**2026-11-10 isolated visual investigation:** `/atelier.html` adds the [Remembering Observatory art stage](OBSERVATORY_ATELIER.md) on the existing `GameEngine`/moat sandbox. Original reconstruction/UV-paint/Blender authoring and material/VFX review tooling are opt-in; this does not move any Hearthmere story beat, publish an atlas, change saves or complete a World V2 phase. The high-end visual target remains unaccepted. Engineering evidence: the continued atelier passes **189 tests**; the original source baseline passed three-hero browser regression and 11/11 World V2 captures; the actual art-stage captures/recording and limitations are in the atelier document.
+
+
 **Baseline checked:** 2026-11-08 at `main` merge `c40f578cf2a70d2f23ca767a17865e1716991026` ([PR #9](https://github.com/blooprocket-create/APlus/pull/9)). **Post-merge GitHub Actions [42566887740](https://github.com/blooprocket-create/APlus/actions/runs/42566887740): SUCCESS.** This is a snapshot; future work must update its status and evidence. Start with [agent instructions](../AGENTS.md) and [decision register](WORLD_V2_DECISIONS.md).
 
 **Phase 3 work has begun and [PR #11](https://github.com/blooprocket-create/APlus/pull/11) is merged** (commit `800eeead491179c6a162c5bb0c384c0e0b9fd1a9`). The separate first-arrival role-selected story page is verified by [181 passing tests and real-browser evidence](https://github.com/blooprocket-create/APlus/actions/runs/42570055439). This is **one first-beat prototype**, not a full playable World V2 campaign. See [Phase 3 progress](WORLD_V2_PHASE3_PROGRESS.md).
