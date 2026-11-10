@@ -170,6 +170,7 @@ export function buildStorybookTree(
       Math.sin(a) * 0.16,
     );
     scar.rotation.z = 0.04 * Math.sin(i);
+    scar.castShadow = scar.receiveShadow = true;
   }
   return trunk;
 }
@@ -348,7 +349,7 @@ export function buildStorybookPine(parent: THREE.Group, paint: Paint): void {
     ),
     greens[1],
   );
-  leader.castShadow = true;
+  leader.castShadow = leader.receiveShadow = true;
 }
 
 export function buildStorybookWell(
