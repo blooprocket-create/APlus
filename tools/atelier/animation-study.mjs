@@ -27,13 +27,13 @@ try{
   const state=await evaluate(`new Promise(resolve=>{window.__atelier.freeze(false);${i===5?"document.querySelector('#cast').click();":''}requestAnimationFrame(()=>{window.__atelier.freeze(true);resolve(window.__atelier.snapshot());});})`);
   await evaluate('new Promise(resolve=>requestAnimationFrame(()=>resolve(true)))');
   const file=String(i).padStart(3,'0')+'.png',shot=await send('Page.captureScreenshot',{format:'png'});writeFileSync(frames+'/'+file,Buffer.from(shot.data,'base64'));
-  records.push({file,...state});console.log('Animation study frame',i,'simulation time',state.simulationTime-start);
+  records.push({file,...state});writeFileSync(frames+'/progress.json',JSON.stringify({start,records,errors},null,2));console.log('Animation study frame',i,'simulation time',state.simulationTime-start);
   if(i>20&&state.simulationTime-start>=4.4)break;
  }
  if(errors.length||records.length<40||records.at(-1).simulationTime-start<4.4)throw Error('Incomplete study or browser exceptions');
- let concat='';for(let i=0;i<records.length;i++){concat+=`file '${records[i].file}'\nduration ${Math.max(.001,(records[i+1]?.simulationTime??records[i].simulationTime+.05)-records[i].simulationTime)}\n`;}
- concat+=`file '${records.at(-1).file}'\n`;writeFileSync(frames+'/timing.txt',concat);
- const encode=spawnSync('ffmpeg',['-y','-f','concat','-safe','0','-i',frames+'/timing.txt','-vf',"drawbox=x=0:y=570:w=iw:h=30:color=black@0.65:t=fill,drawtext=text='FRAME-STEPPED ENGINE STUDY / SIMULATION TIME / NOT REAL-TIME FPS':x=18:y=580:fontsize=11:fontcolor=white",'-fps_mode','vfr','-c:v','libx264','-crf','18','-pix_fmt','yuv420p','-movflags','+faststart',out+'/animation-study.mp4'],{stdio:'inherit'});
+ let concat='';for(let i=0;i<records.length;i++){concat+=`file '${records[i].file}'\noption framerate 1000\nduration ${Math.max(.001,(records[i+1]?.simulationTime??records[i].simulationTime+.05)-records[i].simulationTime)}\n`;}
+ concat+=`file '${records.at(-1).file}'\noption framerate 1000\n`;writeFileSync(frames+'/timing.txt',concat);
+ const encode=spawnSync('ffmpeg',['-y','-f','concat','-safe','0','-i',frames+'/timing.txt','-vf',"drawbox=x=0:y=570:w=iw:h=30:color=black@0.65:t=fill,drawtext=text='FRAME-STEPPED ENGINE STUDY / SIMULATION TIME / NOT REAL-TIME FPS':x=18:y=580:fontsize=11:fontcolor=white",'-fps_mode','vfr','-enc_time_base','1:1000','-c:v','libx264','-crf','18','-pix_fmt','yuv420p','-movflags','+faststart',out+'/animation-study.mp4'],{stdio:'inherit'});
  if(encode.status!==0)throw Error('Animation study encoding failed');
  writeFileSync(out+'/animation-study-evidence.json',JSON.stringify({capturedAt:new Date().toISOString(),method:'One existing GameEngine rAF per frame; pause API only; encoded by observed simulationTime deltas. Not real-time rendering performance.',url:base+'/atelier.html'+(query?'?'+query:''),records,errors},null,2));
 }finally{ws?.close();chrome.kill();setTimeout(()=>{try{rmSync(profile,{recursive:true,force:true});}catch{}},500);}

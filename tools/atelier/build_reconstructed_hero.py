@@ -3,12 +3,13 @@ The source stays in A-pose. Runtime binds it against that pose on the existing
 rig, then the existing animation player supplies the performance. UVs, source
 paint coordinates, expression shapes and four-influence weights survive export.
 """
-import bpy,sys,os,json,math,numpy as np
+import bpy,sys,os,json,math,shutil,numpy as np
 from pathlib import Path
 from mathutils import Vector,Quaternion
 sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 from atelier_mesh import mat,OUT
 source=Path(os.environ.get('ASTRAL_HERO_SCULPT_SOURCE',str(Path(__file__).resolve().parents[2]/'art/atelier/sculpts/celestia')))
+asset_prefix=os.environ.get('ASTRAL_HERO_SCULPT_PREFIX','celestia-sculpt')
 if (source/'CelestiaFitted.blend').exists() and os.environ.get('ASTRAL_REBUILD_HERO_BINDINGS')!='1':
  raise RuntimeError('Reviewed source exists. Use export_authored_hero.py to preserve artist weights; ASTRAL_REBUILD_HERO_BINDINGS=1 explicitly bootstraps new bindings.')
 d=np.load(source/'uv-sculpt.npz');raw=d['vertices'];faces=d['faces'];uvs=d['uv'];normals=d['normals'];camera=json.loads((source/'paint-provenance.json').read_text())['camera']
@@ -145,5 +146,7 @@ rotation=np.stack([right,np.array([0,0,1]),flat_front],axis=0);A=rotation.T/scal
 ru=(.5+tx)*rw+right@A/den;ou=(.5+tx)*ow+right@B/den;rv=(.5+ty)*rw-up@A/den;ov=(.5+ty)*ow-up@B/den
 projection=np.array([[*ru,ou],[*rv,ov],[0,0,0,0],[*rw,ow]]).T.reshape(-1).tolist()
 fit={'schemaVersion':1,'source':'Original image reconstruction + calibrated paint bake','restOffsets':rest,'sourceProjection':projection,'bindQuaternions':bind,'face':{k:marks[k].tolist() for k in ['head','neck','eyeL','eyeR','mouth']},'statistics':{'vertices':len(points),'triangles':len(faces),'removedHandTriangles':int(np.count_nonzero(~keep))},'dimensions':{'hipHeight':hip,'shoulderWidth':shoulder_x*2,'upperArm':upper,'forearm':fore,'thigh':upper_leg,'shin':lower_leg}}
-Path(OUT+'/celestia-sculpt-fit.json').write_text(json.dumps(fit,indent=2)+'\n');bpy.ops.export_scene.gltf(filepath=OUT+'/celestia-sculpt.glb',export_format='GLB',export_yup=True,export_all_influences=False)
+(source/'fit.json').write_text(json.dumps(fit,indent=2)+'\n');Path(OUT+'/'+asset_prefix+'-fit.json').write_text(json.dumps(fit,indent=2)+'\n')
+if (source/'projection-source.png').exists():shutil.copyfile(source/'projection-source.png',Path(OUT)/('hero-source-paint.png' if asset_prefix=='celestia-sculpt' else asset_prefix+'-source-paint.png'))
+bpy.ops.export_scene.gltf(filepath=OUT+'/'+asset_prefix+'.glb',export_format='GLB',export_yup=True,export_all_influences=False)
 bpy.context.preferences.filepaths.save_version=0;bpy.ops.file.pack_all();bpy.ops.wm.save_as_mainfile(filepath=str(source/'CelestiaFitted.blend'),compress=True);print('ATELIER: fitted original Celestia',json.dumps(fit['dimensions']),flush=True)

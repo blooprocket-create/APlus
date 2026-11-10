@@ -87,6 +87,7 @@ to declare high-end acceptance.
 [native isometric](screenshots/astral-slice/24-golden-canopy-gameplay.png) ·
 [ability](screenshots/astral-slice/24-golden-canopy-ability.png) ·
 [raw real-time canvas recording](screenshots/astral-slice/gameplay.webm) ·
+[short motion excerpt](screenshots/astral-slice/animation-study.mp4) ·
 [browser evidence](screenshots/astral-slice/24-golden-canopy-evidence.json).
 
 The actual portrait is substantially stronger than the earlier parameterized
@@ -107,6 +108,19 @@ include review pauses and are not a steady-state FPS benchmark. Physical-device
 performance remains unverified. All optional art/comparison variants total about
 115 MiB before production texture/mesh compression; the normal opening does not
 load that payload.
+
+The [CI run for retained commit 7133b519](https://github.com/blooprocket-create/APlus/actions/runs/42734494615)
+also passed the default Hearthmere browser smoke and all 11 World V2 geography
+captures. These protect the existing opening and architecture; they are not an
+art-quality assessment.
+
+The short motion excerpt is a continuous **2.4 seconds of observed simulation
+time**, visibly labeled as such. Its capture session ended after frame 124, so it
+does not show the complete planned recovery study. Saved frame timestamps were
+recovered from the capture log; full per-frame diagnostic objects were not.
+[Excerpt evidence](screenshots/astral-slice/animation-study-evidence.json) records
+that limitation. The independent pass-24 browser capture above records the
+keyboard, damage and exception checks. Neither movie measures hardware FPS.
 
 ## First investigation: offline spline/UV authoring (retained comparison)
 

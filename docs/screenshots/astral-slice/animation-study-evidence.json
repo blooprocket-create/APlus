@@ -1,0 +1,509 @@
+{
+  "capturedAt": "2026-11-10",
+  "method": "Continuous actual-browser excerpt. One canonical GameEngine rAF per captured frame; existing pause API only; no pose/dt/actor/damage injection. Encoded using printed observed simulationTime deltas. Not real-time rendering performance.",
+  "captureEnd": "Capture session was interrupted after frame 124. This is the continuous saved excerpt, not a complete 4.4-second recovery study.",
+  "timingEvidence": "Printed capture log; per-frame diagnostic objects were not retained before interruption. Full pass-24 runtime/keyboard/damage evidence remains separate.",
+  "frames": [
+    {
+      "file": "000.png",
+      "simulationTime": 0.05
+    },
+    {
+      "file": "001.png",
+      "simulationTime": 0.0666999999999971
+    },
+    {
+      "file": "002.png",
+      "simulationTime": 0.08330000000000293
+    },
+    {
+      "file": "003.png",
+      "simulationTime": 0.1
+    },
+    {
+      "file": "004.png",
+      "simulationTime": 0.11669999999999708
+    },
+    {
+      "file": "005.png",
+      "simulationTime": 0.14999999999998545
+    },
+    {
+      "file": "006.png",
+      "simulationTime": 0.18339999999999418
+    },
+    {
+      "file": "007.png",
+      "simulationTime": 0.20010000000000583
+    },
+    {
+      "file": "008.png",
+      "simulationTime": 0.2167999999999884
+    },
+    {
+      "file": "009.png",
+      "simulationTime": 0.25009999999997673
+    },
+    {
+      "file": "010.png",
+      "simulationTime": 0.26669999999998256
+    },
+    {
+      "file": "011.png",
+      "simulationTime": 0.2833999999999651
+    },
+    {
+      "file": "012.png",
+      "simulationTime": 0.29999999999997096
+    },
+    {
+      "file": "013.png",
+      "simulationTime": 0.3166999999999535
+    },
+    {
+      "file": "014.png",
+      "simulationTime": 0.33329999999995935
+    },
+    {
+      "file": "015.png",
+      "simulationTime": 0.3498999999999652
+    },
+    {
+      "file": "016.png",
+      "simulationTime": 0.36649999999994193
+    },
+    {
+      "file": "017.png",
+      "simulationTime": 0.3831999999999536
+    },
+    {
+      "file": "018.png",
+      "simulationTime": 0.3998999999999652
+    },
+    {
+      "file": "019.png",
+      "simulationTime": 0.4165999999999478
+    },
+    {
+      "file": "020.png",
+      "simulationTime": 0.44999999999991286
+    },
+    {
+      "file": "021.png",
+      "simulationTime": 0.4666999999998663
+    },
+    {
+      "file": "022.png",
+      "simulationTime": 0.4832999999999012
+    },
+    {
+      "file": "023.png",
+      "simulationTime": 0.5166999999999244
+    },
+    {
+      "file": "024.png",
+      "simulationTime": 0.5333999999999361
+    },
+    {
+      "file": "025.png",
+      "simulationTime": 0.5499999999999128
+    },
+    {
+      "file": "026.png",
+      "simulationTime": 0.5665999999998896
+    },
+    {
+      "file": "027.png",
+      "simulationTime": 0.5832999999998429
+    },
+    {
+      "file": "028.png",
+      "simulationTime": 0.599899999999878
+    },
+    {
+      "file": "029.png",
+      "simulationTime": 0.6166999999998664
+    },
+    {
+      "file": "030.png",
+      "simulationTime": 0.6333999999998778
+    },
+    {
+      "file": "031.png",
+      "simulationTime": 0.6500999999998895
+    },
+    {
+      "file": "032.png",
+      "simulationTime": 0.6666999999999244
+    },
+    {
+      "file": "033.png",
+      "simulationTime": 0.6833999999999361
+    },
+    {
+      "file": "034.png",
+      "simulationTime": 0.6999999999999709
+    },
+    {
+      "file": "035.png",
+      "simulationTime": 0.7166999999999826
+    },
+    {
+      "file": "036.png",
+      "simulationTime": 0.7333999999999941
+    },
+    {
+      "file": "037.png",
+      "simulationTime": 0.7501000000000058
+    },
+    {
+      "file": "038.png",
+      "simulationTime": 0.7666999999999824
+    },
+    {
+      "file": "039.png",
+      "simulationTime": 0.7833999999999941
+    },
+    {
+      "file": "040.png",
+      "simulationTime": 0.8001000000000056
+    },
+    {
+      "file": "041.png",
+      "simulationTime": 0.8168000000000173
+    },
+    {
+      "file": "042.png",
+      "simulationTime": 0.8334000000000521
+    },
+    {
+      "file": "043.png",
+      "simulationTime": 0.8667000000000404
+    },
+    {
+      "file": "044.png",
+      "simulationTime": 0.8833000000000755
+    },
+    {
+      "file": "045.png",
+      "simulationTime": 0.8999000000000521
+    },
+    {
+      "file": "046.png",
+      "simulationTime": 0.916600000000122
+    },
+    {
+      "file": "047.png",
+      "simulationTime": 0.9332000000000988
+    },
+    {
+      "file": "048.png",
+      "simulationTime": 0.9499000000000524
+    },
+    {
+      "file": "049.png",
+      "simulationTime": 0.9666000000001223
+    },
+    {
+      "file": "050.png",
+      "simulationTime": 0.9833000000000758
+    },
+    {
+      "file": "051.png",
+      "simulationTime": 1.0000000000000293
+    },
+    {
+      "file": "052.png",
+      "simulationTime": 1.0334000000000525
+    },
+    {
+      "file": "053.png",
+      "simulationTime": 1.0501000000001224
+    },
+    {
+      "file": "054.png",
+      "simulationTime": 1.066700000000099
+    },
+    {
+      "file": "055.png",
+      "simulationTime": 1.0833000000001922
+    },
+    {
+      "file": "056.png",
+      "simulationTime": 1.0999000000001689
+    },
+    {
+      "file": "057.png",
+      "simulationTime": 1.1166000000001224
+    },
+    {
+      "file": "058.png",
+      "simulationTime": 1.133200000000099
+    },
+    {
+      "file": "059.png",
+      "simulationTime": 1.149900000000169
+    },
+    {
+      "file": "060.png",
+      "simulationTime": 1.1665000000001455
+    },
+    {
+      "file": "061.png",
+      "simulationTime": 1.1998000000000757
+    },
+    {
+      "file": "062.png",
+      "simulationTime": 1.2332000000000989
+    },
+    {
+      "file": "063.png",
+      "simulationTime": 1.2499000000000524
+    },
+    {
+      "file": "064.png",
+      "simulationTime": 1.266500000000029
+    },
+    {
+      "file": "065.png",
+      "simulationTime": 1.2831000000000057
+    },
+    {
+      "file": "066.png",
+      "simulationTime": 1.2996999999999823
+    },
+    {
+      "file": "067.png",
+      "simulationTime": 1.316299999999959
+    },
+    {
+      "file": "068.png",
+      "simulationTime": 1.3329999999999125
+    },
+    {
+      "file": "069.png",
+      "simulationTime": 1.366299999999959
+    },
+    {
+      "file": "070.png",
+      "simulationTime": 1.416299999999959
+    },
+    {
+      "file": "071.png",
+      "simulationTime": 1.4328999999999357
+    },
+    {
+      "file": "072.png",
+      "simulationTime": 1.4494999999999123
+    },
+    {
+      "file": "073.png",
+      "simulationTime": 1.466099999999889
+    },
+    {
+      "file": "074.png",
+      "simulationTime": 1.4827999999998425
+    },
+    {
+      "file": "075.png",
+      "simulationTime": 1.499399999999819
+    },
+    {
+      "file": "076.png",
+      "simulationTime": 1.5159999999999123
+    },
+    {
+      "file": "077.png",
+      "simulationTime": 1.5326999999998658
+    },
+    {
+      "file": "078.png",
+      "simulationTime": 1.5493999999999357
+    },
+    {
+      "file": "079.png",
+      "simulationTime": 1.5660999999998892
+    },
+    {
+      "file": "080.png",
+      "simulationTime": 1.5827999999998428
+    },
+    {
+      "file": "081.png",
+      "simulationTime": 1.5994999999997963
+    },
+    {
+      "file": "082.png",
+      "simulationTime": 1.6161999999997498
+    },
+    {
+      "file": "083.png",
+      "simulationTime": 1.6494999999997964
+    },
+    {
+      "file": "084.png",
+      "simulationTime": 1.6661999999997499
+    },
+    {
+      "file": "085.png",
+      "simulationTime": 1.6827999999997265
+    },
+    {
+      "file": "086.png",
+      "simulationTime": 1.6993999999998197
+    },
+    {
+      "file": "087.png",
+      "simulationTime": 1.7160999999997733
+    },
+    {
+      "file": "088.png",
+      "simulationTime": 1.7326999999997499
+    },
+    {
+      "file": "089.png",
+      "simulationTime": 1.7492999999997265
+    },
+    {
+      "file": "090.png",
+      "simulationTime": 1.782599999999773
+    },
+    {
+      "file": "091.png",
+      "simulationTime": 1.799299999999843
+    },
+    {
+      "file": "092.png",
+      "simulationTime": 1.8158999999998195
+    },
+    {
+      "file": "093.png",
+      "simulationTime": 1.8324999999997962
+    },
+    {
+      "file": "094.png",
+      "simulationTime": 1.8491999999997497
+    },
+    {
+      "file": "095.png",
+      "simulationTime": 1.865799999999843
+    },
+    {
+      "file": "096.png",
+      "simulationTime": 1.899199999999866
+    },
+    {
+      "file": "097.png",
+      "simulationTime": 1.9157999999999593
+    },
+    {
+      "file": "098.png",
+      "simulationTime": 1.932399999999936
+    },
+    {
+      "file": "099.png",
+      "simulationTime": 1.9490999999998893
+    },
+    {
+      "file": "100.png",
+      "simulationTime": 1.9824999999997963
+    },
+    {
+      "file": "101.png",
+      "simulationTime": 1.9991999999997498
+    },
+    {
+      "file": "102.png",
+      "simulationTime": 2.0325999999998894
+    },
+    {
+      "file": "103.png",
+      "simulationTime": 2.0493000000000756
+    },
+    {
+      "file": "104.png",
+      "simulationTime": 2.066000000000029
+    },
+    {
+      "file": "105.png",
+      "simulationTime": 2.0826999999999827
+    },
+    {
+      "file": "106.png",
+      "simulationTime": 2.099399999999936
+    },
+    {
+      "file": "107.png",
+      "simulationTime": 2.1160999999998897
+    },
+    {
+      "file": "108.png",
+      "simulationTime": 2.1327999999998433
+    },
+    {
+      "file": "109.png",
+      "simulationTime": 2.1495000000000295
+    },
+    {
+      "file": "110.png",
+      "simulationTime": 2.1661000000001227
+    },
+    {
+      "file": "111.png",
+      "simulationTime": 2.1828000000000762
+    },
+    {
+      "file": "112.png",
+      "simulationTime": 2.1995000000000298
+    },
+    {
+      "file": "113.png",
+      "simulationTime": 2.2161999999999833
+    },
+    {
+      "file": "114.png",
+      "simulationTime": 2.249499999999797
+    },
+    {
+      "file": "115.png",
+      "simulationTime": 2.26609999999989
+    },
+    {
+      "file": "116.png",
+      "simulationTime": 2.2827999999998436
+    },
+    {
+      "file": "117.png",
+      "simulationTime": 2.3161999999999834
+    },
+    {
+      "file": "118.png",
+      "simulationTime": 2.332799999999844
+    },
+    {
+      "file": "119.png",
+      "simulationTime": 2.349399999999937
+    },
+    {
+      "file": "120.png",
+      "simulationTime": 2.3661000000001233
+    },
+    {
+      "file": "121.png",
+      "simulationTime": 2.382800000000077
+    },
+    {
+      "file": "122.png",
+      "simulationTime": 2.399500000000263
+    },
+    {
+      "file": "123.png",
+      "simulationTime": 2.4162000000002166
+    },
+    {
+      "file": "124.png",
+      "simulationTime": 2.43290000000017
+    }
+  ],
+  "errors": null
+}
