@@ -1,0 +1,14 @@
+{
+  "sourceImage": "art/atelier/references/riven-cliff.png",
+  "method": "TripoSR + CPU scikit-image surface extraction",
+  "upstream": "https://github.com/VAST-AI-Research/TripoSR",
+  "upstreamCommit": "107cefdc244c39106fa830359024f6a2f1c78871",
+  "model": "stabilityai/TripoSR",
+  "modelRevision": "5b521936b01fbe1890f6f9baed0254ab6351c04a",
+  "sourceSHA256": "139bab3cbd8c8c99b83b0e7a7c1c8e2979651ffedf80c45ea483880b21cd0c8d",
+  "resolution": 192,
+  "vertices": 58095,
+  "triangles": 115738,
+  "seconds": 92.21,
+  "status": "UNREVIEWED original reconstruction; not accepted production art"
+}

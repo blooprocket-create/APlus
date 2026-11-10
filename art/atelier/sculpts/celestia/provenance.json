@@ -1,0 +1,14 @@
+{
+  "sourceImage": "art/atelier/references/celestia-apose.png",
+  "method": "TripoSR + CPU scikit-image surface extraction",
+  "upstream": "https://github.com/VAST-AI-Research/TripoSR",
+  "upstreamCommit": "107cefdc244c39106fa830359024f6a2f1c78871",
+  "model": "stabilityai/TripoSR",
+  "modelRevision": "5b521936b01fbe1890f6f9baed0254ab6351c04a",
+  "sourceSHA256": "e93aceabda38bad2f4bd73dea8ae1a08efed4fc18801850d04b122b3bd918991",
+  "resolution": 192,
+  "vertices": 18660,
+  "triangles": 37296,
+  "seconds": 136.76,
+  "status": "UNREVIEWED original reconstruction; not accepted production art"
+}

@@ -1,4 +1,4 @@
-"""Original Astral atelier assets. Blender 3.4+; no downloaded geometry.
+"""Original Astral atelier assets. Verified Blender 4.3.2; no downloaded geometry.
 Coordinates below are game Y-up. Silhouettes are authored splines; surfaces
 are continuous quad patches, subdivided before glTF export. Seed affects
 surface wear only, never landmark composition. Run from repository root.

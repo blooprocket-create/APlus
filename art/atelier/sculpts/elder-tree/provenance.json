@@ -1,0 +1,14 @@
+{
+  "sourceImage": "art/atelier/references/elder-tree.png",
+  "method": "TripoSR + CPU scikit-image surface extraction",
+  "upstream": "https://github.com/VAST-AI-Research/TripoSR",
+  "upstreamCommit": "107cefdc244c39106fa830359024f6a2f1c78871",
+  "model": "stabilityai/TripoSR",
+  "modelRevision": "5b521936b01fbe1890f6f9baed0254ab6351c04a",
+  "sourceSHA256": "8832231922c25f62bd30286997f9554b9728478d1f0104a7b48636b53e21dcd8",
+  "resolution": 192,
+  "vertices": 59694,
+  "triangles": 119472,
+  "seconds": 43.93,
+  "status": "UNREVIEWED original reconstruction; not accepted production art"
+}

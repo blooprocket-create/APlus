@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildEnemyMesh } from '../rendering/EnemyMeshBuilder';
 import { CharacterClassId } from '../types/game';
+import { sweepGroundMovement } from './GroundMeshCollider';
 
 type Step = 'road' | 'approach' | 'vault' | 'crate' | 'transfer' | 'stealth' | 'bridge' | 'complete';
 
@@ -25,6 +26,7 @@ export interface SliceActors {
 }
 
 export class MoatSlice {
+  private arena:{x:number;z:number;radiusX:number;radiusZ:number}|null=null;
   public readonly group = new THREE.Group();
   public step: Step = 'road';
   public stealthTime = 0;
@@ -141,7 +143,19 @@ export class MoatSlice {
     this.returningViaShortcut = false;
   }
 
+  /** Optional flat combat-fixture bounds, owned by the existing collision path.
+   * Used only by the isolated art arena; does not define World V2 geography. */
+  public configureArena(arena:{x:number;z:number;radiusX:number;radiusZ:number}|null):void {
+    if(arena&&(!Object.values(arena).every(Number.isFinite)||arena.radiusX<=0||arena.radiusZ<=0))throw Error('Invalid staging arena');
+    this.arena=arena?{...arena}:null;
+  }
+
+  public constrainActor(position:THREE.Vector3,previousX:number,previousZ:number):void {
+    sweepGroundMovement(position,previousX,previousZ,p=>this.walkable(p.x,p.z));
+  }
+
   public walkable(x: number, z: number): boolean {
+    if(this.arena)return ((x-this.arena.x)/this.arena.radiusX)**2+((z-this.arena.z)/this.arena.radiusZ)**2<=1;
     if (x < -19.7 || x > 22.7 || z < -37.7 || z > 17.7) return false;
     if (this.step === 'road' && z < -19.65) return false;
     if (x <= 2.9 || x >= 11.1) return true;

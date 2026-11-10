@@ -437,7 +437,7 @@ def build_rig(hero, paint):
 def set_action(armature, action):
     armature.animation_data_create()
     armature.animation_data.action = action
-    if action.slots:
+    if getattr(action, "slots", None):
         armature.animation_data.action_slot = action.slots[0]
 
 

@@ -1,0 +1,79 @@
+{
+  "capturedAt": "2026-11-09T21:49:38.424Z",
+  "capturePrefix": "20-painted-elder",
+  "browser": "Chromium / SwiftShader",
+  "viewport": [
+    960,
+    600
+  ],
+  "logs": [
+    {
+      "ready": true,
+      "view": 0,
+      "tree": "original reconstructed elder",
+      "hero": "original fitted reconstruction",
+      "keeper": "original reconstruction",
+      "castAge": 10.116700000000002,
+      "frameIntervalMs": 2831.1875,
+      "calls": 77,
+      "triangles": 1281173,
+      "position": [
+        -9,
+        0,
+        11
+      ],
+      "animation": {
+        "isMoving": false,
+        "moveSpeedRatio": 0,
+        "attackComboStep": 0,
+        "attackSwingProgress": 0,
+        "isDashing": false,
+        "hitFlashTimer": 0,
+        "motionProfile": "observatory",
+        "charging": false
+      },
+      "hp": 530
+    },
+    {
+      "ready": true,
+      "view": 0,
+      "tree": "original reconstructed elder",
+      "hero": "original fitted reconstruction",
+      "keeper": "original reconstruction",
+      "castAge": 0.5334000000000232,
+      "frameIntervalMs": 5548.453246753227,
+      "calls": 88,
+      "triangles": 1287865,
+      "position": [
+        -9,
+        0,
+        11
+      ],
+      "animation": {
+        "isMoving": false,
+        "moveSpeedRatio": 0,
+        "attackComboStep": 4,
+        "attackSwingProgress": 0.9062500000000185,
+        "isDashing": false,
+        "hitFlashTimer": 0,
+        "motionProfile": "observatory",
+        "charging": false,
+        "skillSlot": "skill1"
+      },
+      "hp": 530
+    },
+    {
+      "walkingFrom": [
+        -9,
+        0,
+        11
+      ],
+      "walkingTo": [
+        -9,
+        0,
+        11.576
+      ]
+    }
+  ],
+  "errors": []
+}

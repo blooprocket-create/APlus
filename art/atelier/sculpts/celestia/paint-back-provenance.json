@@ -1,0 +1,19 @@
+{
+  "source": "art/atelier/references/celestia-back-paint.png",
+  "view": "back",
+  "cameraModel": "orthographic",
+  "materialKind": "hero",
+  "camera": [
+    1.905306894944799,
+    1.632008458182753,
+    11.349110062328943,
+    199.14392866354683,
+    -0.004797511550700523,
+    0.048653717770958796
+  ],
+  "silhouetteError": 0.18909903841023964,
+  "textureSize": 2048,
+  "frontPaintFraction": 0.2589368081025667,
+  "seconds": 32.26,
+  "status": "UNREVIEWED texture projection; inspect distortion and seams in live renderer"
+}

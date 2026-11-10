@@ -1,0 +1,16 @@
+{
+  "source": "art/atelier/references/celestia-apose.png",
+  "camera": [
+    2.49717078772993,
+    30.1815034163504,
+    -0.5706604719761597,
+    -2.459224458733369,
+    -0.005631927231104426,
+    -0.004196567011367414
+  ],
+  "silhouetteError": 0.17385175266834899,
+  "textureSize": 2048,
+  "frontPaintFraction": 0.2683976153249088,
+  "seconds": 20.19,
+  "status": "UNREVIEWED texture projection; inspect distortion and seams in live renderer"
+}

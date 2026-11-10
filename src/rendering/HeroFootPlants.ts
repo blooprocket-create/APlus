@@ -28,41 +28,33 @@ const shinRotation = new THREE.Quaternion();
 const footRotation = new THREE.Quaternion();
 const adjustment = new THREE.Quaternion();
 
-/** Repose the two links in hip space, retaining the authored knee plane and boot pitch. */
-function solvePlant(plant: FootPlant, hips: THREE.Object3D, weight: number): void {
-  const { thigh, shin, foot } = plant;
-  const upperLength = shin.position.length();
-  const lowerLength = foot.position.length();
-  shinRotation.copy(thigh.quaternion).multiply(shin.quaternion);
-  footRotation.copy(shinRotation).multiply(foot.quaternion);
+/** Repose two links toward a hip-space target, retaining knee plane and boot pitch.
+ * Shared by ordinary foot plants and optional visual-proportion retargeting. */
+export function solveFootTarget(thigh:THREE.Object3D,shin:THREE.Object3D,foot:THREE.Object3D,desired:THREE.Vector3):void {
+  const upperLength=shin.position.length(),lowerLength=foot.position.length();
+  shinRotation.copy(thigh.quaternion).multiply(shin.quaternion);footRotation.copy(shinRotation).multiply(foot.quaternion);
   knee.copy(shin.position).applyQuaternion(thigh.quaternion).add(thigh.position);
   ankle.copy(foot.position).applyQuaternion(shinRotation).add(knee);
-  // Horizontal steering should leave the clip's lift and landing height intact.
-  const height = target.copy(ankle).applyMatrix4(hips.matrixWorld).y;
-  target.set(plant.anchor.x, height, plant.anchor.z).applyMatrix4(inverseHips);
-  target.sub(ankle).clampLength(0, .25).multiplyScalar(weight).add(ankle);
-  direction.copy(target).sub(thigh.position);
-  const distance = direction.length();
-  if (distance < .001) return;
-  direction.multiplyScalar(1 / distance);
-  const reach = Math.min(distance, upperLength + lowerLength - .001);
-  const along = (upperLength ** 2 - lowerLength ** 2 + reach ** 2) / (2 * reach);
-  bend.copy(knee).sub(thigh.position);
-  bend.addScaledVector(direction, -bend.dot(direction));
-  if (bend.lengthSq() < .000001) return;
-  bend.normalize();
-  oldDirection.copy(knee).sub(thigh.position).normalize();
-  newDirection.copy(direction).multiplyScalar(along)
-    .addScaledVector(bend, Math.sqrt(Math.max(0, upperLength ** 2 - along ** 2)));
+  direction.copy(desired).sub(thigh.position);const distance=direction.length();if(distance<.001)return;
+  direction.multiplyScalar(1/distance);const reach=Math.min(distance,upperLength+lowerLength-.001);
+  const along=(upperLength**2-lowerLength**2+reach**2)/(2*reach);
+  bend.copy(knee).sub(thigh.position);bend.addScaledVector(direction,-bend.dot(direction));if(bend.lengthSq()<.000001)return;bend.normalize();
+  newDirection.copy(direction).multiplyScalar(along).addScaledVector(bend,Math.sqrt(Math.max(0,upperLength**2-along**2)));
   target.copy(direction).multiplyScalar(reach).sub(newDirection);
-  oldDirection.copy(ankle).sub(knee).normalize();
-  adjustment.setFromUnitVectors(oldDirection, target.normalize());
-  shinRotation.premultiply(adjustment);
-  oldDirection.copy(knee).sub(thigh.position).normalize();
-  adjustment.setFromUnitVectors(oldDirection, newDirection.normalize());
-  thigh.quaternion.premultiply(adjustment);
-  shin.quaternion.copy(thigh.quaternion).invert().multiply(shinRotation);
-  foot.quaternion.copy(shinRotation).invert().multiply(footRotation);
+  oldDirection.copy(ankle).sub(knee).normalize();adjustment.setFromUnitVectors(oldDirection,target.normalize());shinRotation.premultiply(adjustment);
+  oldDirection.copy(knee).sub(thigh.position).normalize();adjustment.setFromUnitVectors(oldDirection,newDirection.normalize());thigh.quaternion.premultiply(adjustment);
+  shin.quaternion.copy(thigh.quaternion).invert().multiply(shinRotation);foot.quaternion.copy(shinRotation).invert().multiply(footRotation);
+}
+
+function solvePlant(plant:FootPlant,hips:THREE.Object3D,weight:number):void {
+  const {thigh,shin,foot}=plant;
+  shinRotation.copy(thigh.quaternion).multiply(shin.quaternion);
+  knee.copy(shin.position).applyQuaternion(thigh.quaternion).add(thigh.position);
+  ankle.copy(foot.position).applyQuaternion(shinRotation).add(knee);
+  const height=target.copy(ankle).applyMatrix4(hips.matrixWorld).y;
+  target.set(plant.anchor.x,height,plant.anchor.z).applyMatrix4(inverseHips);
+  target.sub(ankle).clampLength(0,.25).multiplyScalar(weight).add(ankle);
+  solveFootTarget(thigh,shin,foot,target);
 }
 
 export function applyFootPlants(

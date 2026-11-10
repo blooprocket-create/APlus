@@ -2,6 +2,12 @@
 
 **2026-11-09 parallel art scope:** the owner requested an isolated [visual pipeline investigation](OBSERVATORY_ATELIER.md). It uses the existing internal combat fixture, not the V2 story page; no additional opening beat is migrated. Phase 3 gates below are unchanged.
 
+The continued art branch adds original reconstruction/paint sources, reversible
+rig fitting, a marker-linked performance and configurable bounds on that same
+fixture. It does not add a world/physics/save owner or approve any new atlas
+geography. The current test suite has 187 passing tests; art acceptance remains
+a separate screenshot/gameplay review.
+
 
 **Status:** **IN PROGRESS** via the first opt-in arrival integration [PR #11](https://github.com/blooprocket-create/APlus/pull/11), documented in [Phase 3.0 progress](WORLD_V2_PHASE3_PROGRESS.md). Full campaign restaging, companion AI and V2 saving are **NOT implemented**. Baseline before work was merged [PR #9](https://github.com/blooprocket-create/APlus/pull/9). The World V2 terrain/navigation foundation exists; the **real game still launches its older Hearthmere scene**. Read [AGENTS.md](../AGENTS.md), [current status](WORLD_V2_STATUS.md), [user decisions](WORLD_V2_DECISIONS.md), [World V2 architecture](WORLD_V2_ARCHITECTURE.md) and the [Phase 0 legacy audit](WORLD_V2_PHASE0_AUDIT.md) before editing.
 

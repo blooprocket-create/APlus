@@ -1,0 +1,19 @@
+{
+  "source": "art/atelier/references/riven-cliff.png",
+  "view": "front",
+  "cameraModel": "perspective",
+  "materialKind": "organic",
+  "camera": [
+    2.3034297202635545,
+    32.50270881084472,
+    1.8105650720627264,
+    -1.088928345459852,
+    -0.0025667890341843527,
+    0.0011645989328615493
+  ],
+  "silhouetteError": 0.09444249094759072,
+  "textureSize": 3072,
+  "frontPaintFraction": 0.2575286638282632,
+  "seconds": 56.21,
+  "status": "UNREVIEWED texture projection; inspect distortion and seams in live renderer"
+}

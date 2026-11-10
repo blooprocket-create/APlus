@@ -657,6 +657,8 @@ export class GameEngine {
   /** Isolated art slice; reuses the internal moat combat sandbox and all live simulation. */
   public async startObservatoryAtelier(character: CharacterSaveData, baseline = false): Promise<void> {
     this.startGameplayWithCharacter(character, [], true);
+    this.slice!.configureArena({x:SLICE_CAMP.x,z:SLICE_CAMP.z-1,radiusX:6.2,radiusZ:5.9});
+    if(!baseline)this.animState.motionProfile='observatory';
     this.slice!.group.visible = false;
     for (const c of this.companions) this.removeSceneObject(c.rig.root);
     this.companions = [];
@@ -672,15 +674,18 @@ export class GameEngine {
     try {
       const { ObservatoryAtelier } = await import('../rendering/ObservatoryAtelier');
       this.atelier = new ObservatoryAtelier(this.scene, this.renderer, this.cameraController,
-        this.playerRig!, SLICE_CAMP.clone(), this.enemies[0].bundle.root, baseline);
+        this.playerRig!, SLICE_CAMP.clone(), this.enemies[0].bundle.root,this.enemies[0].bundle.bodyMesh, baseline);
       await this.atelier.ready;
     } finally { this.setPaused('atelier-loading', false); }
   }
   public atelierView(): void { this.atelier?.nextView(); }
+  public atelierInspectArt(): unknown { return this.atelier?.inspectArt(); }
   public atelierSkill(): void { if (this.atelier && !this.isPaused && this.cooldowns.skill1 <= 0) this.executeSkill('skill1'); }
   public atelierDiagnostics(): unknown {
     return { ...this.atelier?.diagnostics(), position: this.playerPos.toArray(),
-      animation: { ...this.animState }, hp: this.activeCharacter?.currentHp };
+      animation: { ...this.animState }, hp: this.activeCharacter?.currentHp,
+      maxHp:this.effectiveStats?.maxHp, cooldown:this.cooldowns.skill1,
+      keeper:this.enemies[0]?{name:this.enemies[0].name,hp:this.enemies[0].hp,maxHp:this.enemies[0].maxHp}:null };
   }
 
   private buildPreviewPedestal(): void {
@@ -1930,7 +1935,7 @@ export class GameEngine {
       this.minimapTerrain?.update(this.renderer, this.scene, this.environment.minimapWorldRoot, this.playerPos, now);
     }
     if (this.atelier) {
-      this.atelier.update(this.isPaused ? 0 : dt, this.animState);
+      this.atelier.update(this.isPaused ? 0 : dt, this.animState, this.enemies[0]?.hitFlashTimer ?? 0);
       this.atelier.render();
     } else this.renderer.render(this.scene, this.cameraController.camera);
 
@@ -2123,7 +2128,8 @@ export class GameEngine {
       ? this.animState.attackComboStep >= 4
       : this.animState.attackComboStep <= 3
         || this.animState.attackComboStep === 5
-        || (char.classId === 'assassin' && this.animState.skillSlot === 'skill2');
+        || (char.classId === 'assassin' && this.animState.skillSlot === 'skill2')
+        || (this.animState.motionProfile === 'observatory' && this.animState.skillSlot === 'skill1');
     this.playerRig!.updateAnimation(dt, released && exactContact
       ? { ...this.animState, attackSwingProgress: attack.releaseAt }
       : this.animState);
@@ -3020,7 +3026,7 @@ export class GameEngine {
     const ultimate = skillKey === 'ultimate';
     const heavensfall = ultimate && char.classId === 'warrior';
     const shadowExecution = ultimate && char.classId === 'assassin';
-    const duration = this.atelier && skillKey === 'skill1' ? 1.05 : ultimate ? { warrior: .68, assassin: .64, mage: .58 }[char.classId] : .38;
+    const duration = this.atelier && skillKey === 'skill1' ? (this.animState.motionProfile==='observatory'?1.6:1.05) : ultimate ? { warrior: .68, assassin: .64, mage: .58 }[char.classId] : .38;
     this.startHeroAttack(ultimate ? 5 : 4, duration,
       () => this.releaseSkill(skillKey, skillLevelBonus, nearest, forward), ultimate ? undefined : skillKey);
     if (heavensfall) {
@@ -3931,7 +3937,9 @@ export class GameEngine {
       }
 
       // Clamp enemy to the procedural path if in a procedural corridor zone
-      if (this.environment.biomeWalkable) {
+      if(this.atelier&&this.slice){
+        this.slice.constrainActor(pos,previousX,previousZ);
+      } else if (this.environment.biomeWalkable) {
         this.constrainBiomeActor(pos, previousX, previousZ);
       } else if (this.currentPathLayout) {
         const clamped = clampToProceduralPath(pos.x, pos.z, this.currentPathLayout, 0.65);

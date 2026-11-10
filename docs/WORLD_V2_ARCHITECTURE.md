@@ -1,6 +1,21 @@
 # Astral Chronicles — World Architecture V2
 
-**Optional art stage (2026-11-09):** [Observatory atelier](OBSERVATORY_ATELIER.md) is a lazy-loaded rendering presentation attached to the existing engine and internal moat fixture. It owns imported art/materials/postprocessing only; existing combat, input, animation, sentinel AI and camera own behavior. No pure world imports or atlas/collision/save contracts change. It is not a second world/gameplay runtime or campaign cutover.
+**Optional art stage (2026-11-09):** [Observatory atelier](OBSERVATORY_ATELIER.md) is a lazy-loaded rendering presentation attached to the existing engine and internal moat fixture. It owns imported art/materials/postprocessing and presentation fit. An optional `motionProfile` selects an original baked ability through the existing `HeroMotion` player and release-marker contract; existing combat, input, sentinel AI and camera own behavior. No pure world imports or atlas/collision/save contracts change. It is not a second world/gameplay runtime or campaign cutover.
+
+Original reconstructed skinned art uses `ReconstructedHero` and a reversible
+`CharacterRig.fitVisualRestPose` fit. Imported armatures are export carriers;
+runtime skinning references the canonical bones, while `HeroMotion` retargets
+authored foot paths through the existing shared two-link solver. The reviewed
+Blender source/UV paint is independent of offline inference weights. No inference
+service, additional actor or animation clock runs in the game. Atelier vitals
+are read-only projections of existing health/cooldown state.
+
+The art encounter configures an optional flat elliptical arena on `MoatSlice`;
+that same owner constrains the player and uses the shared swept-movement helper
+for the sentinel. Default moat rules are unchanged and tested after removing
+the arena configuration. This proposed fixture footprint is not V2 terrain or
+navigation. Artist-annotated cliff water paths are material data only. Extra hair
+follower bones extend the existing reviewed skin without moving the actor root.
 
 
 **Status:** Product direction locked 2026-11-08. Phase 1 platform is complete; Phase 2's [geography](WORLD_V2_PHASE2_GEOGRAPHY.md) now has a [functional staging runtime](WORLD_V2_PHASE2_RUNTIME.md): full bounded atlas pages, actual bare-terrain collision, baked walkability/nav paths, and native close gameplay camera. **The five-landmass staging map and Hearthmere replacement coordinates are NOT approved final canon.** Production story integration, ships and iPhone performance profiling remain later phases.  

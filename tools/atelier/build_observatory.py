@@ -22,12 +22,23 @@ def clip(poly,nx,nz,c):
    t=da/(da-db);out.append((a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t))
  return out
 sites=[]
+court_outline=[(-5.9,1.3),(-4.4,3.8),(-1.9,4.3),(1,3.5),(3.4,3.8),(4.8,1.7),(4.6,-1),(3.4,-3.3),(2.8,-5.0),(1,-5.6),(-1.8,-5.3),(-3.5,-3.2),(-5.6,-1.7)]
+def broken_edge(x,z):
+ # Two authored collapse scars interrupt the platform edge, exposing earth.
+ return (x<-3.2 and z>1.7) or (x>2.7 and -.4<z<.8)
+def on_court(x,z):
+ inside=False
+ for i,a in enumerate(court_outline):
+  b=court_outline[(i+1)%len(court_outline)]
+  if (a[1]>z)!=(b[1]>z) and x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0]:inside=not inside
+ return inside and not broken_edge(x,z)
 for iz in range(-5,6):
  for ix in range(-5,6):
   x=ix*.87+random.uniform(-.28,.28);z=iz*.87+random.uniform(-.28,.28)
-  if x*x+z*z<24:sites.append((x,z))
+  if x*x+z*z<28:sites.append((x,z))
 for x,z in sites:
- poly=[(math.cos(a)*(4.9+.32*math.sin(a*3)+.16*math.sin(a*7)),math.sin(a)*(4.9+.32*math.sin(a*3)+.16*math.sin(a*7))) for a in [i*math.tau/80 for i in range(80)]]
+ if broken_edge(x,z):continue
+ poly=list(court_outline)
  for xx,zz in sites:
   if (x,z)==(xx,zz):continue
   poly=clip(poly,xx-x,zz-z,(xx*xx+zz*zz-x*x-z*z)*.5)
@@ -42,6 +53,7 @@ for radius in [1.7,2.8,4.3]:
  for segment in range(12):
   if segment in [2,7]:continue
   pts=[(math.sin(a)*radius,.032,-1+math.cos(a)*radius) for a in [segment*math.tau/12+t*.46 for t in [i/12 for i in range(13)]]]
+  if any(not on_court(p[0],p[2]+1) for p in pts):continue
   sweep('Inlaid stellar cartography',pts,[.009]*13,gold,5,0)
 for z in range(-15,-4):
  for x in [-1,0,1]:slab('Pilgrim path',(x*.95+random.uniform(-.08,.08),.018,z),.9,.91,.15,random.uniform(-.12,.12))
@@ -77,19 +89,34 @@ for bi,(pts,rs) in enumerate(branches):
   sweep('Crown • branching twig',[p,(p[0]+side*.7,p[1]+.5,p[2]+.5),(p[0]+side*1.1,p[1]+1,p[2]+.8)],[rs[j]*.5,.08,.008],bark,8,2)
 
 # Leaves are curved, veined, lanceolate surfaces, distributed in authored crown volumes.
-leafvs=[[] for _ in leaves];leaffs=[[] for _ in leaves]
+leafvs=[[] for _ in leaves];leaffs=[[] for _ in leaves];leafuv=[[] for _ in leaves]
 def leaf(p,l,w,a,tilt,idx):
  vs=leafvs[idx];fs=leaffs[idx];start=len(vs)
  for j in range(5):
   t=j/4; sw=math.sin(math.pi*t)**.8*w
   for s in [-1,0,1]:
+   leafuv[idx].append((.5+s*.48*math.sin(math.pi*t)**.8,t))
    u=s*sw;v=t*l;vs.append((p[0]+u*math.cos(a)+v*math.sin(a),p[1]+math.sin(t*math.pi)*l*.18+v*tilt-abs(s)*w*.24,p[2]-u*math.sin(a)+v*math.cos(a)))
  for j in range(4):
   for s in range(2):q=start+j*3+s;fs.append((q,q+1,q+4,q+3))
-for center,sz in [((-9,8,-5.5),(4,1.6,2.7)),((-8.5,10,-8.5),(4,1.5,3)),((-3.5,11,-7.3),(4.4,1.5,3)),((.7,10.6,-6.7),(3.7,1.3,3)),((-1.2,8.3,-10),(3.4,1.1,2.5))]:
- for k in range(1250):
-  # Disciplined canopy masses with small sky openings.
-  a=random.uniform(0,math.tau);r=math.sqrt(random.random());p=(center[0]+math.cos(a)*r*sz[0],center[1]+random.uniform(-1,1)*sz[1]*(1-r*.5),center[2]+math.sin(a)*r*sz[2]);leaf(p,random.uniform(.32,.75),random.uniform(.11,.24),random.uniform(0,math.tau),random.uniform(-.75,.4),random.choices(range(5),[3,5,5,3,1])[0])
+# Leaf sprays follow actual woody shoots. Crown shape comes from twelve
+# authored growth gestures instead of unconnected ellipsoid distributions.
+sprays=[((-11.0,7.8,-5.5),(-11.4,9.0,-5.1),2.5),((-9.7,8.1,-5.7),(-9.1,9.5,-4.9),2.4),
+ ((-10.5,9.9,-9),(-11.1,11.2,-8.8),2.4),((-8.5,9.2,-8),(-8.3,11.0,-7.8),2.3),
+ ((-6,9.5,-7),(-6.3,11.4,-7.0),2.2),((-3.4,10.4,-7.2),(-3.6,12.3,-7.0),2.7),
+ ((-1.2,10.7,-7.8),(-1.1,12.4,-7.5),2.3),((1.4,10.7,-6.4),(1.8,12.0,-6.0),2.0),
+ ((-.8,9.7,-5.9),(-.2,11.5,-4.8),2.0),((-.2,7.9,-10.5),(.6,9.4,-10.7),2.6),
+ ((-2.0,7.4,-10),(-2.5,9.3,-10.8),2.2),((-7.5,8.2,-8),(-7.5,10.0,-9.7),2.2)]
+for cluster,(root,center,spread) in enumerate(sprays):
+ for shoot in range(26):
+  a=shoot*2.399963+cluster*.71;r=spread*(.32+.68*math.sqrt((shoot+.5)/26))
+  end=(center[0]+math.sin(a)*r,center[1]+.7*math.cos(a*1.7+cluster)+.3*(1-r/spread),center[2]+math.cos(a)*r*.7)
+  mid=((root[0]+end[0])*.5,(root[1]+end[1])*.5+.25,(root[2]+end[2])*.5)
+  sweep('Canopy shoot',[root,mid,end],[.032,.018,.0025],bark,5,1)
+  for j in range(3,12):
+   t=j/12;px=(1-t)**2*root[0]+2*t*(1-t)*mid[0]+t*t*end[0];py=(1-t)**2*root[1]+2*t*(1-t)*mid[1]+t*t*end[1];pz=(1-t)**2*root[2]+2*t*(1-t)*mid[2]+t*t*end[2]
+   for side in [-1,1]:
+    leaf((px,py,pz),random.uniform(.35,.62),random.uniform(.12,.21),a+side*.95,random.uniform(-.32,.28),0 if t<.5 else 1 if end[1]>center[1]+.2 else 2 if shoot%3 else 3)
 # Understory: fern fronds grow as alternating pointed leaflets.
 for i in range(135):
  x=random.uniform(-14,12);z=random.uniform(-16,9)
@@ -102,11 +129,9 @@ for i in range(135):
    t=k/8;p=(x+math.sin(a)*L*t,y+math.sin(t*2)*L*.55,z+math.cos(a)*L*t)
    for side in [-1,1]:leaf(p,L*.36*(1-t)+.04,.045,a+side*1.15,-.15,random.choice([0,1]))
 
-# Banks, collapsed masonry, moss cushions; composition intentionally leaves center clear.
-for i in range(75):
- x=random.choice([-1,1])*random.uniform(5.3,15);z=random.uniform(-17,11);y=.1+max(0,abs(x)-5)**1.6/9**1.6*.7
- rock('Garden bank • weathered stone',(x,y-.15,z),(random.uniform(.45,1.6),random.uniform(.35,1.1),random.uniform(.5,1.4)))
- rock('Moss cushion',(x,y+.25,z),(.65,.12,.6),moss)
+# Continuous authored outcrops replace the old random sphere/moss assemblies.
+from bank_sculpt import build_banks
+build_banks(mesh,mat)
 # Hanging vines and star-shaped garden flowers.
 for i in range(20):
  x=random.uniform(-9,3);z=random.uniform(-8,-5);top=random.uniform(7,10);length=random.uniform(1,3)
@@ -121,7 +146,8 @@ for i in range(180):
  sweep('Iris stem',[(x,y,z),(x+.03,y+h,z)],[.009,.005],moss,4,0)
  vs=[(x,y+h,z)]+[(x+math.sin(a)*r,y+h+.035*math.cos(a*5),z+math.cos(a)*r) for a,r in [(j*math.tau/10,.13 if j%2==0 else .047) for j in range(10)]]
  mesh('Wild star iris',vs,[(0,j+1,(j+1)%10+1) for j in range(10)],flower if i%3 else ivory)
-for idx in range(5):mesh('Sculpted foliage • '+str(idx),leafvs[idx],leaffs[idx],leaves[idx])
+from couture_surfaces import uv_mesh
+for idx in range(5):uv_mesh('Sculpted foliage • '+str(idx),leafvs[idx],leaffs[idx],leafuv[idx],leaves[idx],0)
 # Lantern shrines tell of a maintained sanctuary inside an abandoned observatory.
 for x,z in [(-4,2),(4.8,-2),(-2.8,-6),(5,-10)]:
  slab('Lantern foot',(x,.16,z),.7,.7,.25)
@@ -130,15 +156,9 @@ for x,z in [(-4,2),(4.8,-2),(-2.8,-6),(5,-10)]:
  slab('Lantern shelter',(x,1.16,z),.62,.62,.12)
 from observatory_relics import build_relics
 build_relics(mesh,sweep,slab,mat,stone,dark,gold,moss)
-# Distant layered valley silhouettes; authored ridgelines establish depth.
-for layer,z0 in enumerate([-37,-50,-67]):
- pigment=mat('Valley haze '+str(layer),['466f73','64878b','8ba5a4'][layer]);vs=[];fs=[]
- for j in range(121):
-  x=-95+j*190/120
-  y=9+layer*3+5*math.sin(x*.065+layer*2)+3*math.sin(x*.14+layer)+1.2*math.sin(x*.4)
-  vs.extend([(x,-8,z0),(x,y,z0)])
-  if j:q=(j-1)*2;fs.append((q,q+2,q+3,q+1))
- mesh('Distant valley ridge '+str(layer),vs,fs,pigment)
+# Original continuous ravine sculpture replaces flat ridge image planes.
+from terrain_sculpt import build_ravine
+build_ravine(mesh,mat)
 # Low stone garden terraces with a natural, broken top edge.
 for i in range(20):
  x=-17+i*1.65;z=-18+math.sin(i*.27)*1.5
@@ -157,6 +177,17 @@ mod=o.modifiers.new('Organic junction relaxation','SMOOTH');mod.factor=.65;mod.i
 mod=o.modifiers.new('Sculpt surface economy','DECIMATE');mod.ratio=.6;bpy.ops.object.modifier_apply(modifier=mod.name)
 for p in o.data.polygons:p.use_smooth=True
 # Merge by pigment after applying authored surface modifiers. Keeps render batches modest.
+# Retain the earlier gateway as an explicit reversible comparison group. Its
+# materials stay separate from the court so sculpt replacement needs no runtime
+# coordinate-based triangle deletion or changes to gameplay geometry.
+gate_prefixes=('Moon gate','Astronomical brass','Column plinth','Ruined fluted pier','Carved acanthus','Fractured capital','Moon window','Botanical astronomical','Moon dial','Carved window','Pilgrim path','Forgotten terrace')
+gate_materials={}
+for o in list(bpy.context.scene.objects):
+ if o.type=='MESH' and o.name.startswith(gate_prefixes):
+  old=o.data.materials[0]
+  if old.name not in gate_materials:
+   copy=old.copy();copy.name=old.name+' • Archived gate';gate_materials[old.name]=copy
+  o.data.materials[0]=gate_materials[old.name]
 def export(path):
  bpy.ops.object.select_all(action='DESELECT')
  for o in list(bpy.context.scene.objects):
@@ -172,6 +203,8 @@ def export(path):
   bpy.ops.object.select_all(action='DESELECT')
   for o in objects:o.select_set(True)
   bpy.context.view_layer.objects.active=objects[0];bpy.ops.object.join()
+ from bake_occlusion import bake_occlusion
+ bake_occlusion(list(bpy.context.scene.objects))
  bpy.ops.export_scene.gltf(filepath=path,export_format='GLB',export_yup=True)
 export(OUT+'/garden.glb')
 print('ATELIER: original garden exported')

@@ -17,8 +17,8 @@ def sculpt_depth(x,y):
  w,d,z=section(y);base=z+d*math.sqrt(max(.001,1-(x/w)**2))
  cheek=.005*(gaussian(x,y,-.094,-.035,.032,.025)+gaussian(x,y,.094,-.035,.032,.025))
  sockets=-.009*(gaussian(x,y,-.066,.018,.044,.026)+gaussian(x,y,.066,.018,.044,.026))
- bridge=.009*gaussian(x,y,0,.002,.014,.040)
- tip=.018*gaussian(x,y,0,-.032,.014,.012)
+ bridge=.014*max(0,1-abs(x)/.017)**1.35*math.exp(-((y+.008)/.043)**4)
+ tip=.022*gaussian(x,y,0,-.034,.011,.009)
  alar=.004*(gaussian(x,y,-.012,-.039,.009,.008)+gaussian(x,y,.012,-.039,.009,.008))
  philtrum=.0025*gaussian(x,y,0,-.061,.007,.015)
  lips=.004*gaussian(x,y,0,-.084,.027,.010)
@@ -37,6 +37,23 @@ def build_portrait(mesh,skin,out):
     q=(i-1)*N+j;b=(i-1)*N+(j+1)%N;fs.append((q,b,b+N,q+N))
  fs.extend([tuple(reversed(range(N))),tuple(R*N+j for j in range(N))])
  face=mesh('Landmark sculpt • Celestia face',vs,fs,skin,0)
+ # Front-surface paint projection is an explicit authoring UV, exported
+ # alongside the deformation topology. The map follows the sculpt's landmarks.
+ layer=face.data.uv_layers.new(name='Portrait paint UV')
+ for poly in face.data.polygons:
+  for li in poly.loop_indices:
+   x,y,z=vs[face.data.loops[li].vertex_index];layer.data[li].uv=((x+.16)/.32,(y+.16)/.37)
+ # Jaw shapes are authored on the continuous face, not only drawn lip lines.
+ face.shape_key_add(name='Basis')
+ for shape in ['Blink','Focus','Concern','Gaze','SpeakOpen','SpeakWide','SpeakRound']:
+  key=face.shape_key_add(name=shape)
+  for i,(x,y,z) in enumerate(vs):
+   front=max(0,min(1,(z-.025)/.06));lower=math.exp(-((y+.11)/.050)**4)*front
+   xx,yy,zz=x,y,z
+   if shape=='SpeakOpen':yy-=.014*lower;zz+=.002*lower
+   if shape=='SpeakWide':xx*=1+.05*lower
+   if shape=='SpeakRound':xx*=1-.08*lower;zz+=.005*lower
+   key.data[i].co=(xx,-zz,yy)
  # This is also a source handoff: fitting data changes with the sculpt.
  nx,ny=81,91;x0,x1=-.16,.16;y0,y1=-.16,.21
  samples=[round(sculpt_depth(x0+i*(x1-x0)/(nx-1),y0+j*(y1-y0)/(ny-1)),7) for j in range(ny) for i in range(nx)]

@@ -15,12 +15,9 @@ export class AtelierPortrait {
     if(surface.schemaVersion!==1||surface.depth.length!==surface.nx*surface.ny)throw Error('Invalid portrait sculpt surface');
     this.root.name='Atelier expressive portrait';
     for(const side of [-1,1])this.eye(side);
-    this.stroke([[-.025,-.084],[-.014,-.083],[-.004,-.082],[.006,-.082],[.016,-.083],[.025,-.084]],.0012,0x784855,'mouth',0,.003);
-    this.stroke([[-.018,-.086],[-.006,-.090],[.005,-.091],[.016,-.087]],.0018,0xc47e7d,'mouth',0,.0032);
-    this.stroke([[-.009,-.091],[0,-.092],[.009,-.090]],.0008,0xeab0a0,'mouth',0,.004);
-    for(const side of [-1,1]){
-      this.stroke([[side*.006,-.040],[side*.012,-.041],[side*.016,-.038]],.00055,0xb78170,'nose',side,.002);
-    }
+    // Lips and nasal pigmentation belong to the sculpt's painted UV layer;
+    // expression deformation is exported with that surface. Eyes/lashes/brows
+    // remain separate fitted geometry, driven by the canonical morph weights.
   }
 
   private depth(x:number,y:number):number{
@@ -75,7 +72,7 @@ export class AtelierPortrait {
   private eye(side:number):void{
     const cx=side*.065;
     const map=(x:number,y:number):Point=>[cx+side*x,y];
-    const upper:Point[]=[[-.043,.000],[-.028,.017],[-.007,.022],[.017,.022],[.045,.013]];
+    const upper:Point[]=[[-.043,.000],[-.028,.012],[-.007,.016],[.017,.016],[.045,.013]];
     const lower:Point[]=[[-.043,.000],[-.023,-.008],[.002,-.009],[.027,-.002],[.045,.013]];
     const curve=(ps:Point[])=>new THREE.CatmullRomCurve3(ps.map(([x,y])=>new THREE.Vector3(x,y,0)));
     const top=curve(upper),bottom=curve(lower);const points:Point[]=[],faces:number[]=[],uv:number[]=[];const nx=36,ny=10;
@@ -84,18 +81,18 @@ export class AtelierPortrait {
       points.push(map(THREE.MathUtils.lerp(a.x,b.x,v),THREE.MathUtils.lerp(a.y,b.y,v)));uv.push(t,v);
       if(j&&i){const q=(j-1)*(nx+1)+i-1;faces.push(q,q+1,q+nx+2,q,q+nx+2,q+nx+1);}
     }
-    const material=new THREE.ShaderMaterial({side:THREE.DoubleSide,uniforms:{gaze:this.gaze,eyeSide:{value:side}},
-      vertexShader:`varying vec2 vUv;
-        #include <morphtarget_pars_vertex>
-        void main(){vUv=uv;#include <begin_vertex>
-          #include <morphtarget_vertex>
-          gl_Position=projectionMatrix*modelViewMatrix*vec4(transformed,1.);}`.replace(';#include',';\n#include'),
-      fragmentShader:`varying vec2 vUv;uniform float gaze;uniform float eyeSide;
-        void main(){vec2 p=vec2((vUv.x-.48-gaze*.09*eyeSide)*2.55,(vUv.y-.51)*1.08);float r=length(p);float a=atan(p.y,p.x);
+    const material=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.27,clearcoat:.7,clearcoatRoughness:.18,side:THREE.DoubleSide});
+    material.onBeforeCompile=shader=>{
+      shader.uniforms.gaze=this.gaze;shader.uniforms.eyeSide={value:side};
+      shader.vertexShader='varying vec2 irisUv;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n irisUv=uv;');
+      shader.fragmentShader='varying vec2 irisUv;uniform float gaze;uniform float eyeSide;\n'+shader.fragmentShader;
+      shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+        vec2 vUv=irisUv;
+        vec2 p=vec2((vUv.x-.48-gaze*.09*eyeSide)*2.55,(vUv.y-.51)*1.08);float r=length(p);float a=atan(p.y,p.x);
           vec3 white=mix(vec3(.75,.58,.57),vec3(.96,.91,.86),smoothstep(0.,.18,min(vUv.x,1.-vUv.x)));
           white*=.82+.18*(1.-smoothstep(.45,.96,vUv.y));
           float radial=.5+.5*sin(a*51.+sin(a*19.)*.7+r*21.);float fibers=.5+.5*sin(a*103.+r*27.);
-          vec3 iris=mix(vec3(.035,.14,.25),vec3(.17,.63,.67),smoothstep(.10,.43,r));
+          vec3 iris=mix(vec3(.025,.10,.14),vec3(.07,.34,.36),smoothstep(.10,.43,r));
           iris+=vec3(.05,.10,.06)*radial+vec3(.035,.05,.035)*fibers;
           iris=mix(iris,vec3(.015,.047,.09),smoothstep(.37,.43,r));
           iris=mix(iris,vec3(.014,.022,.04),1.-smoothstep(.14,.18,length(p*vec2(1.1,.82))));
@@ -103,17 +100,16 @@ export class AtelierPortrait {
           vec3 c=mix(white,iris,1.-smoothstep(.42,.435,r));
           float glint=1.-smoothstep(.04,.065,length(p-vec2(-.12,.17)));
           float secondary=(1.-smoothstep(.016,.036,length(p-vec2(.14,-.12))))*.75;
-          c=mix(c,vec3(1.,.98,.91),max(glint,secondary));gl_FragColor=vec4(c,1.);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }`});
-    this.add(this.geometry(points,faces,'eye',side,.007,uv),material);
+          c=mix(c,vec3(1.,.98,.91),max(glint,secondary));diffuseColor.rgb*=c;`);
+    };
+    material.customProgramCacheKey=()=> 'atelier-lit-cornea';
+    this.add(this.geometry(points,faces,'eye',side,.007,uv),material).receiveShadow=true;
     this.stroke(upper.map(([x,y])=>map(x,y)),.0028,0x232332,'eye',side,.008);
     this.stroke(lower.map(([x,y])=>map(x,y)),.00085,0xa36a69,'eye',side,.007);
     this.stroke(upper.slice(1).map(([x,y])=>map(x,y+.007)),.00065,0xc28b7e,'eye',side,.002);
     this.stroke([[.035,.021],[.045,.024],[.055,.030]].map(([x,y])=>map(x,y)),.0017,0x232332,'eye',side,.008);
     this.stroke([[.038,.018],[.048,.018],[.054,.021]].map(([x,y])=>map(x,y)),.0010,0x232332,'eye',side,.008);
-    this.stroke([[-.037,.041],[-.015,.046],[.009,.047],[.034,.042]].map(([x,y])=>map(x,y)),.0020,0x526278,'brow',side,.004);
+    this.stroke([[-.037,.036],[-.015,.043],[.009,.046],[.034,.043]].map(([x,y])=>map(x,y)),.0024,0x485268,'brow',side,.004);
   }
   update():void{
     for(const mesh of this.meshes)for(const shape of SHAPES){

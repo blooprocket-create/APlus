@@ -1,0 +1,91 @@
+{
+  "capturedAt": "2026-11-09T22:07:41.911Z",
+  "capturePrefix": "21-carved-sanctuary",
+  "browser": "Chromium / SwiftShader",
+  "viewport": [
+    960,
+    600
+  ],
+  "logs": [
+    {
+      "ready": true,
+      "view": 0,
+      "tree": "original reconstructed elder",
+      "hero": "original fitted reconstruction",
+      "keeper": {
+        "name": "The Orrery Keeper",
+        "hp": 1600,
+        "maxHp": 1600
+      },
+      "castAge": 10.100000000000001,
+      "frameIntervalMs": 6861.756250000093,
+      "calls": 114,
+      "triangles": 1947951,
+      "position": [
+        -9,
+        0,
+        11
+      ],
+      "animation": {
+        "isMoving": false,
+        "moveSpeedRatio": 0,
+        "attackComboStep": 0,
+        "attackSwingProgress": 0,
+        "isDashing": false,
+        "hitFlashTimer": 0,
+        "motionProfile": "observatory",
+        "charging": false
+      },
+      "hp": 530,
+      "maxHp": 530,
+      "cooldown": 0
+    },
+    {
+      "ready": true,
+      "view": 0,
+      "tree": "original reconstructed elder",
+      "hero": "original fitted reconstruction",
+      "keeper": {
+        "name": "The Orrery Keeper",
+        "hp": 1505,
+        "maxHp": 1600
+      },
+      "castAge": 0.5001000000000348,
+      "frameIntervalMs": 8219.084210526345,
+      "calls": 136,
+      "triangles": 1961335,
+      "position": [
+        -9,
+        0,
+        11
+      ],
+      "animation": {
+        "isMoving": false,
+        "moveSpeedRatio": 0,
+        "attackComboStep": 4,
+        "attackSwingProgress": 0.8855000000000297,
+        "isDashing": false,
+        "hitFlashTimer": 0,
+        "motionProfile": "observatory",
+        "charging": false,
+        "skillSlot": "skill1"
+      },
+      "hp": 530,
+      "maxHp": 530,
+      "cooldown": 4.083199999999959
+    },
+    {
+      "walkingFrom": [
+        -9,
+        0,
+        11
+      ],
+      "walkingTo": [
+        -9,
+        0,
+        11.576
+      ]
+    }
+  ],
+  "errors": []
+}

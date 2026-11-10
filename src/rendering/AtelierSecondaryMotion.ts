@@ -10,7 +10,7 @@ export class AtelierSecondaryMotion {
   private readonly velocity=new Float64Array(4);
   private readonly lastPosition=new THREE.Vector3();
   private lastYaw:number;
-  constructor(private actor:THREE.Object3D,canonicalHair:THREE.Object3D,art:THREE.Group){
+  constructor(private actor:THREE.Object3D,canonicalHair:THREE.Object3D,art:THREE.Group|THREE.SkinnedMesh){
     this.lastPosition.copy(actor.position);this.lastYaw=actor.rotation.y;
     for(let i=0;i<4;i++){
       const bone=new THREE.Bone();bone.name='atelier_hair_follow_'+i;
@@ -19,6 +19,24 @@ export class AtelierSecondaryMotion {
     }
     canonicalHair.updateWorldMatrix(true,true);
     const skeleton=new THREE.Skeleton(this.joints);
+    if(art instanceof THREE.SkinnedMesh){
+      // Extend a reviewed whole-body skin instead of discarding its weights.
+      // Only its existing Hair influence is distributed down the follower.
+      const old=art.skeleton,hairIndex=old.bones.indexOf(canonicalHair as THREE.Bone);
+      if(hairIndex<0)throw Error('Weighted hair has no canonical Hair joint');
+      const p=art.geometry.getAttribute('position'),indices=art.geometry.getAttribute('skinIndex'),weights=art.geometry.getAttribute('skinWeight');
+      const toHair=new THREE.Matrix4().copy(canonicalHair.matrixWorld).invert().multiply(art.bindMatrix),point=new THREE.Vector3();
+      for(let i=0;i<p.count;i++){
+        const pairs=Array.from({length:4},(_,c)=>({index:indices.getComponent(i,c),weight:weights.getComponent(i,c)}));
+        const influence=pairs.find(pair=>pair.index===hairIndex&&pair.weight>.20);if(!influence)continue;
+        point.fromBufferAttribute(p,i).applyMatrix4(toHair);const along=THREE.MathUtils.clamp(-point.y/.21,0,2.999),a=Math.floor(along),f=along-a;
+        const combined=pairs.filter(pair=>pair!==influence);combined.push({index:old.bones.length+a,weight:influence.weight*(1-f)},{index:old.bones.length+a+1,weight:influence.weight*f});
+        combined.sort((a,b)=>b.weight-a.weight);const top=combined.slice(0,4),sum=top.reduce((s,p)=>s+p.weight,0);
+        for(let c=0;c<4;c++){indices.setComponent(i,c,top[c].index);weights.setComponent(i,c,top[c].weight/sum);}
+      }
+      const extended=new THREE.Skeleton([...old.bones,...this.joints],[...old.boneInverses,...skeleton.boneInverses]);
+      art.bind(extended,art.bindMatrix);indices.needsUpdate=true;weights.needsUpdate=true;old.dispose();skeleton.dispose();return;
+    }
     for(const source of [...art.children]){
       if(!(source instanceof THREE.Mesh))continue;
       source.updateMatrix();const geometry=source.geometry.clone().applyMatrix4(source.matrix);

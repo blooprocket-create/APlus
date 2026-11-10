@@ -1,19 +1,23 @@
 {
-  "capturedAt": "2026-11-09T18:27:11.065Z",
-  "capturePrefix": "10-refinement",
+  "capturedAt": "2026-11-10T00:53:11.929Z",
+  "capturePrefix": "24-golden-canopy",
   "browser": "Chromium / SwiftShader",
   "viewport": [
-    1280,
-    800
+    960,
+    600
   ],
   "logs": [
     {
       "ready": true,
       "view": 0,
-      "castAge": 10.100000000000001,
-      "frameIntervalMs": 2992.86666666662,
-      "calls": 174,
-      "triangles": 1291019,
+      "simulationTime": 0.06669999999999891,
+      "tree": "sculpt-conditioned porous foliage",
+      "hero": "original fitted reconstruction",
+      "keeperArt": "original reconstruction",
+      "castAge": 10.066699999999999,
+      "frameIntervalMs": 7670.949999999255,
+      "calls": 117,
+      "triangles": 2165308,
       "position": [
         -9,
         0,
@@ -26,17 +30,29 @@
         "attackSwingProgress": 0,
         "isDashing": false,
         "hitFlashTimer": 0,
+        "motionProfile": "observatory",
         "charging": false
       },
-      "hp": 530
+      "hp": 530,
+      "maxHp": 530,
+      "cooldown": 0,
+      "keeper": {
+        "name": "The Orrery Keeper",
+        "hp": 1600,
+        "maxHp": 1600
+      }
     },
     {
       "ready": true,
       "view": 0,
-      "castAge": 0.5166000000000058,
-      "frameIntervalMs": 3983.827659574456,
-      "calls": 183,
-      "triangles": 1297741,
+      "simulationTime": 1.5000999999999793,
+      "tree": "sculpt-conditioned porous foliage",
+      "hero": "original fitted reconstruction",
+      "keeperArt": "original reconstruction",
+      "castAge": 0.5002000000000116,
+      "frameIntervalMs": 11698.807142857107,
+      "calls": 139,
+      "triangles": 2178692,
       "position": [
         -9,
         0,
@@ -46,13 +62,21 @@
         "isMoving": false,
         "moveSpeedRatio": 0,
         "attackComboStep": 4,
-        "attackSwingProgress": 0.7459047619047595,
+        "attackSwingProgress": 0.8958749999999877,
         "isDashing": false,
         "hitFlashTimer": 0,
+        "motionProfile": "observatory",
         "charging": false,
         "skillSlot": "skill1"
       },
-      "hp": 530
+      "hp": 530,
+      "maxHp": 530,
+      "cooldown": 4.066600000000025,
+      "keeper": {
+        "name": "The Orrery Keeper",
+        "hp": 1507,
+        "maxHp": 1600
+      }
     },
     {
       "walkingFrom": [
@@ -70,10 +94,14 @@
       "recordedAbility": {
         "ready": true,
         "view": 2,
-        "castAge": 0.7497999999999958,
-        "frameIntervalMs": 2698.424137931028,
-        "calls": 187,
-        "triangles": 1298029,
+        "simulationTime": 1.6665999999999994,
+        "tree": "sculpt-conditioned porous foliage",
+        "hero": "original fitted reconstruction",
+        "keeperArt": "original reconstruction",
+        "castAge": 0.7000000000000001,
+        "frameIntervalMs": 6401.7828571428145,
+        "calls": 139,
+        "triangles": 2178692,
         "position": [
           -9,
           0,
@@ -83,13 +111,21 @@
           "isMoving": false,
           "moveSpeedRatio": 0,
           "attackComboStep": 4,
-          "attackSwingProgress": 0.9998095238095198,
+          "attackSwingProgress": 0.9375000000000004,
           "isDashing": false,
           "hitFlashTimer": 0,
+          "motionProfile": "observatory",
           "charging": false,
           "skillSlot": "skill1"
         },
-        "hp": 530
+        "hp": 530,
+        "maxHp": 530,
+        "cooldown": 4.000000000000005,
+        "keeper": {
+          "name": "The Orrery Keeper",
+          "hp": 1233,
+          "maxHp": 1600
+        }
       }
     }
   ],
