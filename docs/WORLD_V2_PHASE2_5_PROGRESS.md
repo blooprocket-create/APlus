@@ -28,6 +28,7 @@ Hearthmere also gains staved barrels with inset lids and raised iron hoops, over
 - 188 tests pass, including the existing three-hero opening/rescue/skip/defeat regressions; real V2 kits/companions; movement beyond the former zone radius and across a cell boundary; elevated camera; scenery collision; sea and unloaded-cell rejection; and isolation from legacy saves.
 - Deterministic preview/geography artifacts verify, including reverse geography load order. Dependency audit reports no forbidden dependencies or unresolved local imports.
 - Browser and visual evidence are recorded by `npm run test:browser` and `npm run test:visual`; final results are recorded in the [visual review log](WORLD_V2_VISUAL_REVIEW_LOG.md). The new browser scenarios use actual keyboard input for each hero and verify legacy save bytes remain unchanged.
+- Local browser smoke passed all original/new hero entries and retained lab/story checks; the final geography capture passed 11/11 views. Chromium touch emulation at 844×390 also passed joystick movement and a Skill 1 tap on the built preview, with no page errors. See [PR #16](https://github.com/blooprocket-create/APlus/pull/16) and [CI evidence](https://github.com/blooprocket-create/APlus/actions/runs/42791741837); CI status is reported separately from these local results.
 - Physical iPhone/Android performance and touch hardware are unmeasured. Desktop software WebGL is not a 60 FPS certification.
 
 ## Remaining work before the Phase 2.5 gate
