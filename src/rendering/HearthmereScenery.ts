@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { bakePieces, beam, loft, panel, piece, smoothLoft } from './ArtMesh';
 import { buildRefugeBridge, buildRefugeFire, buildRefugeGrove, buildRefugeLodge } from './HearthmereRefuge';
 import { addPaintedMeadow, type MeadowPlant } from './PaintedMeadow';
+import { buildStorybookBarrel, buildStorybookTree } from './StorybookNature';
 import { GroundMeshCollider } from '../game/GroundMeshCollider';
 import { addPaintedSky, paintedPalette, addSceneryCutaway, PAINTED_WATER_PALETTE } from './PaintedWorldStyle';
 import { RIVER_CENTER_X, RIVER_WAKES, RIVER_WIDTH, SceneryMotion } from './SceneryMotion';
@@ -127,7 +128,6 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
     [surface(0x525b60), surface(0x647271)],
     [surface(0x824d42), surface(0xa76c56)],
   ];
-  const foliage = [surface(0x49665d), surface(0x658354), surface(0x879a62)];
   const dark = surface(0x3f4137);
   const warm = new THREE.MeshBasicMaterial({ color: 0xe5ad65 });
   const cube = (mat: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number, shadow = false, group = town) => {
@@ -233,14 +233,25 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
       gable.castShadow = true;
       gable.receiveShadow = true;
       cube(timber, 0.19, height, d + 0.06, x + side * w * 0.475, height / 2, z, true);
-      const start = vector(x, height + pitch, z);
       const slope = Math.hypot(w / 2 + 0.24, pitch + 0.17);
       const roof = cube(roofs[index][0], slope + 0.07, 0.14, d + 0.46, x + side * (w / 4 + 0.12), height + pitch / 2, z, true);
       roof.rotation.z = -side * Math.atan2(pitch, w / 2 + 0.24);
-      for (let row = 1; row < 7; row++) {
-        const t = row / 7;
-        cube(roofs[index][row % 3 === 0 ? 1 : 0], 0.07, 0.09, d + 0.49,
-          start.x + side * (w / 2 + 0.24) * t, start.y + 0.07 - pitch * t, z, true);
+      const tiles=new THREE.Group(); tiles.position.copy(roof.position); tiles.rotation.copy(roof.rotation);
+      town.add(tiles);
+      for(let row=0;row<7;row++) for(let col=0;col<9;col++) {
+        const tw=(slope+.07)/7+.045, td=(d+.46)/9;
+        const chipped=.025+noise(row*19+col*3+index)*.025;
+        const tile=piece(tiles,panel([[-tw/2,-td/2],[tw/2,-td/2],
+          [tw/2,td/2-chipped],[tw/2-chipped,td/2],[-tw/2+chipped,td/2],[-tw/2,td/2-chipped]],.035),
+          roofs[index][(row*3+col+index)%4===0?1:0],
+          (row-3)*(slope+.07)/7,.088+(side<0?row:6-row)*.006,
+          (col-4)*td+(row%2?.018:-.018));
+        tile.rotation.x=-Math.PI/2;tile.receiveShadow=true;
+      }
+      for(const end of [-1,1]) {
+        const trim=cube(timber,slope+.22,.16,.13,roof.position.x,roof.position.y,
+          z+end*(d/2+.25),true);
+        trim.rotation.z=roof.rotation.z;
       }
       for (const frameZ of [z - d / 2 - 0.008, z + d / 2 + 0.008]) {
         beam(town, timber, vector(x + side * 0.2, 0.59, frameZ),
@@ -284,12 +295,7 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
 
   for (const [x, z] of [[-25.6, 3.5], [-11.5, -3.3], [-8.8, 6.7], [2.3, -10.4], [26.4, 9.2]]) {
     for (let i = 0; i < 3; i++) {
-      const barrel = piece(town, loft([[0, 0.205, 0.205], [0.09, 0.237, 0.237], [0.32, 0.272, 0.272],
-        [0.62, 0.23, 0.23], [0.67, 0.205, 0.205]], 9, true), plank, x + i * 0.55, 0, z + (i % 2) * 0.34);
-      barrel.castShadow = true;
-      for (const y of [0.14, 0.52]) {
-        piece(town, loft([[y, 0.256, 0.256], [y + 0.048, 0.256, 0.256]], 9), iron, barrel.position.x, 0, barrel.position.z);
-      }
+      buildStorybookBarrel(town, surface, x + i * .55, z + (i % 2) * .34);
     }
   }
   buildRefugeFire(town, parent, time, surface);
@@ -299,28 +305,12 @@ export function buildHearthmereScenery(parent: THREE.Group, buildings: readonly 
   for (const [i, [x, z]] of [[-28, -8], [-26, 11], [-22, -12], [-17, 12], [-9, 12], [-4, -11], [6, 11],
     [8.9, 12.8]].entries()) {
     const scale = i >= 6 ? .86 + noise(i + 3) * .19 : .88 + noise(i + 3) * .7;
-    const trunk = piece(town, loft([[0, 0.27, 0.23], [0.55, 0.18, 0.18], [1.85, 0.13, 0.13, 0.14],
-      [2.8, 0.064, 0.064, 0.23]], 8), timber, x, 0, z);
-    trunk.scale.setScalar(scale);
-    trunk.castShadow = true;
-    blockers.push(trunk);
-    for (let k = 0; k < 8; k++) {
-      const angle = k * 2.39996 + i;
-      const distance = (0.54 + (k % 3) * 0.2) * scale;
-      const tx = x + Math.cos(angle) * distance;
-      const tz = z + Math.sin(angle) * distance;
-      const ty = (2.43 + noise(i * 7 + k + 9) * 1.22) * scale;
-      const width = (0.68 + noise(k * 3 + i + 15) * 0.32) * scale;
-      const tree = piece(town, smoothLoft([[-0.62, 0.39, 0.5], [-0.31, 0.81, 0.87, 0.08],
-        [0.11, 1.0, 0.97], [0.48, 0.75, 0.72, -0.08], [0.69, 0.23, 0.28, -0.18]], 14),
-        foliage[k % 3], tx, ty, tz);
-      tree.rotation.y = angle;
-      tree.scale.set(width, scale * (0.46 + (k % 3) * 0.08), width * 0.92);
-      tree.castShadow = true;
-      if (k < 3) beam(town, timber, vector(x, 1.53 * scale, z),
-        vector(tx, ty - 0.22 * scale, tz), 0.16 * scale);
-    }
+    const tree = new THREE.Group();
+    tree.position.set(x,0,z); tree.scale.setScalar(scale); tree.rotation.y=i*1.37;
+    town.add(tree);
+    blockers.push(buildStorybookTree(tree,surface,i));
   }
+
   const canPlant = (x: number, z: number) =>
     !(x > 11 && x < 21) && roadWear(x, z) < .23 &&
     !buildings.some(b => Math.abs(x - b.x) < b.w / 2 + .53 && Math.abs(z - b.z) < b.d / 2 + .58);

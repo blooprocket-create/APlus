@@ -28,7 +28,11 @@ export function addSceneryCutaway(
   const varyings = 'varying vec3 paintPosition;\nvarying vec3 paintView;\n';
   shader.vertexShader = 'uniform vec3 paintWorldOrigin;\n' + varyings + shader.vertexShader.replace('#include <project_vertex>', `
     #include <project_vertex>
-    paintPosition = (modelMatrix * vec4(transformed, 1.0)).xyz + paintWorldOrigin;
+    vec4 paintVertex = vec4(transformed, 1.0);
+    #ifdef USE_INSTANCING
+      paintVertex = instanceMatrix * paintVertex;
+    #endif
+    paintPosition = (modelMatrix * paintVertex).xyz + paintWorldOrigin;
     paintView = mvPosition.xyz;
   `);
   shader.fragmentShader = varyings + 'uniform vec4 sceneryFocus;\n' +

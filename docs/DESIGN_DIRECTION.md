@@ -1,5 +1,15 @@
 # Astral Chronicles — design direction and interview record
 
+## Latest clarification — D167, November 10, 2026
+
+**Follow-up D168:** The user clarified that the characters are okay and need polish, while the scenery feels like a prototype. Prioritize convincing trees, recognizable static objects and heavier environmental polish. This authorizes improving environmental assets within the live direction; it does not request another character-model redesign. See [current integration progress](WORLD_V2_PHASE2_5_PROGRESS.md) for implemented work and remaining gates.
+
+The user explicitly wants to **stick to the current live game's art direction, with substantially more polish**, and still convert the game into an **open-world anime action RPG with cinematic storytelling**. The supplied reference is [the production game](https://astralcronicles.vercel.app/), inspected at commit `92c0de443594733cdc19881ff4b986b63c99609e`. Preserve its recognizable anime/cel-shaded characters, painted stylized world, celestial motifs and presentation language as quality improves. These descriptive observations are reference evidence, not newly locked numeric palettes or asset specifications.
+
+D167 refines D166 below: Ghibli/Solo Leveling reference qualities may inform polish within the live direction. They do not replace the user's chosen visual foundation. Current assets and techniques may be refined or replaced where needed to improve quality while retaining that identity. The open-world conversion, isometric gameplay camera, cast/story and existing phase gates continue. No new topology, camera mode, final shader, production milestone completion or performance result is approved by this clarification.
+
+The next concrete milestone remains real gameplay integration on V2 terrain, with a representative polished scene as the visual review target; the full Hearthmere cinematic/story/save migration follows the Phase 2.5 gate. The implementation sequence is an existing project handoff, not a new user decision.
+
 Original interview record updated through November 4, 2026. **World V2 implementation-status cross-reference added November 8, 2026.**
 
 **IMPORTANT for coding agents:** This file is the historical **creative decision log**, NOT an assertion that the project remains unimplemented. Start with [AGENTS.md](../AGENTS.md), the [current evidence-backed implementation status](WORLD_V2_STATUS.md), [World V2 decision register](WORLD_V2_DECISIONS.md), [architecture](WORLD_V2_ARCHITECTURE.md), [roadmap](PRODUCTION_ROADMAP.md) and [Phase 3 handoff](WORLD_V2_PHASE3_HANDOFF.md). Phase 0 preflight, Phase 1 engineering and Phase 2 **staging runtime** are implemented and merged; the existing player-facing Hearthmere opening is still separate from V2. The final world atlas, ships, V2 campaign and production performance are NOT shipped.

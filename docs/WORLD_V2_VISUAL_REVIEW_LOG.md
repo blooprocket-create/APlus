@@ -1,5 +1,21 @@
 # World V2 — Screenshot-based visual iteration log
 
+## November 10, 2026 — live-direction environment pass and real-engine fixture
+
+Evidence: [draft PR #16](https://github.com/blooprocket-create/APlus/pull/16), [CI run and screenshot artifacts](https://github.com/blooprocket-create/APlus/actions/runs/42791741837). Local captures: `test-artifacts/browser-smoke/` and `test-artifacts/world-v2-review/`. The final local geography capture completed **11/11** views with no technical capture issues; all three original opening starts and all three V2 gameplay starts/movement/skill inputs passed the browser smoke.
+
+Inspected actual images: original live Hearthmere at 1440×900; updated Hearthmere and integrated warrior gameplay; fixed-view arrival, river basin, first island and mainland coast; final evergreen revision at the same river-basin camera. This is a visual-language review, not a pixel-equality claim.
+
+- Hearthmere's flattened crowns now have upright, irregular foliage masses, exposed root flare and branching structure. Barrel staves/hoops, separate roof tiles and the well opening/rope/bucket read more clearly at gameplay distance. Character source models are retained. Crowns still have simplified large forms and foreground canopies still need composition/occlusion iteration.
+- The first evergreen revision was rejected during inspection: widely separated small pointed sprays read as sparse ornaments. The final revision uses broader overlapping, serrated fronds with a raised ridge/underside and exposed supporting boughs. The captured tree has a substantially fuller tapered silhouette; this is still a stylized first asset pass.
+- The integrated gameplay capture initially showed only sky because the original follow camera stayed at Y=0 while actors were on elevated terrain. Corrected snap/follow elevation and added a regression test. Subsequent real gameplay images show the three heroes, enemy encounter and ability effect on the loaded ground.
+- **Outstanding visual finding:** arrival/first-island review cameras still frame large areas of bare painted ground. The staging clearance pads and sparse region composition need authored dressing, denser purposeful vegetation, readable landscape landmarks and better bank/shore treatment. The technical 11/11 capture result does not certify environmental beauty or a completed open-world level.
+- Touch emulation at 844×390 passed on the built preview: real touch events on the virtual joystick moved Celestia about 1.6 world units; tapping Skill 1 started its cooldown; the hero remained on sampled terrain, with no page errors. This is not physical-device performance evidence.
+
+During a long-running Vite development session, regenerated public artifact URLs returned the HTML fallback and were correctly rejected by SHA verification. The built preview served the correct artifact bytes and passed the touch run. `predev` now creates the bakes for a fresh development start; restart a running dev server after an independent bake. No integrity checks were weakened.
+
+Disposition: first environmental and playable-integration pass ready for review. D167/D168 retain the live art direction and existing characters; wider environment production, remaining Phase 2.5 gates, complete cinematic story and V2 saves remain open. No final art approval or mobile FPS result is claimed.
+
 **Scope:** Phase 2 staged geography only. Screenshots depict actual browser/Three.js rendering from reproducible camera coordinates, not the finalized Astral Chronicles art direction or canonical world layout. This log records the actual image evidence and resulting code changes, rather than declaring a world visually complete because tests pass.
 
 | Pass | Evidence | Observed result | Action |

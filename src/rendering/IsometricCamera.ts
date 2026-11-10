@@ -111,7 +111,7 @@ export class IsometricCameraController {
   }
 
   public snapToIsometricFollow(targetPos: THREE.Vector3): void {
-    this.currentFocus.set(targetPos.x, 0.8, targetPos.z);
+    this.currentFocus.set(targetPos.x, targetPos.y + 0.8, targetPos.z);
     this.camera.position.set(
       this.currentFocus.x + this.baseOffset.x,
       this.currentFocus.y + this.baseOffset.y,
@@ -152,7 +152,7 @@ export class IsometricCameraController {
 
     const desiredFocus = new THREE.Vector3(
       targetPos.x + lookAheadX,
-      0.8,
+      targetPos.y + 0.8,
       targetPos.z + lookAheadZ
     );
     this.currentFocus.lerp(desiredFocus, Math.min(1, dt * 7.5));

@@ -5,3 +5,5 @@ dist/
 
 # Generated Phase 1 preview bake (reproduced on every build)
 public/world-v2/preview/
+public/world-v2/geography/
+test-artifacts/

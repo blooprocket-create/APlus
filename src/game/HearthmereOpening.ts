@@ -8,7 +8,8 @@ import type { CharacterClassId } from '../types/game';
 import { buildHearthmereScenery } from '../rendering/HearthmereScenery';
 import { HearthmereImpact, HearthmereResident } from '../rendering/HearthmereCast';
 import { HearthmereGiant } from '../rendering/HearthmereGiant';
-import { bakePieces, beam, loft, piece } from '../rendering/ArtMesh';
+import { bakePieces, beam, piece } from '../rendering/ArtMesh';
+import { buildStorybookWell } from '../rendering/StorybookNature';
 import { GroundMeshCollider, sweepGroundMovement } from './GroundMeshCollider';
 
 export const HEARTHMERE_WAYSTATION = { x: -24, z: 5 };
@@ -129,12 +130,7 @@ export class HearthmereOpening {
     this.river.uniforms.bridgeWake = this.impact.wake;
     this.setSceneryFocus = scenery.setFocus;
     box(this.group, ember, 1.1, 0.45, 0.65, -8.5, 0.4, 7.5);
-    const well = piece(this.group, loft([[0, 0.84, 0.84], [0.16, 0.89, 0.89], [0.72, 0.79, 0.79], [0.81, 0.84, 0.84]], 10, true),
-      stone, -13.3, 0, -6.1);
-    well.castShadow = true;
-    piece(this.group, new THREE.CircleGeometry(0.65, 14), steel, -13.3, 0.816, -6.1).rotation.x = -Math.PI / 2;
-    for (const x of [-14.08, -12.53]) box(this.group, wood, 0.15, 2.15, 0.15, x, 1.02, -6.1).castShadow = true;
-    box(this.group, wood, 1.93, 0.16, 0.16, -13.3, 2.08, -6.1).castShadow = true;
+    const well = buildStorybookWell(this.group, color => new THREE.MeshLambertMaterial({color}), -13.3,-6.1);
     const cranePost = box(this.group, wood, 0.5, 5.6, 0.5, 2.5, 2.8, -11);
     cranePost.castShadow = true;
     const crane = new THREE.Group();

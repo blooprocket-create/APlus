@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { bakePieces, beam, loft, piece, smoothLoft } from '../rendering/ArtMesh';
+import { bakePieces, loft, piece, smoothLoft } from '../rendering/ArtMesh';
+import { buildStorybookTree, buildStorybookPine } from '../rendering/StorybookNature';
 import { paintedPalette } from '../rendering/PaintedWorldStyle';
 import { addPaintedMeadow, type MeadowPlant } from '../rendering/PaintedMeadow';
 import { SceneryMotion } from '../rendering/SceneryMotion';
@@ -18,8 +19,8 @@ type PaintedMesh = { geometry: THREE.BufferGeometry; material: THREE.MeshLambert
 function makePaintedTemplate(
   kind: SceneryKind,
   origin: THREE.IUniform<THREE.Vector3>,
+  focus: THREE.IUniform<THREE.Vector4>,
 ): PaintedMesh {
-  const focus = { value: new THREE.Vector4(0, 0, 0, 0) };
   const paint = paintedPalette(focus, { worldOrigin: origin });
   const temporary = new THREE.Group();
   const colors = new Map<number, THREE.MeshLambertMaterial>();
@@ -39,43 +40,9 @@ function makePaintedTemplate(
   }
 
   if (kind === 'round-tree') {
-    // Sculpted trunk + asymmetrical, brush-colored blossom masses adapted from
-    // HearthmereRefuge.buildRefugeGrove, scaled to the V2 world camera.
-    shape(smoothLoft([[0,.33,.30],[.18,.26,.23],[.8,.19,.19,.07],
-      [1.55,.15,.16,.12,-.06],[2.50,.11,.12,.20,.10],
-      [3.30,.045,.055,.32,.18]], 12), 0x675444, 0, 0, 0, [1.8, 1.7, 1.8]);
-    const crowns: Array<[number,number,number,number,number]> = [
-      [-1.35,4.12,-.6,1.4,0x416454],[1.29,4.35,-.7,1.55,0x648762],
-      [-1.0,4.90,.75,1.62,0x94a870],[1.0,4.82,.64,1.45,0x648762],
-      [.18,5.58,-.2,1.73,0x94a870],[.85,5.4,-.25,.93,0x49665d],
-    ];
-    const crownSections: readonly [number,number,number,number?][] = [
-      [-.72,.16,.16,.04],[-.57,.62,.61,.10],[-.30,.91,.87,.10],
-      [-.03,1,.96,.056],[.23,.92,.83,-.04],[.47,.71,.64,-.10],
-      [.65,.43,.39,-.16],[.72,.12,.12,-.21],
-    ];
-    for (const [x,y,z,size,tint] of crowns) {
-      const bough = beam(temporary, color(0x70513e),
-        new THREE.Vector3(0,2.3,0), new THREE.Vector3(x,y,z), .19);
-      bough.castShadow = bough.receiveShadow = true;
-      shape(smoothLoft(crownSections, 16), tint, x,y,z, [size,size*.78,size*.96], x*.19);
-    }
+    buildStorybookTree(temporary, color);
   } else if (kind === 'pine') {
-    // Replace cone stacks with gently swept, sculpted loft tiers.
-    shape(smoothLoft([[0,.32,.27],[.30,.30,.27],[2.5,.19,.19],
-      [5.0,.13,.13,.07],[7.7,.035,.038,.10]], 10),
-    0x675444,0,0,0,[1.18,1,1.18]);
-    const tiers: Array<[number,number,number,number]> = [
-      [2.9,2.15,1.16,0x416454],
-      [4.7,1.92,1.01,0x648762],
-      [6.35,1.53,.88,0x879a62],
-    ];
-    for (const [y,width,depth,tint] of tiers) {
-      shape(smoothLoft([[-1.0,.19,.16],[-.78,.61,.57],
-        [-.30,.89,.82],[.20,1,.93],[.75,.64,.64,.05],
-        [1.20,.19,.21,.07]], 14),
-      tint, 0, y, 0, [width,1.02,depth], y*.12);
-    }
+    buildStorybookPine(temporary,color);
   } else if (kind === 'shrub') {
     const crown = smoothLoft([[-.60,.12,.16],[-.36,.63,.54],
       [-.05,1,.88],[.27,.86,.80],[.68,.36,.42],[.78,.08,.12]], 14);
@@ -152,6 +119,7 @@ export function createSceneryMeshes(
   cell: TerrainCell, seed: string,
   protectedSites: readonly ProtectedSite[] = [],
   worldOrigin: THREE.IUniform<THREE.Vector3> = { value: new THREE.Vector3() },
+  focus: THREE.IUniform<THREE.Vector4> = { value:new THREE.Vector4() },
 ): PaintedCellScenery {
   const placements = makeSceneryPlacements(cell, seed, protectedSites);
   const group = new THREE.Group();
@@ -161,7 +129,7 @@ export function createSceneryMeshes(
   for (const kind of ['pine','round-tree','boulder','shrub'] as const) {
     const items = placements.filter(item => item.kind === kind);
     if (!items.length) continue;
-    const template = makePaintedTemplate(kind, worldOrigin);
+    const template = makePaintedTemplate(kind, worldOrigin, focus);
     const instances = new THREE.InstancedMesh(template.geometry, template.material, items.length);
     instances.name = 'Painted ' + kind + ' / original Hearthmere art grammar';
     instances.castShadow = true;

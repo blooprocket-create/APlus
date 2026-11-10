@@ -1,12 +1,16 @@
 # Astral Chronicles — Phase 2.5: Gameplay & Visual Foundation Convergence
 
-**Status: PLANNED. Priority after merged Phase 3.0 first-arrival slice, BEFORE continuing Phase 3.1+.** Phase 3.0 is retained as a useful proof of world/story entry, but it does not satisfy this new phase. Source of truth: [agent instructions](../AGENTS.md), [status](WORLD_V2_STATUS.md), [decisions](WORLD_V2_DECISIONS.md), [architecture](WORLD_V2_ARCHITECTURE.md), [Phase 3 handoff](WORLD_V2_PHASE3_HANDOFF.md), [art contract](WORLD_V2_ART_PARITY.md).
+**Status: IN PROGRESS — first opt-in real-GameEngine slice; remaining gate work is listed in [progress](WORLD_V2_PHASE2_5_PROGRESS.md). Priority after merged Phase 3.0 first-arrival slice, BEFORE continuing Phase 3.1+.** Phase 3.0 is retained as a useful proof of world/story entry, but it does not satisfy this new phase. Source of truth: [agent instructions](../AGENTS.md), [status](WORLD_V2_STATUS.md), [decisions](WORLD_V2_DECISIONS.md), [architecture](WORLD_V2_ARCHITECTURE.md), [Phase 3 handoff](WORLD_V2_PHASE3_HANDOFF.md), [art contract](WORLD_V2_ART_PARITY.md).
 
 ## Objective
+
+**D167 refinement, 2026-11-10:** Use the current live game's art direction as the visual foundation, with substantially higher polish, while continuing the open-world anime action RPG/cinematic story conversion. The reference inspected is production commit `92c0de443594733cdc19881ff4b986b63c99609e` at [the live game](https://astralcronicles.vercel.app/). The D166 references below support this continuity requirement. Look development should improve the selected direction rather than replace it; do not treat current low-detail execution as the quality ceiling. No Phase 2.5 slice is completed by this clarification.
 
 Put **the real existing Astral Chronicles gameplay stack** on World V2's deterministic streamed land and actual terrain elevation. Do not create a second combat system inside the geography lab. The geography lab remains a dedicated infrastructure and screenshot QA fixture; the opt-in World V2 playable session becomes the destination for integrated systems and eventually the production entrypoint. Keep the existing original game at /index.html working as a regression baseline until cutover.
 
 This is **porting and adapting owners**, not duplicating or reimplementing abilities, movement math, companion AI, UI, sounds, camera, animation, or effects. The previous painted art parity is a **minimum continuity baseline, not an approved beauty/quality target**. This phase also establishes new original art-direction/look-development targets for later production refinement.
+
+**Current result (November 10):** `/world-v2-gameplay.html` reuses the real engine and original characters on baked terrain, with a small encounter and shared environmental improvements. D168 prioritizes scenery quality while retaining the characters. Do not mark 2.5.0–2.5.4 complete from this fixture; use the remaining-work list and evidence in [progress](WORLD_V2_PHASE2_5_PROGRESS.md).
 
 ## System migration matrix
 

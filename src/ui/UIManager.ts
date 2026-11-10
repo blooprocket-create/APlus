@@ -22,6 +22,7 @@ import {
 } from '../game/ManagementSystem';
 import { ActionId } from '../input/InputManager';
 import { PersistenceManager } from '../persistence/PersistenceManager';
+import type { WorldV2GameSession } from '../game/WorldV2GameSession';
 import { InMemoryStorageAdapter } from '../persistence/StorageAdapter';
 import { deleteHearthmereSave, readHearthmereSave, type HearthmereSave } from '../persistence/HearthmereSave';
 import { HEARTHMERE_WAYSTATION } from '../game/HearthmereOpening';
@@ -44,6 +45,7 @@ import {
 export type CommandDeckTab = 'inventory' | 'companions' | 'abilities' | 'cutscenes';
 
 export class UIManager {
+  private readonly worldV2Mode = location.pathname.endsWith('/world-v2-gameplay.html');
   private root: HTMLElement;
   private engine: GameEngine;
 
@@ -129,7 +131,7 @@ export class UIManager {
   private renderLobbyDOM(): void {
     const role = this.selectedHero;
     const hero = CHARACTER_CLASSES[role];
-    const save = readHearthmereSave(role);
+    const save = this.worldV2Mode ? null : readHearthmereSave(role);
     const name = save?.name ?? CANONICAL_HERO_NAMES[role];
     this.root.innerHTML = `
       <div class="lobby-screen">
@@ -156,12 +158,12 @@ export class UIManager {
                 <label for="opening-hero-name">Name your hero</label>
                 <input id="opening-hero-name" class="input-field" minlength="2" maxlength="18" required value="${this.escapeHtml(name)}">`}
               <p id="opening-start-error" class="form-error" role="alert"></p>
-              <button id="btn-hearthmere" class="btn-anime btn-primary journey-button" type="submit">${save ? 'Continue Hearthmere' : 'Start Hearthmere'} ${icon('arrow', 22)}</button>
+              <button id="btn-hearthmere" class="btn-anime btn-primary journey-button" type="submit">${this.worldV2Mode ? 'Enter the foothills' : save ? 'Continue Hearthmere' : 'Start Hearthmere'} ${icon('arrow', 22)}</button>
               ${save ? '<button id="btn-delete-save" class="btn-anime btn-danger" type="button">Delete save</button>' : ''}
             </form>
           </section>
         </main>
-        <footer class="lobby-footer"><span class="local-save"><span class="status-dot"></span> PROGRESS SAVED ON THIS DEVICE</span></footer>
+        <footer class="lobby-footer"><span class="local-save"><span class="status-dot"></span> ${this.worldV2Mode ? 'OPEN-WORLD PLAYTEST · PROGRESS RESETS ON EXIT' : 'PROGRESS SAVED ON THIS DEVICE'}</span></footer>
       </div>`;
 
     this.bindFullscreenButton();
@@ -210,7 +212,8 @@ export class UIManager {
       if (deleteButton) deleteButton.disabled = true;
       error.textContent = '';
       try { await this.launchHearthmere(role, chosenName, save ?? undefined); }
-      catch {
+      catch (cause) {
+        console.error('Astral Chronicles could not start the selected session', cause);
         button.disabled = false;
         selector.disabled = false;
         if (deleteButton) deleteButton.disabled = false;
@@ -224,6 +227,13 @@ export class UIManager {
     await temporary.init();
     const hero = await temporary.createCharacter({ accountId: 'hearthmere', slotIndex: 0, name, classId: role });
     hero.id = `hearthmere_${role}`;
+    if (this.worldV2Mode) {
+      const { WorldV2GameWorld } = await import('../rendering/WorldV2GameWorld');
+      const world = await WorldV2GameWorld.create();
+      try { this.startHudAndGameplay(hero,undefined,world); }
+      catch(error) { world.dispose(); throw error; }
+      return;
+    }
     const snapshot: HearthmereSave = saved ?? {
       version: 1, classId: role, name, step: 'arrival', position: HEARTHMERE_WAYSTATION, yaw: Math.PI,
       hp: hero.currentHp, energy: hero.ultimateEnergy, flasks: 3, seconds: 0, enemies: [],
@@ -231,7 +241,7 @@ export class UIManager {
     this.startHudAndGameplay(hero, snapshot);
   }
 
-  private startHudAndGameplay(character: CharacterSaveData, openingSave: HearthmereSave): void {
+  private startHudAndGameplay(character: CharacterSaveData, openingSave?: HearthmereSave, worldV2?: WorldV2GameSession): void {
     const cDef = CHARACTER_CLASSES[character.classId];
     this.lastCompanionMarkup = '';
 
@@ -494,7 +504,7 @@ export class UIManager {
       this.engine.interactWithNearbyQuestNpc();
     });
 
-    this.engine.startGameplayWithCharacter(character, [], false, openingSave);
+    this.engine.startGameplayWithCharacter(character, [], false, openingSave, worldV2);
   }
 
   public playCutscene(cutsceneId: CutsceneId): void {
@@ -542,6 +552,7 @@ export class UIManager {
   }
 
   public openCommandDeckModal(initialTab?: CommandDeckTab): void {
+    if(this.engine.isWorldV2 && initialTab==='cutscenes') {this.openAtlas();return;}
     if (initialTab) {
       this.deckTab = initialTab;
       this.deckFeedbackMsg = null;
@@ -1080,9 +1091,9 @@ export class UIManager {
     if (!this.hudRefs || this.cutsceneDirector.isPlaying()) return;
     this.openOverlay('Take a breath.', `<p>Your triad will wait. The world is paused.</p><div class="pause-settings"><button id="toggle-audio" class="setting-row">Sound effects <span>${this.engine.audio.muted ? 'OFF' : 'ON'}</span></button><button id="toggle-shake" class="setting-row">Camera shake <span>${this.shakeEnabled ? 'ON' : 'OFF'}</span></button></div>`, [
       { label: 'Return to the journey', action: () => this.closeOverlay() },
-      ...(!this.engine.isSlice && !this.engine.isOpening ? [{ label: 'World atlas & journal', action: () => this.openAtlas() }] : []),
+      ...(!this.engine.isWorldV2 && !this.engine.isSlice && !this.engine.isOpening ? [{ label: 'World atlas & journal', action: () => this.openAtlas() }] : []),
       { label: 'How to play', action: () => this.openHelp() },
-      { label: this.engine.isSlice ? 'Return to heroes' : 'Save & return to heroes', action: async () => {
+      { label: this.engine.isSlice || this.engine.isWorldV2 ? 'Return to heroes' : 'Save & return to heroes', action: async () => {
         if (!await this.engine.saveActiveCharacterNow()) {
           const message = this.root.querySelector('#game-menu .menu-content p');
           if (message) message.textContent = 'Saving failed. Check browser storage, then try again. Your session is still active.';
@@ -1170,16 +1181,22 @@ export class UIManager {
       if (this.root.querySelector('#game-menu')) this.closeOverlay();
       else if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       else this.openPauseMenu();
-    } else if (!this.engine.isSlice && !this.engine.isOpening && event.code === 'KeyM' && !this.root.querySelector('#game-menu[data-locked]')) {
+    } else if (!this.engine.isWorldV2 && !this.engine.isSlice && !this.engine.isOpening && event.code === 'KeyM' && !this.root.querySelector('#game-menu[data-locked]')) {
       if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       this.openAtlas();
-    } else if (!this.engine.isSlice && !this.engine.isOpening && event.code === 'KeyI' && this.hudRefs && !this.root.querySelector('#game-menu')) {
+    } else if (!this.engine.isWorldV2 && !this.engine.isSlice && !this.engine.isOpening && event.code === 'KeyI' && this.hudRefs && !this.root.querySelector('#game-menu')) {
       if (this.root.querySelector('#command-deck-modal')) this.closeDeck();
       else this.openCommandDeckModal('inventory');
     } else if (event.code === 'Slash' && event.shiftKey) this.openHelp();
   };
 
   public openAtlas(): void {
+    if(this.engine.isWorldV2) {
+      this.openOverlay('The lands beyond', '<p>Explore freely with your triad. This playtest includes terrain traversal and a foothill encounter. The cinematic story and saving are still being connected.</p><p>Your progress resets when you leave this playtest.</p>',[
+        {label:'Return to the foothills',action:()=>this.closeOverlay()},
+      ]);
+      return;
+    }
     if (this.engine.isFinishing) return;
     const character = this.hudRefs && !this.engine.isOpening ? this.engine.getActiveCharacter() : null;
     if (!character) { this.openHelp(); return; }
@@ -1271,7 +1288,7 @@ export class UIManager {
     this.hudRefs.lvPill.textContent = `LV.${t.level}`;
     this.hudRefs.goldSpan.textContent = `◈ ${t.gold.toLocaleString()}`;
     this.hudRefs.crystalSpan.textContent = `✦ ${t.aetherCrystals}`;
-    this.hudRefs.saveBadge.textContent = t.slice || t.lastSavedText === 'Save failed' ? t.lastSavedText : `✓ ${t.lastSavedText}`;
+    this.hudRefs.saveBadge.textContent = t.worldV2 || t.slice || t.lastSavedText === 'Save failed' ? t.lastSavedText : `✓ ${t.lastSavedText}`;
 
     this.hudRefs.waveTitle.textContent = t.zoneTitle;
     this.hudRefs.waveSub.textContent = t.zoneSubtitle;
@@ -1385,7 +1402,7 @@ export class UIManager {
     this.root.querySelector('#expedition-count')!.textContent = t.isSafeZone ? 'A moment of respite' : `${t.expedition.defeated} / ${t.expedition.total} fiends defeated`;
     this.root.querySelector('#expedition-time')!.textContent = t.isSafeZone ? 'Flasks replenished · Vitality restored' : `${Math.floor(t.expedition.seconds / 60)}:${Math.floor(t.expedition.seconds % 60).toString().padStart(2, '0')} · ${Math.round(t.pathProgress * 100)}% explored`;
     if (qv.stage === 'chronicle' && !t.isSafeZone) {
-      meter.querySelector('.eyebrow')!.textContent = 'THE LONG DAWN';
+      meter.querySelector('.eyebrow')!.textContent = t.worldV2 ? 'THE LANDS BEYOND' : 'THE LONG DAWN';
       this.root.querySelector('#expedition-count')!.textContent = qv.progressText;
     }
     this.root.querySelector('#damage-vignette')!.classList.toggle('hurt', t.damageFlash);

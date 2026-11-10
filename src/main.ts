@@ -32,6 +32,9 @@ async function main(): Promise<void> {
     onTriggerCutscene: (cutsceneId) => ui?.playCutscene(cutsceneId),
   });
 
+  if (new URLSearchParams(location.search).get('functionalQA') === '1') {
+    Object.assign(window, {__worldV2GameQA:{snapshot:()=>engine?.worldV2Snapshot()}});
+  }
   ui = new UIManager(uiRoot, engine);
   ui.showCharacterSelectScreen();
   display.refresh(true);
